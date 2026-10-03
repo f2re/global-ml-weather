@@ -8,7 +8,7 @@ import sys
 import tempfile
 import time
 import urllib.request
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 
 root=Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory() as temporary:
@@ -27,10 +27,10 @@ with tempfile.TemporaryDirectory() as temporary:
                 browser=p.chromium.launch(headless=True)
                 page=browser.new_page(viewport={'width':1600,'height':1100})
                 errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
-                page.goto(base);page.wait_for_selector('#connection:text("Сервер доступен")')
+                page.goto(base);expect(page.locator('#connection')).to_have_text('Сервер доступен')
                 page.select_option('#kind','adaptive');page.select_option('#mesh','0');page.select_option('#horizon','6')
-                page.click('#start');page.wait_for_function("document.querySelector('#run-state').textContent === 'Завершено'",timeout=60000)
-                page.wait_for_function("!document.querySelector('#lead').disabled")
+                page.click('#start');expect(page.locator('#run-state')).to_have_text('Завершено',timeout=60000)
+                expect(page.locator('#lead')).to_be_enabled()
                 page.locator('#lead').fill('3');page.locator('#lead').dispatch_event('change')
                 page.select_option('#variable','temperature');page.select_option('#profile-var','2');page.wait_for_timeout(500)
                 page.click('[data-page=sources]');assert page.locator('#connector-list .card').count()==6
@@ -38,12 +38,12 @@ with tempfile.TemporaryDirectory() as temporary:
                 page.click('#upload');page.wait_for_selector('#inbox-list:text("sample.csv")')
                 page.click('[data-page=agents]');assert page.locator('#agent-list .card').count()==9
                 page.click('[data-page=protocols]');page.locator('#protocol-list button').first.click()
-                page.wait_for_function("document.querySelector('#protocol-text').textContent.includes('Научная постановка')")
+                expect(page.locator('#protocol-text')).to_contain_text('Научная постановка')
                 page.click('[data-page=experiments]')
                 target=root/'outputs'/'browser';target.mkdir(parents=True,exist_ok=True)
                 page.screenshot(path=str(target/'desktop.png'),full_page=True)
                 page.set_viewport_size({'width':390,'height':844});page.wait_for_timeout(300)
-                assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+                assert page.locator('html').evaluate('(el) => el.scrollWidth <= window.innerWidth')
                 page.screenshot(path=str(target/'mobile.png'),full_page=True)
                 assert not errors,errors
                 browser.close()
