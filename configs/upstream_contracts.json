@@ -1,0 +1,38 @@
+{
+  "schema": "global-weather.upstream-contracts/1",
+  "audited_at": "2026-10-03",
+  "consumer_base_revision": "916a2d7e9e34d203519dc810bfeb8599fa6bc279",
+  "projects": {
+    "arktika": {
+      "repository": "f2re/arktika-worker",
+      "branch": "main",
+      "revision": "4d744570653ac60c8fd059d10e617c3806a6bafc",
+      "files": {
+        "arktika/model.py": "74e938eaee0e7d9b60a3c80b43945496d5370094",
+        "arktika/store.py": "4dcb0a5c0a5b6986badb438ef1520a24ec1e4c15",
+        "arktika/download.py": "ead50f5a0d38494862eeb059d342226de229d0b5",
+        "arktika/processing.py": "8f9525acae706d2e4dd1343ca1f5094bf5fb2a89"
+      },
+      "supported": ["catalog.sqlite read-only assets/jobs", "download.json receipts", "ARCM1", "ARCM2"],
+      "not_proven": ["live operator archive", "Electro-L downloader", "physical calibration of every file"]
+    },
+    "satdump": {
+      "repository": "f2re/SatDump",
+      "branch": "release/1.2.2",
+      "revision": "394431e11d9fffe1a73d3e0670fb023ad7562241",
+      "files": {
+        "src-core/products/dataset.cpp": "9b5b8b05566b307db68ef188a9c4a3d564e9301b",
+        "src-core/products/products.cpp": "6a19b85c4e04ff55b1ac4cc514f67cc4386587c0",
+        "src-core/products/image_products.cpp": "365e00067e8879fb6f6f9d79843fa2d878ef48f9",
+        "src-core/products/image_products.h": "799e10d083de837eef9e537cf8ff0adc49b2a938",
+        "plugins/meteor_support/meteor/module_meteor_instruments.cpp": "66dc340bd0e35178b8dcd3073aad92b6df26fb18",
+        "plugins/elektro_arktika_support/elektro_arktika/instruments/msugs/module_msugs.cpp": "6a6dfdbd3cd1a614c25b87401469ddc5e4fb506b",
+        "plugins/elektro_arktika_support/elektro_arktika/lrit/module_elektro_lrit_data_decoder.cpp": "9f2b2f964e02c9bfa5dfc897412cfa57e165d107"
+      },
+      "supported": ["dataset.json", "product.cbor", "decode-status.json", "msu_mr", "msu_gs", "mtvza hrpt30 metadata"],
+      "not_proven": ["actual installed binary identity", "microwave calibration", "antenna operator", "raw MSU-GS image-only metadata"]
+    }
+  },
+  "hash_algorithm": "Git blob SHA1 (header plus file bytes), not file SHA256",
+  "integration_test_kind": "source-contract-derived synthetic fixtures; not real satellite observations"
+}

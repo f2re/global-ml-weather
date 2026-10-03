@@ -1,0 +1,50 @@
+name: upstream-contracts
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  pinned-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: f2re/arktika-worker
+          ref: 4d744570653ac60c8fd059d10e617c3806a6bafc
+          path: .upstream/arktika
+          persist-credentials: false
+          sparse-checkout: |
+            arktika/model.py
+            arktika/store.py
+            arktika/download.py
+            arktika/processing.py
+          sparse-checkout-cone-mode: false
+      - uses: actions/checkout@v4
+        with:
+          repository: f2re/SatDump
+          ref: 394431e11d9fffe1a73d3e0670fb023ad7562241
+          path: .upstream/satdump
+          persist-credentials: false
+          sparse-checkout: |
+            src-core/products
+            plugins/meteor_support/meteor/module_meteor_instruments.cpp
+            plugins/elektro_arktika_support/elektro_arktika/instruments/msugs/module_msugs.cpp
+            plugins/elektro_arktika_support/elektro_arktika/lrit/module_elektro_lrit_data_decoder.cpp
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: >-
+          python -m global_weather.connectors.preflight
+          --project-root . --arktika-source .upstream/arktika
+          --satdump-source .upstream/satdump --report outputs/contracts/preflight.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: upstream-contract-report
+          path: outputs/contracts
