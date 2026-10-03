@@ -10,6 +10,8 @@ import time
 import urllib.request
 from playwright.sync_api import sync_playwright, expect
 
+EXPECTED_SOURCES = {'local_observations', 'satdump', 'graphcast', 'noaa_isd',
+                    'era5_cds', 'satellite_manifest', 'arktika_worker'}
 root=Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory() as temporary:
     with socket.socket() as sock:
@@ -20,9 +22,14 @@ with tempfile.TemporaryDirectory() as temporary:
         try:
             for _ in range(100):
                 try:
-                    urllib.request.urlopen(base+'/api/bootstrap',timeout=1).close();break
+                    with urllib.request.urlopen(base+'/api/bootstrap',timeout=1) as response:
+                        bootstrap=json.load(response)
+                    break
                 except OSError:time.sleep(.1)
             else:raise RuntimeError('Server did not start.')
+            connectors=bootstrap['connectors']
+            assert {item['id'] for item in connectors} == EXPECTED_SOURCES
+            assert len(connectors) == len(EXPECTED_SOURCES)
             with sync_playwright() as p:
                 browser=p.chromium.launch(headless=True)
                 page=browser.new_page(viewport={'width':1600,'height':1100})
@@ -35,7 +42,10 @@ with tempfile.TemporaryDirectory() as temporary:
                     expect(page.locator('#lead')).to_be_enabled()
                     page.locator('#lead').fill('3');page.locator('#lead').dispatch_event('change')
                     page.select_option('#variable','temperature');page.select_option('#profile-var','2');page.wait_for_timeout(500)
-                    page.click('[data-page=sources]');assert page.locator('#connector-list .card').count()==6
+                    page.click('[data-page=sources]')
+                    expect(page.locator('#connector-list .card')).to_have_count(len(EXPECTED_SOURCES))
+                    for item in connectors:
+                        expect(page.locator('#connector-list')).to_contain_text(item['title'])
                     page.locator('#upload-file').set_input_files({'name':'sample.csv','mimeType':'text/csv','buffer':b'a,b\n1,2\n'})
                     with page.expect_response(lambda r: r.url.endswith('/api/inbox/sample.csv') and r.request.method == 'POST') as uploaded:
                         page.click('#upload')
@@ -57,7 +67,8 @@ with tempfile.TemporaryDirectory() as temporary:
                     (target/'page-errors.json').write_text(json.dumps(errors,ensure_ascii=False),encoding='utf-8')
                     raise
                 browser.close()
-                print(json.dumps({'page_errors':errors,'mobile_overflow':False,'backend':'actual_local_http','model':'adaptive'},ensure_ascii=False))
+                print(json.dumps({'page_errors':errors,'mobile_overflow':False,'backend':'actual_local_http',
+                                  'model':'adaptive','connector_ids':sorted(EXPECTED_SOURCES)},ensure_ascii=False))
         finally:
             process.terminate()
             try:process.wait(timeout=15)
