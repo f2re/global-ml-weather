@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "global-ml-weather"
+version = "0.1.0"
+description = "Observation-driven spherical weather research prototype; no pretrained weights"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24,<3", "scipy>=1.10,<2", "torch>=2.2,<3"]
+
+[project.optional-dependencies]
+test = ["pytest>=7,<10"]
+
+[project.scripts]
+global-weather = "global_weather.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["global_weather*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
