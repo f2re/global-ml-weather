@@ -1,0 +1,9 @@
+"""Explicit data acquisition and admission. No network calls at import time."""
+CATALOG = [
+    dict(id='local_observations', title='Станции и аэрология · JSONL', capability='Проверка контракта, времени и масок', access='local', state='implemented', limitation='Не создаёт отсутствующие профили; физическое качество проверяется отдельно.'),
+    dict(id='satdump', title='SatDump · МСУ-МР / МТВЗА', capability='Инвентаризация файлов и карантин необработанных продуктов', access='local', state='inventory_only', limitation='CBOR и изображения не объявляются физическими радиансами; декодирование и антенная геометрия не реализованы.'),
+    dict(id='graphcast', title='GraphCast · статистики ERA5', capability='Загрузка mean/std с контрольными суммами; импорт существующим модулем', access='public_https', state='implemented_not_live_verified', limitation='Недостаточно для полного набора величин; fit_period требуется подтвердить.'),
+    dict(id='noaa_isd', title='NOAA ISD · наземные наблюдения', capability='Загрузка годового CSV станции; чтение T, Td, ветра и MSLP с QC', access='public_https', state='implemented_not_live_verified', limitation='В архиве нет исторической задержки поступления. Высоты датчиков требуют проверки; осадки не раскладываются по часам.'),
+    dict(id='era5_cds', title='ERA5 · CDS', capability='Проверяемый запрос и явная загрузка через cdsapi', access='credentials_and_license', state='implemented_not_live_verified', limitation='Нужен ключ вне репозитория и принятие условий CDS. Реанализ — цели/нормы, не заполнение пропусков оперативных входов.'),
+    dict(id='satellite_manifest', title='Электро-Л / Арктика-М · манифест', capability='Локальный приём метаданных физических каналов', access='local', state='admission_only', limitation='Не является подключением к геопорталу; URL и авторизация оператора ещё не настроены.'),
+]

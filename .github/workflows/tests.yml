@@ -16,7 +16,25 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install 'torch>=2.2,<3' --index-url https://download.pytorch.org/whl/cpu
-      - run: python -m pip install -e '.[test,data]'
+      - run: python -m pip install -e '.[test,data,lab]'
+      - run: python -c 'from global_weather.adaptive import AdaptiveWeatherModel'
       - run: python -m pytest -q
       - run: global-weather train-smoke --optimizer-steps 2 --horizon-hours 72 --output outputs/ci
       - run: python -m global_weather.adaptive_cli --output outputs/adaptive-ci
+      - run: python -m compileall -q global_weather
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'torch>=2.2,<3' --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e '.[lab,browser]'
+      - run: python -m playwright install --with-deps chromium
+      - run: python scripts/browser-test.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lab-browser-screenshots
+          path: outputs/browser

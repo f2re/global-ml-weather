@@ -1,0 +1,23 @@
+{
+  "experiment_id": "TO_BE_ASSIGNED",
+  "hypothesis": "",
+  "status": "planned",
+  "data_kind": "unknown",
+  "input_provenance": [],
+  "target_provenance": [],
+  "training_period": null,
+  "validation_period": null,
+  "test_period": null,
+  "normalization_fingerprint": null,
+  "normalization_fit_period": null,
+  "grid_fingerprint": null,
+  "pressure_levels": "37_1000_to_1_hPa",
+  "forecast_horizon_hours": 72,
+  "baseline": null,
+  "physical_assumptions": [],
+  "analytical_tests": [],
+  "results": null,
+  "reviewers": {"physics": null, "verification": null, "release": null},
+  "known_limitations": [],
+  "meteorologically_validated": false
+}

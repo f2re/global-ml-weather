@@ -1,0 +1,18 @@
+[Unit]
+Description=Global weather research lab (loopback only)
+After=network.target
+
+[Service]
+Type=simple
+# User unit; place the repository at ~/global-ml-weather or adjust both paths.
+WorkingDirectory=%h/global-ml-weather
+ExecStart=%h/global-ml-weather/.venv/bin/python -m global_weather.lab.app --workspace %h/.local/share/global-weather-lab --port 8765
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target
