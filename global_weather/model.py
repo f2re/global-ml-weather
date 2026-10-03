@@ -92,7 +92,7 @@ class ObservationEncoder(nn.Module):
         super().__init__()
         self.variable = nn.Embedding(n_variables,hidden)
         self.source = nn.Embedding(len(SOURCES),hidden)
-        self.value = nn.Sequential(nn.Linear(12,hidden),nn.GELU(),nn.Linear(hidden,hidden))
+        self.value = nn.Sequential(nn.Linear(12+2*hidden,hidden),nn.GELU(),nn.Linear(hidden,hidden))
         self.source_projection = nn.ModuleList([nn.Linear(hidden,hidden,bias=False) for _ in SOURCES])
         self.column_gate = nn.Linear(hidden,hidden)
         self.update = nn.GRUCell(hidden,hidden)
@@ -101,7 +101,8 @@ class ObservationEncoder(nn.Module):
         n,l,d = state.shape
         if not len(obs.cells):
             return state
-        token = self.value(obs.features)+self.variable(obs.variables)+self.source(obs.sources)
+        token = self.value(torch.cat([obs.features,self.variable(obs.variables),
+                                      self.source(obs.sources)],dim=-1))
         for hour in range(12):
             merged = torch.zeros_like(state)
             source_count = state.new_zeros(n,l)

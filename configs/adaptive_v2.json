@@ -1,0 +1,31 @@
+{
+  "architecture": "adaptive-v2",
+  "status": "research_untrained",
+  "mesh": "dual_icosahedral_voronoi",
+  "mesh_level": 6,
+  "hidden": 128,
+  "latent_slots": 8,
+  "history_hours": 12,
+  "step_hours": 3,
+  "horizon_hours": 72,
+  "output_pressure_levels": "ERA5_37_1000_to_1_hPa",
+  "normalization": {
+    "required": true,
+    "bundle": "data/normalization/complete_era5_training.json",
+    "base_source": "configs/normalization_sources.json",
+    "allow_online_refit": false,
+    "allow_missing_scales": false,
+    "satellite_channel_statistics": "own_training_partition_only"
+  },
+  "physical_adaptation": {
+    "state_conditioned_messages": true,
+    "wind_projected_along_edges": true,
+    "theta_difference_and_validity": true,
+    "coriolis_latitude": true,
+    "hydrostatic_loss_weight_initial_experiment": 0.01,
+    "conservative_exchange": "tested_operator_not_wired_to_forecast_budget",
+    "automatic_mesh_refinement": false
+  },
+  "comparison_experiments": ["directed_graph_vs_HEALPix_CNN", "latent_slots_4_8_16_38", "cold_start_vs_cycled_analysis"],
+  "config_role": "research specification; instantiate Python components explicitly, not an automatic trainer"
+}

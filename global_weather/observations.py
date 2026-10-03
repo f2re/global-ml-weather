@@ -70,6 +70,8 @@ class PackedObservations:
     schema_fingerprint: str
     accepted_records: int
     rejected: dict[str, int]
+    normalization_fingerprint: str = ""
+    evidence_ids: tuple[str, ...] = ()  # one identity per placed token, stable across releases
 
     def coverage(self, n_cells):
         """Direct evidence at issue time, not confidence or future coverage."""
@@ -116,9 +118,14 @@ def read_jsonl(path):
 
 
 def pack_observations(records, grid: SphereGrid, pressure_pa, issue_time,
-                      variables=None):
+                      variables=None, *, normalization=None):
     variables = DEFAULT_VARIABLES if variables is None else variables
     p = validate_levels(pressure_pa)
+    if normalization is not None:
+        for name,var in variables.items():
+            stat=normalization.get(name,var.units)
+            if bool(stat.pressure_pa) != (var.vertical == 'pressure'):
+                raise ValueError('Normalisation vertical meaning differs from the variable registry.')
     vocab = tuple(sorted(variables))
     issue = utc(issue_time)
     selected = {}
@@ -148,6 +155,7 @@ def pack_observations(records, grid: SphereGrid, pressure_pa, issue_time,
             reject('invalid_contract')
     feats, cells, levels, slots, sources, var_ids, weights = [], [], [], [], [], [], []
     accepted = 0
+    evidence_ids = []
     for event,rec in selected.values():
         try:
             var = variables[rec['variable']]
@@ -200,7 +208,12 @@ def pack_observations(records, grid: SphereGrid, pressure_pa, issue_time,
                 links = [(j-1,1-alpha),(j,alpha)]
             else:
                 links = [(len(p) if var.vertical == 'surface' else -1,1.)]
-            feature = [(value-var.offset)/var.scale, age/12.,
+            normalized = (value-var.offset)/var.scale
+            if normalization is not None:
+                normalized = float(normalization.normalise(
+                    rec['variable'], value, var.units,
+                    pressure if var.vertical == 'pressure' else None))
+            feature = [normalized, age/12.,
                        np.log(pressure/100_000.)/7 if pressure > 0 else 0.,
                        float(var.vertical == 'pressure'), elevation/5000.,
                        float('elevation_m' in rec), footprint/100., np.cos(np.deg2rad(zenith)),
@@ -211,15 +224,19 @@ def pack_observations(records, grid: SphereGrid, pressure_pa, issue_time,
                 slots.append(11-int(np.floor(age)))
                 sources.append(SOURCES.index(event.source)); var_ids.append(vocab.index(rec['variable']))
                 weights.append(weight*quality)
+                evidence_ids.append(json.dumps([event.source,event.observation_id,event.revision,
+                                                event.available_at.isoformat()],separators=(',',':')))
             accepted += 1
         except (KeyError,TypeError,ValueError) as exc:
             reject(str(exc) if str(exc) in ('unit_mismatch','footprint_operator_required',
                                             'pressure_outside_supported_levels') else 'invalid_physical_record')
     schema = json.dumps({'version':1,'variables':{k:asdict(variables[k]) for k in vocab},
-                         'pressure_pa':p.tolist()},sort_keys=True,allow_nan=False)
+                         'pressure_pa':p.tolist(),
+                         'normalization':normalization.fingerprint if normalization else ''},sort_keys=True,allow_nan=False)
     fingerprint = hashlib.sha256(schema.encode()).hexdigest()
     long = lambda a: torch.tensor(a,dtype=torch.long)
     return PackedObservations(torch.tensor(feats,dtype=torch.float32).reshape(-1,12),
                               long(cells),long(levels),long(slots),long(sources),long(var_ids),
                               torch.tensor(weights,dtype=torch.float32), issue,grid.fingerprint,torch.tensor(p,dtype=torch.float32),
-                              vocab,fingerprint,accepted,rejected)
+                              vocab,fingerprint,accepted,rejected,
+                              normalization.fingerprint if normalization else "",tuple(evidence_ids))

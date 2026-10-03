@@ -1,0 +1,22 @@
+{
+  "preferred_source": "graphcast_era5_37",
+  "repository": "https://github.com/google-deepmind/weathernext",
+  "revision": "f2f2c5117d2f864e2d5e7c2f9f220db5e1049dd3",
+  "source_notebook": "docs/weathernext1_graph/graphcast_demo.ipynb",
+  "artifacts": {
+    "mean_by_level.nc": "https://storage.googleapis.com/dm_graphcast/graphcast/stats/mean_by_level.nc",
+    "stddev_by_level.nc": "https://storage.googleapis.com/dm_graphcast/graphcast/stats/stddev_by_level.nc"
+  },
+  "numerical_artifacts_bundled": false,
+  "actual_cloud_bytes_verified_in_this_revision": false,
+  "fit_period": null,
+  "kind": "global_level_zscore",
+  "not_inherited": ["neural network weights", "diffs_stddev_by_level for a different forecast step", "local or seasonal climatology"],
+  "own_training_statistics_required": ["td2m", "surface_pressure", "total_cloud_fraction", "3-hour precipitation_step", "each satellite platform and physical channel"],
+  "comparison_source_only": {
+    "repository": "https://github.com/microsoft/aurora",
+    "path": "aurora/normalisation.py",
+    "blob_sha": "f10a1b56cab4ab0fce47392eef59608c67affad2",
+    "reason_not_default": "Base published atmospheric normalization covers 13 pressure levels; no unsupported extrapolation to 37 levels. Static min-max factors are not z-score statistics."
+  }
+}

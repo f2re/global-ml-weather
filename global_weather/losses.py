@@ -1,7 +1,8 @@
 """Missing-target-safe, area-weighted objectives; no target is never 'zero rain'."""
 import torch
 from torch.nn import functional as F
-from .vertical import PROFILE_SCALES, SURFACE_SCALES
+from .vertical import (PROFILE_SCALES, SURFACE_SCALES, PROFILE_VARIABLES,
+                       PROFILE_UNITS, SURFACE_VARIABLES, SURFACE_UNITS)
 
 
 def masked_huber(prediction,target,mask,weights=None,delta=1.):
@@ -20,7 +21,8 @@ def masked_huber(prediction,target,mask,weights=None,delta=1.):
     return loss,int((valid & (w > 0)).sum())
 
 
-def forecast_loss(frame,profile_target,profile_mask,surface_target,surface_mask,area):
+def forecast_loss(frame,profile_target,profile_mask,surface_target,surface_mask,area,
+                  *,normalization=None,pressure_pa=None,step_hours=3):
     """Equal per-variable tasks; terrain mask must come from TARGET pressure.
 
     Never use a predicted below-ground mask to hide errors during training.
@@ -29,10 +31,17 @@ def forecast_loss(frame,profile_target,profile_mask,surface_target,surface_mask,
     """
     tasks = []
     for k,scale in enumerate(PROFILE_SCALES):
+        if normalization is not None:
+            if pressure_pa is None: raise ValueError('Pressure coordinates required for z-scaled loss.')
+            _,std=normalization.get(PROFILE_VARIABLES[k],PROFILE_UNITS[k]).at(pressure_pa.detach().cpu().numpy())
+            scale=torch.as_tensor(std,device=frame.profiles.device,dtype=frame.profiles.dtype)
         loss,count = masked_huber(frame.profiles[...,k]/scale,profile_target[...,k]/scale,
                                    profile_mask[...,k],area[:,None])
         if count: tasks.append(loss)
     for k,scale in enumerate(SURFACE_SCALES):
+        if normalization is not None:
+            interval=step_hours if SURFACE_VARIABLES[k]=='precipitation_step' else None
+            _,scale=normalization.get(SURFACE_VARIABLES[k],SURFACE_UNITS[k]).at(interval_hours=interval)
         loss,count = masked_huber(frame.surface[...,k]/scale,surface_target[...,k]/scale,
                                    surface_mask[...,k],area)
         if count: tasks.append(loss)

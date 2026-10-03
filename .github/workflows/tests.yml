@@ -16,6 +16,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install 'torch>=2.2,<3' --index-url https://download.pytorch.org/whl/cpu
-      - run: python -m pip install -e '.[test]'
+      - run: python -m pip install -e '.[test,data]'
       - run: python -m pytest -q
       - run: global-weather train-smoke --optimizer-steps 2 --horizon-hours 72 --output outputs/ci
+      - run: python -m global_weather.adaptive_cli --output outputs/adaptive-ci

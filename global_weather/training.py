@@ -6,6 +6,8 @@ remain external. This module does not infer missing targets from observations.
 from dataclasses import dataclass
 from datetime import timedelta
 import torch
+import numpy as np
+from .physics import hydrostatic_penalty
 from .losses import forecast_loss
 from .observations import utc
 
@@ -57,7 +59,9 @@ def assert_time_separation(train_issue_times,validation_issue_times,*,horizon_ho
         raise ValueError('Train/validation observation or target windows overlap.')
 
 
-def train_step(model,optimizer,observations,elevation_m,land_fraction,targets: Targets,*,grad_clip=1.):
+def train_step(model,optimizer,observations,elevation_m,land_fraction,targets: Targets,*,grad_clip=1.,physics_weight=0.):
+    if physics_weight < 0 or not np.isfinite(physics_weight):
+        raise ValueError("Physics weight must be finite and nonnegative.")
     if grad_clip <= 0:
         raise ValueError('Positive gradient clipping threshold required.')
     targets.validate(model)
@@ -73,7 +77,12 @@ def train_step(model,optimizer,observations,elevation_m,land_fraction,targets: T
             continue
         i=lookup[frame.lead_hours]
         losses.append(forecast_loss(frame,targets.profiles[i],targets.profile_mask[i],
-                                   targets.surface[i],targets.surface_mask[i],area))
+                                   targets.surface[i],targets.surface_mask[i],area,
+                                   normalization=getattr(model,'normalization',None),
+                                   pressure_pa=model.pressure_pa,step_hours=model.step_hours))
+        if physics_weight:
+            losses[-1]=losses[-1]+physics_weight*hydrostatic_penalty(
+                frame.profiles,model.pressure_pa,targets.profile_mask[i])
     loss=torch.stack(losses).mean()
     if not torch.isfinite(loss):
         raise FloatingPointError('Nonfinite loss.')
