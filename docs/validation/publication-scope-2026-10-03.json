@@ -1,0 +1,14 @@
+{
+  "schema": "publication-scope-v1",
+  "base_commit": "916a2d7e9e34d203519dc810bfeb8599fa6bc279",
+  "source_overlay": "global-ml-weather-compatibility-v0.3.1.zip",
+  "source_overlay_sha256": "9d21b0ee33c7977dbe7609db0f82822e66a778da650302edc4e48d277d920c5c",
+  "scope": ["native compatibility adapters", "mandatory agent contract", "Russian technical documentation", "formal documentation checks", "CI with rasterio and pinned producer sources"],
+  "full_local_current_checkout_tests_claimed": false,
+  "acceptance_evidence": "GitHub Actions results and artifacts for the exact candidate commit; previous runs do not certify a changed candidate",
+  "real_satellite_samples_tested": false,
+  "installed_satdump_binary_tested": false,
+  "forecast_skill_claimed": false,
+  "independent_scientific_review_claimed": false,
+  "official_asd_ste100_compliance_claimed": false
+}

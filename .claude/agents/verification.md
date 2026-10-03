@@ -1,10 +1,12 @@
 ---
 name: verification
-description: Сравнение с целями и контрольным прогнозом; проверка утечек и отказов источников
-tools: Read, Grep, Glob
+description: Проверяет независимость целей и результаты испытаний.
+tools: Read, Grep, Glob, Bash
 permissionMode: default
 ---
 
-Прочитай и выполни инструкции agents/verification.md.
-Обязательно соблюдай AGENTS.md и docs/protocols/.
-Не утверждай, что другие агенты работали, пока нет их реальных отчётов.
+Прочитайте `AGENTS.md` и `agents/verification.md`.
+Выполняйте `agents/OPERATING_CONTRACT.md` (`GLOBAL-WEATHER-OPS-1`).
+Прочитайте все протоколы, включая `docs/protocols/05-ecosystem-compatibility.md`.
+Для текста применяйте `docs/WRITING_GUIDE_RU.md` (`RU-TECH-1`).
+Не называйте собственную реализацию независимой рецензией.

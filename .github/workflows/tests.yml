@@ -12,12 +12,14 @@ jobs:
         python-version: ['3.11', '3.13']
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install 'torch>=2.2,<3' --index-url https://download.pytorch.org/whl/cpu
-      - run: python -m pip install -e '.[test,data,lab]'
-      - run: python -c 'from global_weather.adaptive import AdaptiveWeatherModel'
+      - run: python -m pip install -e '.[test,data,lab,ecosystem]'
+      - run: python -c 'from global_weather.adaptive import AdaptiveWeatherModel; import rasterio'
       - run: python -m pytest -q
       - run: global-weather train-smoke --optimizer-steps 2 --horizon-hours 72 --output outputs/ci
       - run: python -m global_weather.adaptive_cli --output outputs/adaptive-ci
@@ -26,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -38,3 +42,51 @@ jobs:
         with:
           name: lab-browser-screenshots
           path: outputs/browser
+  producer-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/checkout@v4
+        with:
+          repository: f2re/arktika-worker
+          ref: 4d744570653ac60c8fd059d10e617c3806a6bafc
+          path: producers/arktika-worker
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /arktika/model.py
+            /arktika/processing.py
+            /arktika/download.py
+      - uses: actions/checkout@v4
+        with:
+          repository: f2re/SatDump
+          ref: 394431e11d9fffe1a73d3e0670fb023ad7562241
+          path: producers/SatDump
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /src-core/products/dataset.cpp
+            /src-core/products/image_products.cpp
+            /docs/ru/station/MTVZA_PROCESSING.md
+      - run: python -m global_weather.compatibility checkout producers/arktika-worker --upstream arktika-worker
+      - run: python -m global_weather.compatibility checkout producers/SatDump --upstream satdump
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python scripts/check_docs.py --strict --output outputs/docs-style.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: documentation-check
+          path: outputs/docs-style.json

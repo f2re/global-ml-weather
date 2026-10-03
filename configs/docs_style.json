@@ -1,0 +1,15 @@
+{
+  "profile": "RU-TECH-1",
+  "limits": {"procedure_words": 25, "description_words": 30},
+  "include": [
+    "README.md", "AGENTS.md", "agents/*.md", ".claude/agents/*.md",
+    "global_weather/connectors/AGENTS.md", "global_weather/lab/AGENTS.md",
+    "docs/ARCHITECTURE.md", "docs/DATA_CONTRACT.md", "docs/NORMALIZATION.md",
+    "docs/CONNECTORS.md", "docs/LAB.md", "docs/ROADMAP.md", "docs/ECOSYSTEM.md",
+    "docs/WRITING_GUIDE_RU.md", "docs/TERMS_RU.md", "docs/protocols/*.md"
+  ],
+  "scope_note": "Active operational documentation and agent instructions. Historical validation reports, changelog entries, archived contracts and detailed mathematical decisions retain their original evidence and require manual review.",
+  "target_interpretation": "Approximately 80% is a stylistic request, not a measured percentage of official standard compliance.",
+  "certified_standard_compliance": false,
+  "manual_review_required": true
+}

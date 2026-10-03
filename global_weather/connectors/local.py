@@ -18,6 +18,18 @@ def inspect_file(path):
     size = path.stat().st_size
     if size > MAX_BYTES: raise ValueError('Файл больше предела 32 МиБ; подготовьте отдельную выборку.')
     base = dict(name=path.name, bytes=size, sha256=sha256(path), physics_verified=False, status='inspected')
+    if path.suffix.lower() == '.cbor':
+        from .native_cbor import loads
+        try:
+            metadata = loads(path.read_bytes())
+            from .ecosystem import metadata_kind
+            kind = metadata_kind(metadata)
+            if kind != 'satdump_image_product': raise ValueError('Unknown product.')
+            return dict(base, status='native_metadata_only', kind=kind, instrument=metadata.get('instrument'),
+                        channel_layout=metadata.get('channel_layout'), channel_count=len(metadata['images']),
+                        model_ready=False, note='Метаданные SatDump распознаны. Связанные растры, калибровка и геометрия не проверены; используйте CLI compatibility satdump для полного локального набора.')
+        except (ValueError, TypeError, UnicodeError):
+            return dict(base, status='quarantine', reason='Недопустимый или неподдерживаемый CBOR.')
     if path.suffix.lower() == '.jsonl':
         reasons, sources = Counter(), Counter()
         times = []; valid = 0; total = 0
@@ -60,6 +72,12 @@ def inspect_file(path):
                         surface_subset_complete_for_3h=not missing and interval == 3,
                         model_ready=False,
                         note='Совпадение состава не удостоверяет происхождение или независимость обучающего периода.')
+        if isinstance(payload, dict):
+            from .ecosystem import metadata_kind
+            kind = metadata_kind(payload)
+            if kind:
+                return dict(base, status='native_metadata_only', kind=kind, model_ready=False,
+                            note='Формат проекта-поставщика распознан. Веб-инспекция не следует путям/URL из файла; локальный импорт выполняется отдельной командой compatibility.')
         return dict(base, status='inventory_only', kind=payload.get('kind') if isinstance(payload, dict) else None)
     return dict(base, status='quarantine', reason='Формат требует отдельного декодера и физической проверки.')
 

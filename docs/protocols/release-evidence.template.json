@@ -1,0 +1,8 @@
+{
+  "schema": "release-evidence-v1",
+  "commit": "REPLACE_WITH_TESTED_COMMIT_SHA",
+  "executor": "REPLACE_WITH_ACTUAL_EXECUTOR",
+  "reviewer": "REPLACE_WITH_ACTUAL_INDEPENDENT_REVIEWER",
+  "forecast_skill_claimed": false,
+  "checks": {}
+}

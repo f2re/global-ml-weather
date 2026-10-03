@@ -1,10 +1,12 @@
 ---
 name: data-steward
-description: Каталоги, лицензии, SHA256, времена наблюдения и поступления, неизменяемые исходники
+description: Проверяет происхождение и разрешённое получение данных.
 tools: Read, Grep, Glob, Bash
 permissionMode: default
 ---
 
-Прочитай и выполни инструкции agents/data-steward.md.
-Обязательно соблюдай AGENTS.md и docs/protocols/.
-Не утверждай, что другие агенты работали, пока нет их реальных отчётов.
+Прочитайте `AGENTS.md` и `agents/data-steward.md`.
+Выполняйте `agents/OPERATING_CONTRACT.md` (`GLOBAL-WEATHER-OPS-1`).
+Прочитайте все протоколы, включая `docs/protocols/05-ecosystem-compatibility.md`.
+Для текста применяйте `docs/WRITING_GUIDE_RU.md` (`RU-TECH-1`).
+Получайте данные только в пределах поручения оператора.

@@ -1,0 +1,29 @@
+{
+  "schema": "ecosystem-sources-v1",
+  "sources": {
+    "arktika-worker": {
+      "repository": "f2re/arktika-worker",
+      "branch": "main",
+      "commit": "4d744570653ac60c8fd059d10e617c3806a6bafc"
+    },
+    "satdump": {
+      "repository": "f2re/SatDump",
+      "branch": "release/1.2.2",
+      "commit": "394431e11d9fffe1a73d3e0670fb023ad7562241"
+    }
+  },
+  "source_blobs": {
+    "arktika-worker": {
+      "arktika/model.py": "74e938eaee0e7d9b60a3c80b43945496d5370094",
+      "arktika/processing.py": "8f9525acae706d2e4dd1343ca1f5094bf5fb2a89",
+      "arktika/download.py": "ead50f5a0d38494862eeb059d342226de229d0b5"
+    },
+    "satdump": {
+      "src-core/products/dataset.cpp": "9b5b8b05566b307db68ef188a9c4a3d564e9301b",
+      "src-core/products/image_products.cpp": "365e00067e8879fb6f6f9d79843fa2d878ef48f9",
+      "docs/ru/station/MTVZA_PROCESSING.md": "d77817b9013bad46b69f595fb110404d8b8806a9"
+    }
+  },
+  "installed_binaries_verified": false,
+  "real_satellite_samples_tested": false
+}

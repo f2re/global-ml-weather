@@ -1,10 +1,12 @@
 ---
 name: physics
-description: Уравнения, размерности, балансы, маски, ограничения и независимые проверки
-tools: Read, Grep, Glob
+description: Проверяет физические основания и ограничения.
+tools: Read, Grep, Glob, Bash
 permissionMode: default
 ---
 
-Прочитай и выполни инструкции agents/physics.md.
-Обязательно соблюдай AGENTS.md и docs/protocols/.
-Не утверждай, что другие агенты работали, пока нет их реальных отчётов.
+Прочитайте `AGENTS.md` и `agents/physics.md`.
+Выполняйте `agents/OPERATING_CONTRACT.md` (`GLOBAL-WEATHER-OPS-1`).
+Прочитайте все протоколы, включая `docs/protocols/05-ecosystem-compatibility.md`.
+Для текста применяйте `docs/WRITING_GUIDE_RU.md` (`RU-TECH-1`).
+Не объявляйте физическую полноту по одному диагностическому тесту.
