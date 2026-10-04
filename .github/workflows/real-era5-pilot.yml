@@ -1,0 +1,27 @@
+name: real-era5-pilot
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/real-data-training-v070']
+    paths: ['scripts/download-real-era5-pilot.py', '.github/workflows/real-era5-pilot.yml']
+permissions:
+  contents: read
+jobs:
+  targets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy scipy numcodecs
+      - run: python scripts/download-real-era5-pilot.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: actual-era5-37level-pilot
+          path: outputs/real-era5-pilot
+          if-no-files-found: error
+          retention-days: 90
