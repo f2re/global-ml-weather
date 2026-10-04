@@ -16,7 +16,8 @@ import time
 import uuid
 import numpy as np
 import torch
-from .dataset import PreparedDataset, integer
+from ..multimodal.dataset import TrainingDataset as PreparedDataset
+from .dataset import integer
 from .io import atomic_json, artifact, digest, local_path, read_json, reference, sha256, write_arrays
 from ..vertical import PRESSURE_HPA, PROFILE_VARIABLES, PROFILE_UNITS, SURFACE_VARIABLES, SURFACE_UNITS
 
@@ -66,6 +67,7 @@ class TrainConfig:
             raise ValueError('Последний этап должен достигать полного горизонта.')
         # Screening estimate, not a hard allocator memory guarantee.
         estimate = ds.n_cells*38*self.hidden*4*(2+self.horizon_hours//ds.step)*16
+        estimate += ds.input_activation_estimate() if hasattr(ds, "input_activation_estimate") else 0
         if estimate > self.memory_budget_mib*1024**2:
             raise ValueError('Оценка активаций превышает заданный бюджет памяти.')
         return estimate
@@ -106,12 +108,8 @@ def event(stage, **values):
 
 
 def make_model(ds, cfg):
-    from ..adaptive import AdaptiveWeatherModel
-    from ..grid import build_pyramid
-    observations = ds.packed(ds.samples[0])
-    return AdaptiveWeatherModel(build_pyramid(ds.level), observations.vocabulary,
-                                observation_schema=observations.schema_fingerprint, hidden=cfg.hidden,
-                                latent_slots=cfg.latent_slots, step_hours=ds.step, normalization=ds.norm)
+    from ..multimodal.model import make_model as factory
+    return factory(ds, cfg)
 
 
 def target_tensors(ds, sample, horizon):
@@ -382,7 +380,7 @@ def evaluate(dataset_path, run, output, *, split='test'):
     if split == 'test':
         from .dataset import utc
         end = utc(trained['selection_end_utc'])
-        if any(s.issue-timedelta(hours=12) <= end for s in ds.subset('test')):
+        if any(s.issue-timedelta(hours=ds.history_hours) <= end for s in ds.subset('test')):
             raise ValueError('Итоговый тест пересекается с периодом выбора контрольной точки.')
     result = evaluate_model(ds, model, split, cfg.horizon_hours)
     result['weights'] = read_json(Path(run)/'best.json')['weights']

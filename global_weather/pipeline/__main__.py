@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 from .io import read_json, atomic_json, reference, local_path
-from .dataset import PreparedDataset
+from ..multimodal.dataset import TrainingDataset as PreparedDataset
 
 
 def main(argv=None):

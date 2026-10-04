@@ -77,7 +77,7 @@ def manifest_summary(workspace, name):
 
 
 def execute(spec, output, workspace):
-    from ..pipeline.dataset import PreparedDataset
+    from ..multimodal.dataset import TrainingDataset as PreparedDataset
     from ..pipeline.runner import train, evaluate, forecast, TrainConfig
     path = dataset_path(workspace, spec.dataset_id)
     ds = PreparedDataset(path, max_cells=162, max_samples=16, inference=spec.kind in ('forecast_dataset', 'validate_dataset'))
