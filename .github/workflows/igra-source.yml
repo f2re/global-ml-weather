@@ -1,0 +1,26 @@
+name: igra-source
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/real-data-cuda-v070']
+    paths: ['.github/workflows/igra-source.yml']
+permissions:
+  contents: read
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: |
+          mkdir -p outputs/igra
+          curl --fail --retry 3 --location --proto '=https' --max-time 120 'https://www.ncei.noaa.gov/pub/data/igra/data/data-y2d/USM00072249-data-beg2026.txt.zip' -o outputs/igra/USM00072249-data-beg2026.txt.zip
+          sha256sum outputs/igra/*.zip > outputs/igra/SHA256SUMS
+          printf '%s\n' 'https://www.ncei.noaa.gov/pub/data/igra/data/data-y2d/USM00072249-data-beg2026.txt.zip' > outputs/igra/source.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: real-igra-sounding
+          path: outputs/igra
+          retention-days: 90
