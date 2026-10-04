@@ -1,0 +1,49 @@
+name: real-binary-providers
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/real-data-training-v070']
+    paths: ['.github/workflows/real-binary-providers.yml']
+permissions:
+  contents: read
+jobs:
+  binary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download actual bounded public files
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from datetime import datetime,timezone
+          import hashlib,json
+          out=Path('outputs/real-binary');out.mkdir(parents=True)
+          urls={
+            'goes.nc':'https://noaa-goes16.s3.amazonaws.com/ABI-L2-MCMIPC/2020/001/00/OR_ABI-L2-MCMIPC-M6_G16_s20200010001184_e20200010003557_c20200010004112.nc',
+            'gfs.grib2':'https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20220101/00/atmos/gfs.t00z.pgrb2.1p00.f000',
+            'gfs.idx':'https://noaa-gfs-bdp-pds.s3.amazonaws.com/gfs.20220101/00/atmos/gfs.t00z.pgrb2.1p00.f000.idx'}
+          rows=[]
+          for name,url in urls.items():
+              h=hashlib.sha256();size=0
+              with urlopen(Request(url,headers={'User-Agent':'global-ml-weather real provider audit'}),timeout=120) as response,(out/name).open('xb') as f:
+                  while chunk:=response.read(1048576):
+                      size+=len(chunk)
+                      if size>250000000:raise ValueError('Explicit provider file-size bound exceeded')
+                      h.update(chunk);f.write(chunk)
+                  rows.append({'path':name,'requested_url':url,'response_url':response.geturl(),'http_status':response.status,'bytes':size,'sha256':h.hexdigest(),'acquired_at':datetime.now(timezone.utc).isoformat()})
+              print(name,size,h.hexdigest(),flush=True)
+          (out/'report.json').write_text(json.dumps({'schema':'real-binary-provider-download-1','data_kind':'real','objects':rows},indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: actual-satellite-and-ncep-files
+          path: outputs/real-binary
+          if-no-files-found: error
+          retention-days: 30
