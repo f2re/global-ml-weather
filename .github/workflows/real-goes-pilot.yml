@@ -1,0 +1,53 @@
+name: real-goes-pilot
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/real-data-training-v070']
+    paths: ['.github/workflows/real-goes-pilot.yml']
+permissions:
+  contents: read
+jobs:
+  imagery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip download --no-deps h5netcdf --dest outputs/real-goes/wheels
+      - name: Fetch genuine matching satellite scans
+        run: |
+          python - <<'PY'
+          import hashlib,json,xml.etree.ElementTree as ET
+          from urllib.request import Request,urlopen
+          from urllib.parse import urlencode
+          from datetime import datetime,timezone
+          from pathlib import Path
+          out=Path('outputs/real-goes');out.mkdir(parents=True,exist_ok=True);objects=[]
+          def get(url,path,bound):
+              with urlopen(Request(url,headers={'User-Agent':'global-ml-weather real training validation'}),timeout=120) as r:
+                  data=r.read(bound+1)
+                  if not data or len(data)>bound:raise ValueError('Provider byte budget exceeded')
+                  path.write_bytes(data)
+                  info={'requested_url':url,'response_url':r.geturl(),'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'http_status':r.status,'acquired_at':datetime.now(timezone.utc).isoformat(),'path':path.name}
+              objects.append(info);return data
+          for day in (2,4,10,18):
+              prefix=f'ABI-L2-MCMIPC/2020/{day:03d}/06/'
+              url='https://noaa-goes16.s3.amazonaws.com/?'+urlencode({'list-type':2,'prefix':prefix,'max-keys':32})
+              data=get(url,out/f'listing-202001{day:02d}T06.xml',200000)
+              ns={'s':'http://s3.amazonaws.com/doc/2006-03-01/'}
+              keys=sorted(n.findtext('s:Key',namespaces=ns) for n in ET.fromstring(data).findall('s:Contents',ns))
+              if not keys or not keys[0].startswith(prefix):raise ValueError('Missing actual satellite scan')
+              get('https://noaa-goes16.s3.amazonaws.com/'+keys[0],out/f'goes-202001{day:02d}T06.nc',100000000)
+              print('ACTUAL_GOES',day,objects[-1]['sha256'],flush=True)
+          (out/'report.json').write_text(json.dumps({'schema':'actual-goes-pilot-1','data_kind':'real','objects':objects},indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: matching-actual-goes-pilot
+          path: outputs/real-goes
+          retention-days: 30
+          if-no-files-found: error
