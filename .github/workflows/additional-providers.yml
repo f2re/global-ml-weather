@@ -1,0 +1,27 @@
+name: additional-real-providers
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/real-data-training-v070']
+    paths: ['scripts/probe-additional-providers.py', '.github/workflows/additional-providers.yml']
+permissions:
+  contents: read
+jobs:
+  observations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python scripts/probe-additional-providers.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: additional-actual-provider-files
+          path: outputs/additional-providers
+          if-no-files-found: error
+          retention-days: 30
