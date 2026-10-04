@@ -1,8 +1,7 @@
-"""Fetch a small-in-time REAL global ERA5 pilot from the public WeatherBench copy.
+"""Acquire real 37-level ERA5 pilot targets, not generated weather.
 
-No generated field values. Nearest native ERA5 pixels are selected at the
-repository's 12-cell sphere. All 37 pressure levels are retained. This is a
-3-hour data/optimizer integration pilot, not a weather skill validation.
+Four separated issues, analysis and +3h. Full hourly source chunks are sampled
+at 12 global cells; the 6GB transfer bound is based on observed chunk sizes.
 """
 from pathlib import Path
 from datetime import datetime,timedelta,timezone
@@ -12,12 +11,13 @@ import numpy as np
 from numcodecs import get_codec
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from global_weather.grid import build_grid,latlon
+from global_weather.vertical import PRESSURE_HPA
 BASE='https://storage.googleapis.com/weatherbench2/datasets/era5/1959-2023_01_10-full_37-1h-0p25deg-chunk-1.zarr'
 OUT=Path('outputs/real-era5-pilot');OUT.mkdir(parents=True,exist_ok=True)
-MAX=5_000_000_000
+MAX=6_000_000_000
 receipt={'schema':'provider-receipt-1','provider':'weatherbench2_era5_37','data_kind':'real','status':'acquiring','objects':[],
  'details':{'role':'real_reanalysis_targets_not_station_observations','license':'ECMWF/Copernicus ERA5; retain WeatherBench attribution',
- 'operator':'nearest_native_ERA5_grid_cell; not conservative average','horizon_hours':3}}
+ 'operator':'nearest_native_ERA5_grid_cell; not conservative average','horizon_hours':3,'transfer_limit_bytes':MAX}}
 used=0;cache={}
 def get(key,limit=170_000_000):
  global used
@@ -32,7 +32,7 @@ def get(key,limit=170_000_000):
    used+=len(data);receipt['objects'].append(row)
    if len(data)<2_000_000:cache[key]=data
    return data
-  except Exception:
+  except (OSError,TimeoutError):
    if attempt==2:raise
    time.sleep(2+attempt)
 metadata=get('.zmetadata',2_000_000);(OUT/'source-zmetadata.json').write_bytes(metadata);meta=json.loads(metadata)['metadata']
@@ -47,7 +47,6 @@ def chunk(name,ti=None):
  a=np.frombuffer(decoded,dtype=np.dtype(m['dtype'])).reshape(shape)
  return a[ti%shape[0]] if 'time' in dims else a
 lat=chunk('latitude');lon=chunk('longitude');levels=chunk('level')
-from global_weather.vertical import PRESSURE_HPA
 if set(levels)!=set(PRESSURE_HPA):raise ValueError('Not all 37 levels')
 order=[int(np.flatnonzero(levels==p)[0]) for p in PRESSURE_HPA]
 grid=build_grid(0);ll=latlon(grid.xyz);iy=np.abs(lat[:,None]-ll[:,0]).argmin(0);ix=np.abs(lon[:,None]-(ll[:,1]%360)).argmin(0)
@@ -66,8 +65,7 @@ for issue in issues:
   for name in PROFILE:
    a=chunk(name,ti);values[name]=np.asarray(a[:,iy,ix].T[:,order]).copy();del a
    print('REAL_FIELD',when.isoformat(),name,'downloaded_bytes',used,flush=True)
-  for name in SURFACE:
-   values[name]=np.asarray(chunk(name,ti)[iy,ix]).copy()
+  for name in SURFACE:values[name]=np.asarray(chunk(name,ti)[iy,ix]).copy()
   if lead:
    hourly=[values['total_precipitation']]
    for h in (1,2):hourly.append(np.asarray(chunk('total_precipitation',ti-h)[iy,ix]).copy())
