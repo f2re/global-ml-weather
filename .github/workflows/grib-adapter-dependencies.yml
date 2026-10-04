@@ -1,0 +1,22 @@
+name: grib-adapter-dependencies
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/real-data-cuda-v070']
+    paths: ['.github/workflows/grib-adapter-dependencies.yml']
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip download --only-binary=:all: --dest outputs/grib cfgrib eccodes
+      - uses: actions/upload-artifact@v4
+        with:
+          name: grib-adapter-validation-dependencies
+          path: outputs/grib
+          retention-days: 7
