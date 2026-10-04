@@ -109,6 +109,9 @@ def make_model(ds, cfg):
     from ..adaptive import AdaptiveWeatherModel
     from ..grid import build_pyramid
     observations = ds.packed(ds.samples[0])
+    if ds.manifest.get('multimodal') is not None:
+        from ..multimodal.integration import make_model as make_multimodal
+        return make_multimodal(ds, cfg, observations, build_pyramid(ds.level))
     return AdaptiveWeatherModel(build_pyramid(ds.level), observations.vocabulary,
                                 observation_schema=observations.schema_fingerprint, hidden=cfg.hidden,
                                 latent_slots=cfg.latent_slots, step_hours=ds.step, normalization=ds.norm)
@@ -382,7 +385,7 @@ def evaluate(dataset_path, run, output, *, split='test'):
     if split == 'test':
         from .dataset import utc
         end = utc(trained['selection_end_utc'])
-        if any(s.issue-timedelta(hours=12) <= end for s in ds.subset('test')):
+        if any(s.issue-timedelta(hours=ds.history_hours) <= end for s in ds.subset('test')):
             raise ValueError('Итоговый тест пересекается с периодом выбора контрольной точки.')
     result = evaluate_model(ds, model, split, cfg.horizon_hours)
     result['weights'] = read_json(Path(run)/'best.json')['weights']

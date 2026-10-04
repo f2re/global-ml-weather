@@ -1,0 +1,26 @@
+name: multimodal-integration
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  multimodal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install 'torch>=2.2,<3' --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e '.[test,data,lab,ecosystem]'
+      - run: python -m pytest tests/test_multimodal.py tests/test_multimodal_data.py tests/test_multimodal_capsules.py tests/test_multimodal_hardening.py tests/test_multimodal_pipeline.py tests/test_reference_assets.py -q
+      - run: python -m global_weather.multimodal selftest --output outputs/multimodal
+      - uses: actions/upload-artifact@v4
+        with:
+          name: multimodal-${{ matrix.python-version }}
+          path: outputs/multimodal/report.json

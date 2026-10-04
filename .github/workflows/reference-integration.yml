@@ -1,0 +1,43 @@
+name: real-reference-integration
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/reference-assets-v060']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'torch>=2.2,<3' --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install numpy scipy xarray h5py
+      - uses: actions/download-artifact@v4
+        with:
+          name: global-dem-30s-under-900mb
+          run-id: 37203926389
+          github-token: ${{ github.token }}
+          path: data/dem
+      - run: PYTHONPATH=. python scripts/reference-data-test.py --dem data/dem/earth_relief_30s_p.nc --output outputs/reference-reader.json
+      - name: Archive exact tested source tree
+        run: |
+          python - <<'PY'
+          import pathlib,subprocess,zipfile
+          p=pathlib.Path('outputs');p.mkdir(exist_ok=True)
+          with zipfile.ZipFile(p/'source-snapshot.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for name in subprocess.check_output(['git','ls-files'],text=True).splitlines():
+                  if pathlib.Path(name).is_file():z.write(name,name)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: real-reference-integration
+          path: |
+            outputs/reference-reader.json
+            outputs/source-snapshot.zip

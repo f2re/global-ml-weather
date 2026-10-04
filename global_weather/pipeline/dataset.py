@@ -160,9 +160,8 @@ class PreparedDataset:
                 if self.registry[r['variable']].get('product') and r.get('valid', True):
                     if r.get('derivation', {}).get('data_kind') != self.kind:
                         raise ValueError('Происхождение продукции и выборки различается.')
-                # Archive files may include late messages: packing filters them, never rewrites times.
                 if not r.get('valid', True):
-                    result.append(r)  # A withdrawn revision must cancel its earlier value.
+                    result.append(r)
                     continue
                 if r.get('units') != self.registry[r['variable']]['units']:
                     raise ValueError('Единицы наблюдения не совпадают с реестром.')
@@ -233,7 +232,6 @@ class PreparedDataset:
 
     def packed(self, sample):
         from ..observations import pack_observations, Variable
-        from ..grid import build_grid
         grid = self.grid()
         variables = {k: Variable(**v) for k, v in self.registry.items()}
         packed = pack_observations(self.eligible_records(sample), grid, np.array(PRESSURE_HPA)*100,
@@ -241,6 +239,9 @@ class PreparedDataset:
         unacceptable = {k: v for k, v in packed.rejected.items() if k != 'not_available_in_12h_window' and v}
         if unacceptable:
             raise ValueError(f'Наблюдения не прошли допуск: {unacceptable}')
+        if self.manifest.get('multimodal') is not None:
+            from ..multimodal.integration import attach
+            return attach(self, sample, packed)
         if not packed.accepted_records:
             raise ValueError('Нет пригодных наблюдений или зарегистрированного контекста поверхности.')
         return packed

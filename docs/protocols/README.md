@@ -13,8 +13,11 @@
 | [06](06-russian-documentation.md) | Русская техническая документация |
 | [07](07-training-and-inference.md) | Подготовленная выборка, обучение и прогноз |
 | [08](08-satellite-products.md) | Спутниковые продукты и медленный контекст |
+| [09](09-multimodal-adapters.md) | Связность нейросетевых адаптеров |
+| [10](10-reference-data-and-terrain.md) | Реальные нормы и цифровой рельеф |
 
 Соблюдайте `GLOBAL-WEATHER-OPS-1`.
 Для обучения дополнительно соблюдайте `GLOBAL-WEATHER-TRAIN-1`.
 Для продукции соблюдайте `GLOBAL-WEATHER-PRODUCTS-1`.
+Для нескольких кодировщиков соблюдайте `GLOBAL-WEATHER-MULTIMODAL-1`.
 Применяйте профиль `RU-TECH-1` к активной документации.

@@ -7,16 +7,19 @@
     "mean_by_level.nc": "https://storage.googleapis.com/dm_graphcast/graphcast/stats/mean_by_level.nc",
     "stddev_by_level.nc": "https://storage.googleapis.com/dm_graphcast/graphcast/stats/stddev_by_level.nc"
   },
-  "numerical_artifacts_bundled": false,
-  "actual_cloud_bytes_verified_in_this_revision": false,
-  "fit_period": null,
+  "numerical_artifacts_bundled": true,
+  "actual_cloud_bytes_verified_in_this_revision": true,
+  "source_manifest": "assets/normalization/graphcast/SOURCES.json",
+  "fit_period": {"start":"1979-01-02T00:00:00+00:00","end":"2015-12-31T23:59:59.999999+00:00"},
+  "period_interpretation": "Conservative bounds from matching NetCDF date_start/date_end attributes, not model training dates",
   "kind": "global_level_zscore",
   "not_inherited": ["neural network weights", "diffs_stddev_by_level for a different forecast step", "local or seasonal climatology"],
-  "own_training_statistics_required": ["td2m", "surface_pressure", "total_cloud_fraction", "3-hour precipitation_step", "each satellite platform and physical channel"],
+  "own_training_statistics_required": ["td2m", "3-hour precipitation_step", "each satellite platform and physical channel", "derived products"],
+  "auxiliary_statistics_available": ["surface_pressure", "total_cloud_fraction", "sea_surface_temperature", "sea_ice_fraction"],
   "comparison_source_only": {
     "repository": "https://github.com/microsoft/aurora",
     "path": "aurora/normalisation.py",
     "blob_sha": "f10a1b56cab4ab0fce47392eef59608c67affad2",
-    "reason_not_default": "Base published atmospheric normalization covers 13 pressure levels; no unsupported extrapolation to 37 levels. Static min-max factors are not z-score statistics."
+    "reason_not_default": "The previously inspected atmospheric normalization covers 13 levels; no extrapolation to the 37-level target."
   }
 }

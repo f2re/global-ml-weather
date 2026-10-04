@@ -1,0 +1,24 @@
+{
+  "schema": "reference-statistics-1",
+  "repository": "https://github.com/google-deepmind/weathernext",
+  "revision": "f2f2c5117d2f864e2d5e7c2f9f220db5e1049dd3",
+  "license": "CC-BY-4.0 for released non-code materials; underlying ECMWF/Copernicus conditions apply",
+  "acquired_utc": "2026-10-04",
+  "workflow_run": 37203064675,
+  "artifacts": {
+    "mean_by_level.nc": {
+      "url": "https://storage.googleapis.com/dm_graphcast/graphcast/stats/mean_by_level.nc",
+      "sha256": "e6e724b94cd27707903cdc5cf5784d420bab306f722e631f4455e25c96da9931",
+      "bytes": 5776,
+      "attributes": {"date_start": "1979-01-02", "date_end": "2015", "timestep_hours": "6", "window_stride": "1"}
+    },
+    "stddev_by_level.nc": {
+      "url": "https://storage.googleapis.com/dm_graphcast/graphcast/stats/stddev_by_level.nc",
+      "sha256": "29f941d8c34906b87a1745f93b2308d1e169ec9bbdc4c5491479c771fe92c3cb",
+      "bytes": 5776,
+      "attributes": {"date_start": "1979-01-02", "date_end": "2015", "timestep_hours": "6", "window_stride": "1"}
+    }
+  },
+  "fit_period_interpretation": "date_end=2015 includes the whole year conservatively; not a local/monthly climatology",
+  "excluded": "diffs_stddev_by_level.nc describes 6h increments, not state standard deviation; not used for the 3h model"
+}

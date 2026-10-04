@@ -1,2 +1,2 @@
 """Spherical observation-to-forecast research components, not a trained service."""
-__version__ = "0.5.0"
+__version__ = "0.6.0"
