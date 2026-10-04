@@ -1,0 +1,55 @@
+name: extra-provider-samples
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/real-data-cuda-v070']
+    paths: ['.github/workflows/extra-provider-samples.yml']
+permissions:
+  contents: read
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install requests xarray netCDF4 cfgrib eccodes
+      - run: |
+          python - <<'PY'
+          import requests,hashlib,json,time
+          from pathlib import Path
+          import xarray as xr
+          root=Path('outputs/additional-sources');root.mkdir(parents=True)
+          report={}
+          url='https://dods.ndbc.noaa.gov/thredds/fileServer/data/stdmet/44013/44013h2020.nc'
+          try:
+              r=requests.get(url,timeout=90);r.raise_for_status()
+              if len(r.content)>30000000:raise ValueError('Buoy file exceeds validation limit')
+              p=root/'ndbc-44013-2020.nc';p.write_bytes(r.content)
+              with xr.open_dataset(p) as ds:details={'attrs':{k:str(v) for k,v in ds.attrs.items()},'variables':{k:{'dims':list(v.dims),'units':v.attrs.get('units')} for k,v in ds.variables.items()}}
+              report[p.name]={'url':url,'sha256':hashlib.sha256(r.content).hexdigest(),'bytes':len(r.content),'acquired_unix':time.time(),'status':'downloaded','details':details}
+          except Exception as e:report['ndbc']={'url':url,'status':'failed','error':str(e)}
+          for model in ('gfs','gdas'):
+              url=f'https://noaa-gfs-bdp-pds.s3.amazonaws.com/{model}.20240101/00/atmos/{model}.t00z.pgrb2.0p25.f000'
+              try:
+                  r=requests.get(url+'.idx',timeout=60);r.raise_for_status();lines=r.text.splitlines();index=next(i for i,l in enumerate(lines) if ':TMP:2 m above ground:' in l)
+                  begin=int(lines[index].split(':')[1]);end=int(lines[index+1].split(':')[1])-1
+                  if end-begin>10000000:raise ValueError('GRIB message too large')
+                  r=requests.get(url,headers={'Range':f'bytes={begin}-{end}'},timeout=60);r.raise_for_status()
+                  if r.status_code!=206 or len(r.content)!=end-begin+1:raise ValueError('Range not honored')
+                  p=root/(model+'-2m-temperature.grib2');p.write_bytes(r.content)
+                  with xr.open_dataset(p,engine='cfgrib',backend_kwargs={'indexpath':''}) as ds:details={'variables':list(ds.data_vars),'units':{k:v.attrs.get('units') for k,v in ds.data_vars.items()},'valid_time':str(ds.valid_time.values)}
+                  report[p.name]={'url':url,'byte_range':[begin,end],'source_index_line':lines[index],'sha256':hashlib.sha256(r.content).hexdigest(),'bytes':len(r.content),'acquired_unix':time.time(),'status':'downloaded','details':details}
+              except Exception as e:report[model]={'url':url,'status':'failed','error':str(e)}
+          (root/'report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-additional-provider-samples
+          path: outputs/additional-sources
+          retention-days: 90
