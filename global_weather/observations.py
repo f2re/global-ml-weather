@@ -29,13 +29,22 @@ class Variable:
     source: str | None = None
     platform: str | None = None
     channel_id: str | None = None
+    product: str | None = None
+    method: str | None = None
+    history_hours: int = 12
+    product_depth_m: float | None = None
 
     def __post_init__(self):
         if not self.units or not np.isfinite([self.offset,self.scale]).all() or self.scale <= 0:
             raise ValueError('Invalid normalization/units.')
         if self.vertical not in ('pressure','surface','column'):
             raise ValueError('Unknown vertical placement.')
-        if self.vertical == 'column' and (self.source not in SATELLITES or not self.platform or not self.channel_id):
+        if self.product is not None:
+            from .products.ingest import check_variable
+            check_variable(self)
+        elif self.product_depth_m is not None or self.method is not None or type(self.history_hours) is not int or self.history_hours != 12:
+            raise ValueError('Raw observations retain a 12-hour history and no retrieval method.')
+        if self.product is None and self.vertical == 'column' and (self.source not in SATELLITES or not self.platform or not self.channel_id):
             raise ValueError('A column radiance requires explicit source/platform/channel binding.')
 
 
@@ -141,7 +150,7 @@ def pack_observations(records, grid: SphereGrid, pressure_pa, issue_time,
             event = ObservationEvent(str(rec['observation_id']), source, utc(rec['observed_at']),
                                      utc(rec['available_at']), int(rec.get('revision',0)))
             key = (event.source,event.observation_id)
-            if not select_as_issued([event],issue):
+            if not select_as_issued([event],issue,history_hours=variables[name].history_hours):
                 reject('not_available_in_12h_window'); continue
             old = selected.get(key)
             if old and (event.revision,event.available_at) < (old[0].revision,old[0].available_at):
@@ -172,7 +181,16 @@ def pack_observations(records, grid: SphereGrid, pressure_pa, issue_time,
             footprint = float(rec.get('footprint_km',0.))
             if not np.isfinite(footprint) or footprint < 0:
                 raise ValueError('invalid_footprint')
-            if event.source in SATELLITES:
+            if var.product is not None:
+                from .products.ingest import check_record
+                check_record(rec,var,issue)
+                if 'view_zenith_deg' not in rec or footprint <= 0:
+                    raise ValueError('derived_product_geometry_missing')
+                if footprint > np.sqrt(grid.areas_m2[c])/1000:
+                    raise ValueError('footprint_operator_required')
+            elif rec.get('derivation') is not None:
+                raise ValueError('A derived product must not impersonate a raw channel.')
+            elif event.source in SATELLITES:
                 if var.source != event.source or var.platform != rec.get('platform') or var.channel_id != rec.get('channel_id'):
                     raise ValueError('sensor_binding_mismatch')
                 if 'view_zenith_deg' not in rec:
@@ -187,7 +205,6 @@ def pack_observations(records, grid: SphereGrid, pressure_pa, issue_time,
                     raise ValueError('channel_mismatch')
                 if var.vertical != 'column' or footprint <= 0:
                     raise ValueError('satellite_geometry_missing')
-                # NO pretending a broad antenna footprint is a high-resolution point.
                 if footprint > np.sqrt(grid.areas_m2[c])/1000:
                     raise ValueError('footprint_operator_required')
             elevation = float(rec.get('elevation_m',0.))
@@ -221,11 +238,13 @@ def pack_observations(records, grid: SphereGrid, pressure_pa, issue_time,
             for level,weight in links:
                 if weight <= 0: continue
                 feats.append(feature); cells.append(c); levels.append(level)
-                slots.append(11-int(np.floor(age)))
+                slots.append(11-min(11,int(np.floor(age))))  # Keep real age; slow context uses the oldest update.
                 sources.append(SOURCES.index(event.source)); var_ids.append(vocab.index(rec['variable']))
                 weights.append(weight*quality)
-                evidence_ids.append(json.dumps([event.source,event.observation_id,event.revision,
-                                                event.available_at.isoformat()],separators=(',',':')))
+                identity = [event.source,event.observation_id,event.revision,event.available_at.isoformat()]
+                if var.product is not None:
+                    identity.append(dict(product=var.product,history_hours=var.history_hours))
+                evidence_ids.append(json.dumps(identity,separators=(',',':')))
             accepted += 1
         except (KeyError,TypeError,ValueError) as exc:
             reject(str(exc) if str(exc) in ('unit_mismatch','footprint_operator_required',

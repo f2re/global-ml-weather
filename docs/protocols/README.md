@@ -12,7 +12,9 @@
 | [05](05-ecosystem-compatibility.md) | Совместимость существующих проектов |
 | [06](06-russian-documentation.md) | Русская техническая документация |
 | [07](07-training-and-inference.md) | Подготовленная выборка, обучение и прогноз |
+| [08](08-satellite-products.md) | Спутниковые продукты и медленный контекст |
 
 Соблюдайте `GLOBAL-WEATHER-OPS-1`.
 Для обучения дополнительно соблюдайте `GLOBAL-WEATHER-TRAIN-1`.
+Для продукции соблюдайте `GLOBAL-WEATHER-PRODUCTS-1`.
 Применяйте профиль `RU-TECH-1` к активной документации.

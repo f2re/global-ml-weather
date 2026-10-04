@@ -15,6 +15,7 @@ from .physics import physical_context
 from .vertical import (PROFILE_VARIABLES, PROFILE_UNITS, SURFACE_VARIABLES,
                        SURFACE_UNITS, above_ground, tangent_components)
 from .observations import utc
+from .products.ingest import evidence_history
 
 
 class DirectedGraph(GraphOps):
@@ -235,8 +236,8 @@ class AdaptiveWeatherModel(GlobalWeatherModel):
             state = self._process(state, elevation, land, obs.issue_time)
         for key, age in zip(obs.evidence_ids, obs.features[:, 1].detach().cpu().tolist()):
             evidence[key] = obs.issue_time-timedelta(hours=age*12.)
-        lower = obs.issue_time-timedelta(hours=12)
-        retained = tuple(sorted((key, time) for key, time in evidence.items() if lower < time <= obs.issue_time))
+        retained = tuple(sorted((key, time) for key, time in evidence.items()
+                                if obs.issue_time-timedelta(hours=evidence_history(key)) < time <= obs.issue_time))
         return AnalysisState(state, obs.issue_time, self.get_extra_state(), retained)
 
     def analyse(self, obs, elevation_m, land_fraction):
@@ -255,7 +256,7 @@ class AdaptiveWeatherModel(GlobalWeatherModel):
         state = background.latent
         for step in range(self.step_hours, int(hours)+1, self.step_hours):
             state = self._step(state, elevation, land, background.valid_time+timedelta(hours=step))
-        evidence = tuple((k, t) for k, t in background.evidence if t > valid_time-timedelta(hours=12))
+        evidence = tuple((k, t) for k, t in background.evidence if t > valid_time-timedelta(hours=evidence_history(k)))
         return AnalysisState(state, valid_time, self.get_extra_state(), evidence)
 
     def forward(self, obs, elevation_m, land_fraction, *, horizon_hours=72, product_mask=None, background=None):

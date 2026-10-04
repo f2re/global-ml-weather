@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import numpy as np
 from .io import artifact, digest, read_json, read_arrays, parse_json, MAX_JSON
+from ..products.ingest import maximum_history, record_history
 from ..vertical import PRESSURE_HPA, PROFILE_VARIABLES, PROFILE_UNITS, SURFACE_VARIABLES, SURFACE_UNITS
 
 
@@ -70,6 +71,7 @@ class PreparedDataset:
         self.registry = read_json(artifact(self.root, m.get('registry'), limit=MAX_JSON))
         if not isinstance(self.registry, dict) or not self.registry:
             raise ValueError('Пустой реестр величин.')
+        self.history_hours = maximum_history(self.registry)
         p = artifact(self.root, m.get('static'), limit=512*1024**2)
         st = read_arrays(p)
         _same(st.get('surface_units'), ('m', '1'), 'единицы статических полей')
@@ -115,7 +117,7 @@ class PreparedDataset:
             for split in ('validation', 'test'):
                 times = [s.issue for s in self.samples if s.split == split]
                 if times:
-                    self.norm.assert_independent_test((min(times)-timedelta(hours=12)).isoformat())
+                    self.norm.assert_independent_test((min(times)-timedelta(hours=self.history_hours)).isoformat())
         elif require_norm:
             raise ValueError('Набор не содержит фиксированных норм.')
         self.fingerprint = digest(m)
@@ -131,7 +133,7 @@ class PreparedDataset:
         parts = [[s for s in self.samples if s.split == k] for k in ('train', 'validation', 'test')]
         parts = [p for p in parts if p]
         for left, right in zip(parts, parts[1:]):
-            if max(s.issue for s in left) + timedelta(hours=self.horizon) >= min(s.issue for s in right) - timedelta(hours=12):
+            if max(s.issue for s in left) + timedelta(hours=self.horizon) >= min(s.issue for s in right) - timedelta(hours=self.history_hours):
                 raise ValueError('Временные окна разных частей выборки пересекаются или нарушен порядок.')
 
     def subset(self, split):
@@ -155,6 +157,9 @@ class PreparedDataset:
                 observed, available = utc(r['observed_at']), utc(r['available_at'])
                 if available < observed:
                     raise ValueError('Готовность наблюдения раньше измерения.')
+                if self.registry[r['variable']].get('product') and r.get('valid', True):
+                    if r.get('derivation', {}).get('data_kind') != self.kind:
+                        raise ValueError('Происхождение продукции и выборки различается.')
                 # Archive files may include late messages: packing filters them, never rewrites times.
                 if not r.get('valid', True):
                     result.append(r)  # A withdrawn revision must cancel its earlier value.
@@ -168,8 +173,8 @@ class PreparedDataset:
 
     def eligible_records(self, sample, *, include_invalid=False):
         selected = {}
-        lower = sample.issue-timedelta(hours=12)
         for record in self.records(sample):
+            lower = sample.issue-timedelta(hours=record_history(self.registry,record['variable']))
             observed, available = utc(record['observed_at']), utc(record['available_at'])
             if not lower < observed <= sample.issue or available > sample.issue:
                 continue
@@ -237,7 +242,7 @@ class PreparedDataset:
         if unacceptable:
             raise ValueError(f'Наблюдения не прошли допуск: {unacceptable}')
         if not packed.accepted_records:
-            raise ValueError('Нет пригодных наблюдений в 12-часовом окне.')
+            raise ValueError('Нет пригодных наблюдений или зарегистрированного контекста поверхности.')
         return packed
 
     def grid(self):

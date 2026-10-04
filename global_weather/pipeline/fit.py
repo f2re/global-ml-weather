@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 from .dataset import PreparedDataset, utc
 from .io import atomic_json, reference, digest, sha256, read_json, local_path
+from ..products.ingest import maximum_history, record_history
 from ..vertical import PRESSURE_HPA, PROFILE_VARIABLES, PROFILE_UNITS, SURFACE_VARIABLES, SURFACE_UNITS
 
 
@@ -81,6 +82,10 @@ def fit_normalization(dataset_path, output_manifest, *, base_path=None):
     others = {name: Moments() for name in missing if name not in profiles and name not in surface}
     for name in others:
         v = ds.registry[name]
+        if v.get('product'):
+            from ..observations import Variable
+            Variable(**v)  # Validate retrieval identity, units and maximum age.
+            continue
         if v.get('vertical') != 'column' or not all(v.get(k) for k in ('source', 'platform', 'channel_id')):
             raise ValueError('Дополнительная норма требует привязки к физическому спутниковому каналу.')
     seen = {}; hashes = {}; used_end = max(s.issue for s in train)
@@ -99,7 +104,7 @@ def fit_normalization(dataset_path, output_manifest, *, base_path=None):
         if others:
             hashes['observations:'+s.id] = s.observations['sha256']
             for r in ds.eligible_records(s, include_invalid=True):
-                if r['variable'] not in others or not s.issue-timedelta(hours=12) < utc(r['observed_at']) <= s.issue or utc(r['available_at']) > s.issue:
+                if r['variable'] not in others or not s.issue-timedelta(hours=record_history(ds.registry,r['variable'])) < utc(r['observed_at']) <= s.issue or utc(r['available_at']) > s.issue:
                     continue
                 key = (r.get('source'), r.get('observation_id'))
                 if not all(key):
@@ -128,7 +133,7 @@ def fit_normalization(dataset_path, output_manifest, *, base_path=None):
                                 tuple(np.array(PRESSURE_HPA)*100) if name in profiles else (),
                                 ds.step if name == 'precipitation_step' else None)
             origins[name] = 'own_training_partition'
-    period = {'start': (min(s.issue for s in train)-timedelta(hours=12)).isoformat(), 'end': used_end.isoformat()}
+    period = {'start': (min(s.issue for s in train)-timedelta(hours=ds.history_hours)).isoformat(), 'end': used_end.isoformat()}
     fit_ends.append(period)
     if any(not isinstance(p, dict) or not p.get('end') or not p.get('start') for p in fit_ends):
         combined_period = None
@@ -157,7 +162,7 @@ def fit_normalization(dataset_path, output_manifest, *, base_path=None):
     for split in ('validation', 'test'):
         times = [s.issue for s in ds.samples if s.split == split]
         if times:
-            bundle.assert_independent_test((min(times)-timedelta(hours=12)).isoformat())
+            bundle.assert_independent_test((min(times)-timedelta(hours=ds.history_hours)).isoformat())
     ds.assert_unchanged()
     bundle.save(norm_path)
     manifest = dict(ds.manifest)
