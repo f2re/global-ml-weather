@@ -1,0 +1,27 @@
+name: real-source-acquisition
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/real-data-cuda-v070']
+    paths: ['scripts/real-source-probe.py', '.github/workflows/real-source-acquisition.yml']
+permissions:
+  contents: read
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install requests
+      - run: python scripts/real-source-probe.py --network --output outputs/real-source-samples
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: real-noaa-source-samples
+          path: outputs/real-source-samples
+          retention-days: 90
