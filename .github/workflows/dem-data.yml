@@ -1,0 +1,43 @@
+name: dem-data
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/reference-assets-v060']
+    paths: ['scripts/download-reference-dem.py', '.github/workflows/dem-data.yml']
+permissions:
+  contents: read
+concurrency:
+  group: dem-data-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy rasterio netCDF4
+      - run: python scripts/download-reference-dem.py --output outputs/dem --network
+      - uses: actions/upload-artifact@v4
+        with:
+          name: global-dem-30s-under-900mb
+          path: |
+            outputs/dem/earth_relief_30s_p.nc
+            outputs/dem/earth_relief_30s_p.nc.sha256
+            outputs/dem/manifest.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: global-dem-source-metadata
+          path: |
+            outputs/dem/manifest.json
+            outputs/dem/gmt_data_server.txt
+            outputs/dem/index.html
+          retention-days: 90
