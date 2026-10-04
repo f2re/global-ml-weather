@@ -1,0 +1,27 @@
+name: reference-assets
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/reference-assets-v060']
+    paths: ['scripts/reference-source-probe.py', '.github/workflows/reference-assets.yml']
+permissions:
+  contents: read
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy xarray scipy netCDF4
+      - run: python scripts/reference-source-probe.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: downloaded-reference-sources
+          path: outputs/reference-probe
+          retention-days: 30
