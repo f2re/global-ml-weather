@@ -1,0 +1,13 @@
+{
+  "epochs": 24,
+  "hidden": 32,
+  "latent_slots": 8,
+  "horizon_hours": 72,
+  "seed": 17,
+  "learning_rate": 0.0001,
+  "physics_weight": 0.01,
+  "patience": 24,
+  "threads": 1,
+  "memory_budget_mib": 4096,
+  "curriculum": [[3,3],[6,6],[9,12],[12,24],[15,48],[24,72]]
+}

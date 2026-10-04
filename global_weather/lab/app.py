@@ -8,7 +8,7 @@ import re
 import secrets
 import numpy as np
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from .contracts import RunSpec, safe_child
@@ -56,7 +56,9 @@ def create_app(workspace=None, *, testing=False):
         return dict(csrf=token, roles=ROLES, connectors=CATALOG,
                     status='research_untrained', network_execution=False,
                     limits=dict(mesh_level=3, hidden=32, horizon_hours=72, max_queued=6),
-                    protocols=['01-scientific-method.md', '02-data-and-normalization.md', '03-execution-security.md', '04-verification-release.md'])
+                    protocols=['01-scientific-method.md', '02-data-and-normalization.md', '03-execution-security.md',
+                               '04-verification-release.md', '05-ecosystem-compatibility.md',
+                               '06-russian-documentation.md', '07-training-and-inference.md'])
     @app.get('/api/runs')
     def runs(): return queue.list()
     @app.post('/api/runs')
@@ -92,7 +94,7 @@ def create_app(workspace=None, *, testing=False):
     def frame(run_id: str, lead: int = 0, variable: str = 't2m', level: int = 0, cell: int = 0):
         from ..vertical import PROFILE_VARIABLES, SURFACE_VARIABLES
         r = report(run_id)
-        if r.get('status') != 'synthetic' or lead not in r.get('lead_hours', []): raise HTTPException(400, 'Недопустимый срок.')
+        if r.get('status') not in ('synthetic', 'research_forecast') or lead not in r.get('lead_hours', []): raise HTTPException(400, 'Недопустимый срок.')
         if not 0 <= cell < r['cells'] or not 0 <= level < 37: raise HTTPException(400, 'Недопустимая ячейка или уровень.')
         path = safe_child(queue.runs, run_id)/f'frame_{lead:03d}.npz'
         with np.load(path, allow_pickle=False) as f:
@@ -128,7 +130,6 @@ def create_app(workspace=None, *, testing=False):
                     total += len(chunk)
                     if total > MAX_BYTES: raise HTTPException(413, 'Превышен предел 32 МиБ.')
                     stream.write(chunk)
-            # No pickle, CBOR code or serialized weights are executed on upload.
             if path.exists(): raise HTTPException(409, 'Файл уже существует.')
             temporary.replace(path)
         except FileExistsError:
@@ -143,10 +144,17 @@ def create_app(workspace=None, *, testing=False):
         path = Path(__file__).resolve().parents[2]/'docs'/'protocols'/name
         if not path.is_file(): raise HTTPException(404, 'Документ находится в полной рабочей копии.')
         return path.read_text(encoding='utf-8')
+    from .pipeline_ui import register
+    register(app, queue)
     static = Path(__file__).with_name('static')
     app.mount('/static', StaticFiles(directory=static), name='static')
     @app.get('/')
-    def index(): return FileResponse(static/'index.html')
+    def index():
+        text = (static/'index.html').read_text(encoding='utf-8')
+        text = text.replace('GLOBAL-ML-WEATHER / 0.3', 'GLOBAL-ML-WEATHER / 0.4')
+        text = text.replace('<b>Обученных весов нет</b>', '<b>Точность не подтверждена</b>')
+        text = text.replace('</nav>', '</nav><a class="textlink" href="/training">Обучение и проверка выборки →</a>', 1)
+        return HTMLResponse(text)
     return app
 
 

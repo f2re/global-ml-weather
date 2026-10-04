@@ -1,0 +1,6 @@
+.training-page{display:block}.training-page main{margin:0 auto;max-width:1400px;width:100%;padding:28px;box-sizing:border-box}
+.training-layout{display:grid;grid-template-columns:310px minmax(0,1fr);gap:20px;margin:20px 0}.training-layout>*{min-width:0}
+#training-error{background:#fff0ed;padding:14px;border:1px solid #b55;margin-top:12px;white-space:pre-wrap}
+#pipeline-log{max-height:260px;overflow:auto}#pipeline-runs{display:grid;gap:8px}.pipeline-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.training-page pre{white-space:pre-wrap;overflow-wrap:anywhere}.training-page .card{margin-bottom:18px}
+@media(max-width:760px){.training-page main{padding:12px}.training-layout{grid-template-columns:1fr}.training-page header{display:block}.training-page select{max-width:100%}}

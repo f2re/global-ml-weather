@@ -104,14 +104,12 @@ class RunQueue:
             run_id = row['id']
             try: self._execute(run_id)
             except Exception as exc:
-                # No credentials or submitted file content in error records.
                 with self.connect() as db:
                     db.execute("UPDATE runs SET status='failed', finished=?, reason=? WHERE id=? AND status NOT IN ('cancelled','interrupted')", (now(), type(exc).__name__ + ': ошибка исполнения; см. протокол.', run_id))
 
     def _execute(self, run_id):
         directory = self.runs/run_id
         package_root = Path(__file__).resolve().parents[2]
-        # Do not forward API keys, proxy credentials, SSH sockets or LLM settings.
         env = {k: os.environ[k] for k in ('PATH', 'LANG', 'LD_LIBRARY_PATH', 'SYSTEMROOT') if k in os.environ}
         home = directory/'home'; home.mkdir(exist_ok=True)
         env.update(HOME=str(home), PYTHONPATH=str(package_root), PYTHONUNBUFFERED='1',
@@ -122,7 +120,7 @@ class RunQueue:
             with self.guard:
                 if self.get(run_id)['status'] != 'queued': return
                 with self.connect() as db: db.execute("UPDATE runs SET status='running', started=? WHERE id=?", (now(), run_id))
-                command = [sys.executable, '-m', 'global_weather.lab.worker', '--run-dir', str(directory), '--inbox', str(self.inbox)]
+                command = [sys.executable, '-m', 'global_weather.lab.dispatch', '--run-dir', str(directory), '--inbox', str(self.inbox)]
                 self.process = subprocess.Popen(command, cwd=package_root, env=env, stdout=log, stderr=subprocess.STDOUT,
                                                 stdin=subprocess.DEVNULL, start_new_session=True, shell=False)
                 self.active_id = run_id; process = self.process

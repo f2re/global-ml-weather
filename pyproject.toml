@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "global-ml-weather"
-version = "0.3.1"
+version = "0.4.0"
 description = "Observation-driven spherical weather research model and local test lab"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.24,<3", "scipy>=1.10,<2", "torch>=2.2,<3"]
 
 [project.optional-dependencies]
 test = ["pytest>=7,<10"]
-data = ["xarray>=2024.1", "h5netcdf>=1.3"]
+data = ["xarray>=2024.1", "h5netcdf>=1.3", "h5py>=3.10,<4"]
 lab = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "httpx>=0.27,<1", "pydantic>=2.7,<3"]
 cds = ["cdsapi>=0.7,<1"]
 browser = ["playwright>=1.48,<2"]
@@ -20,6 +20,7 @@ ecosystem = ["rasterio>=1.3,<2"]
 [project.scripts]
 global-weather = "global_weather.cli:main"
 global-weather-lab = "global_weather.lab.app:main"
+global-weather-pipeline = "global_weather.pipeline.__main__:main"
 global-weather-compatibility = "global_weather.compatibility:main"
 
 [tool.setuptools.packages.find]

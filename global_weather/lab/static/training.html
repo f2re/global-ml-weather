@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Обучение и проверка · Глобальная модель</title><link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/training.css"><script defer src="/static/training.js"></script></head>
+<body class="training-page"><main><header><div><div class="eyebrow">GLOBAL-ML-WEATHER / 0.4</div>
+<h1>Обучение по подготовленным данным</h1><a href="/">Сферическая карта и испытания →</a></div>
+<div class="header-tag">Исследовательский расчёт<br><b>Точность требует отдельной проверки</b></div></header>
+<div class="notice">Исполнитель использует существующую очередь. Сеть и произвольные команды недоступны.
+Наборы размещает оператор в <code>outputs/lab/datasets/ИМЯ/dataset.json</code>.
+Синтетический набор проверяет программу, а не погоду.</div><div id="training-error" role="alert" hidden></div>
+<section class="training-layout"><form id="training-form" class="card controls">
+<h2>Входы и действие</h2><label>Набор данных<select id="dataset" required></select></label>
+<p id="dataset-info" class="hint">Загрузка списка…</p>
+<label>Действие<select id="action"><option value="validate_dataset">Проверить выборку</option>
+<option value="train_dataset">Обучить модель</option><option value="evaluate_dataset">Оценить на итоговом тесте</option>
+<option value="forecast_dataset">Рассчитать по обученным весам</option></select></label>
+<label>Завершённое обучение<select id="trained-run"><option value="">Выберите для оценки или прогноза</option></select></label>
+<label>Пример для прогноза<select id="sample"></select></label>
+<div class="pair"><label>Эпохи<input id="epochs" type="number" min="1" max="5" value="2"></label>
+<label>Горизонт, ч<select id="train-horizon"><option>3</option><option>6</option><option>12</option><option>24</option><option>48</option><option>72</option></select></label></div>
+<div class="pair"><label>Признаки D<select id="train-hidden"><option>16</option><option>32</option></select></label>
+<label>Позиции K<select id="train-slots"><option>4</option><option selected>8</option><option>16</option><option>38</option></select></label></div>
+<button id="submit-training" class="primary" type="submit">Поставить в очередь</button>
+<p class="hint">Предел стенда: 162 ячейки, 16 примеров, 5 эпох. Для больших исследований используйте CLI с отдельным бюджетом ресурсов.</p></form>
+<div class="card"><div class="card-title">Результат <span id="pipeline-state">Нет запуска</span></div>
+<p id="pipeline-kind" class="notice">Ожидается выборка.</p><div id="epoch-table" class="table-wrap"></div>
+<div id="score-table" class="table-wrap"></div><pre id="pipeline-log">Нет задачи.</pre>
+<button id="cancel-training" disabled>Остановить</button> <a id="training-report" hidden>Скачать отчёт JSON</a>
+<p id="forecast-help" hidden>Поля и профили доступны на основной странице. Выберите этот запуск в журнале.</p>
+</div></section><section class="card"><h2>Запуски</h2><div id="pipeline-runs"></div></section>
+<section class="card"><h2>Подготовить контрольный пример</h2>
+<pre>python -m global_weather.pipeline demo-dataset --output outputs/lab/datasets/demo --horizon-hours 3</pre>
+<p>Команда создаёт явно синтетические данные и собственные нормы. Она не загружает наблюдения.</p>
+<p>Порядок подготовки ERA5 и нормы реальных данных описаны в <code>docs/TRAINING.md</code>.</p></section>
+</main></body></html>

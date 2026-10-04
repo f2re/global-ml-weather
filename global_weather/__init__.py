@@ -1,2 +1,2 @@
-"""Spherical observation-to-forecast research components, not a trained service."""
-__version__ = "0.3.1"
+"""Spherical observation-to-forecast research components, not an operational service."""
+__version__ = "0.4.0"

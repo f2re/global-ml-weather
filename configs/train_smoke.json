@@ -1,0 +1,11 @@
+{
+  "epochs": 2,
+  "hidden": 16,
+  "latent_slots": 8,
+  "horizon_hours": 3,
+  "seed": 17,
+  "learning_rate": 0.0001,
+  "patience": 5,
+  "threads": 1,
+  "memory_budget_mib": 1024
+}
