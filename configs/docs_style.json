@@ -6,7 +6,7 @@
     "global_weather/connectors/AGENTS.md", "global_weather/lab/AGENTS.md", "global_weather/pipeline/AGENTS.md", "global_weather/products/AGENTS.md", "global_weather/multimodal/AGENTS.md",
     "docs/ARCHITECTURE.md", "docs/DATA_CONTRACT.md", "docs/NORMALIZATION.md", "docs/MULTIMODAL.md", "docs/REFERENCE_DATA.md",
     "docs/CONNECTORS.md", "docs/LAB.md", "docs/ROADMAP.md", "docs/ECOSYSTEM.md",
-    "docs/WRITING_GUIDE_RU.md", "docs/TERMS_RU.md", "docs/TRAINING.md", "docs/SATELLITE_PRODUCTS.md", "docs/protocols/*.md"
+    "docs/WRITING_GUIDE_RU.md", "docs/TERMS_RU.md", "docs/TRAINING.md", "docs/SATELLITE_PRODUCTS.md", "docs/PRODUCT_CONTEXT.md", "docs/protocols/*.md"
   ],
   "scope_note": "Active operational documentation and agent instructions. Historical reports retain their evidence.",
   "target_interpretation": "Approximately 80% is a stylistic request, not measured official standard compliance.",

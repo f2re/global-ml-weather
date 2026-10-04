@@ -23,29 +23,49 @@ REQUIRED = {
     'land_surface_temperature': ('radiance','emissivity','transmittance','upwelling','downwelling','clear_land'),
     'soil_moisture_surface': ('tb_h','tb_v','soil_temperature','vegetation_temperature','tau_nadir','omega','incidence','eligible'),
 }
+OPTICAL_METHOD = 'reflectance-lut-liquid-lwp-v1'
+OPTICAL_INPUTS = ('nonabsorbing','absorbing','solar_zenith','view_zenith','relative_azimuth','eligible')
 
 
 def calculate(job_path, output):
+    job_hash = sha256(job_path)
     job = read_json(job_path)
     required = {'schema','product','inputs','available_at','availability_reference','data_kind'}
     if (not isinstance(job,dict) or not required.issubset(job)
-            or set(job)-required-{'lut','parameters'} or job['schema'] != 'satellite-product-job-1'):
+            or set(job)-required-{'lut','parameters','method'} or job['schema'] != 'satellite-product-job-1'):
         raise ValueError('Неверный контракт задания продукции.')
     if not isinstance(job['availability_reference'],str) or not job['availability_reference'].strip():
         raise ValueError('Нужна ссылка на доказательство времени готовности.')
     name = job['product']
-    if name not in REQUIRED or not isinstance(job['inputs'],dict) or set(job['inputs']) != set(REQUIRED[name]):
+    if name not in REQUIRED:
+        raise ValueError('Неизвестный продукт.')
+    method = job.get('method', CATALOG[name].methods[0])
+    if method not in CATALOG[name].methods:
+        raise ValueError('Метод не соответствует продукту.')
+    optical = name == 'cloud_liquid_water_path' and method == OPTICAL_METHOD
+    inputs = OPTICAL_INPUTS if optical else REQUIRED[name]
+    if not isinstance(job['inputs'],dict) or set(job['inputs']) != set(inputs):
         raise ValueError('Отсутствуют необходимые входы либо есть неизвестные поля.')
     root = Path(job_path).absolute().parent
     paths = {k: resolve(root,v) for k,v in job['inputs'].items()}
     fields = {k: load_field(p) for k,p in paths.items()}
     kwargs = dict(available_at=job['available_at'], data_kind=job['data_kind'])
     params = job.get('parameters', {})
-    allowed = {'max_solar_zenith'} if name in ('ndvi','ndvi_toa','ndmi','ndsi') else (
-        {'max_chi2','max_conditional_sigma'} if name == 'soil_moisture_surface' else set())
+    allowed = {'max_condition','max_relative_sigma'} if optical else (
+        {'max_solar_zenith'} if name in ('ndvi','ndvi_toa','ndmi','ndsi') else (
+        {'max_chi2','max_conditional_sigma'} if name == 'soil_moisture_surface' else set()))
     if not isinstance(params,dict) or set(params)-allowed:
         raise ValueError('Неизвестные параметры метода.')
-    if name == 'soil_moisture_surface':
+    if optical:
+        from .optical import CloudOpticsLUT, cloud_lwp_from_reflectances
+        lp = resolve(root,job['lut']); table = read_json(lp)
+        if set(table) != {'optical_depth','radius_m','reflectance','metadata'}:
+            raise ValueError('Неизвестные поля облачной таблицы.')
+        lut = CloudOpticsLUT(np.array(table['optical_depth']),np.array(table['radius_m']),
+                            np.array(table['reflectance']),table['metadata'],sha256(lp))
+        p = cloud_lwp_from_reflectances(**fields,lut=lut,**kwargs,**params)
+        if sha256(lp) != job['lut']['sha256']: raise ValueError('Таблица изменилась.')
+    elif name == 'soil_moisture_surface':
         lp = resolve(root,job['lut']); table = read_json(lp)
         lut = SoilEmissivityLUT(np.array(table['moisture']),np.array(table['emissivity_hv']),table['metadata'],sha256(lp))
         p = soil_moisture(**fields,lut=lut,**kwargs,**params)
@@ -59,10 +79,13 @@ def calculate(job_path, output):
                      'cloud_top_height': cloud_height, 'cloud_liquid_water_path': liquid_water_path,
                      'land_surface_temperature': surface_temperature}
         p = functions[name](**fields,**kwargs)
-    metadata = dict(p.metadata,availability_reference=job['availability_reference'],job_sha256=sha256(job_path))
+    if p.method != method:
+        raise ValueError('Вычисленный метод отличается от заявленного.')
+    metadata = dict(p.metadata,availability_reference=job['availability_reference'],job_sha256=job_hash)
     p = replace(p,metadata=metadata)
     for k,path in paths.items():
         if sha256(path) != job['inputs'][k]['sha256']: raise ValueError('Вход изменился при расчёте.')
+    if sha256(job_path) != job_hash: raise ValueError('Задание изменилось при расчёте.')
     checksum = save_product(output,p)
     return dict(status='product_calculated',product=p.name,method=p.method,
                 valid_pixels=int(p.valid.sum()),invalid_pixels=int((~p.valid).sum()),
@@ -74,6 +97,7 @@ def main(argv=None):
     commands = parser.add_subparsers(dest='command',required=True)
     commands.add_parser('catalog')
     c=commands.add_parser('calculate');c.add_argument('--job',required=True);c.add_argument('--output',required=True)
+    c=commands.add_parser('build-context');c.add_argument('--plan',required=True);c.add_argument('--output',required=True)
     c=commands.add_parser('export');c.add_argument('--product',required=True);c.add_argument('--geometry',required=True)
     c.add_argument('--output',required=True);c.add_argument('--registry-output',required=True)
     c.add_argument('--history-hours',type=int);c.add_argument('--max-records',type=int,default=100000)
@@ -82,6 +106,9 @@ def main(argv=None):
     args=parser.parse_args(argv)
     if args.command=='catalog': report={k: asdict(v) for k,v in CATALOG.items()}
     elif args.command=='calculate': report=calculate(args.job,args.output)
+    elif args.command=='build-context':
+        from .batch import build_context
+        report=build_context(args.plan,args.output)
     elif args.command=='from-capsule':
         from .bridge import from_capsule
         report=from_capsule(args.capsule,args.output,data_kind=args.data_kind,geometry_output=args.geometry_output)
@@ -91,6 +118,7 @@ def main(argv=None):
         report=export_product(args.product,args.geometry,args.output,history_hours=args.history_hours,max_records=args.max_records)
         exclusive_bytes(args.registry_output,lambda f:f.write((canonical(report['registry'])+'\n').encode()))
     print(json.dumps(report,ensure_ascii=False,indent=2,allow_nan=False))
+    if args.command=='build-context' and report['status']=='blocked': raise SystemExit(2)
 
 
 if __name__=='__main__': main()

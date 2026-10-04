@@ -81,6 +81,11 @@ def check_record(record, var, issue):
         if a.get('depth_top_m') != 0 or a.get('depth_bottom_m') != var.product_depth_m:
             raise ValueError('Не указана глубина поверхностной влажности почвы.')
         require_hash(a.get('lut_sha256'))
+    if var.method == 'reflectance-lut-liquid-lwp-v1':
+        attrs = meta.get('attributes', {})
+        require_hash(attrs.get('lut_sha256'))
+        if attrs.get('parameter_covariance_used') is not True or not isinstance(attrs.get('lut_provenance'), dict):
+            raise ValueError('Нужны происхождение оптической таблицы и сведения о ковариации.')
     return meta
 
 
@@ -99,7 +104,8 @@ def export_product(product_path, geometry_path, output, *, variable=None, histor
         raise ValueError('Источник не зарегистрирован.')
     var = variable or ':'.join([p.metadata['source'], p.metadata['platform'], p.name, p.method])
     registry = variable_spec(p.name, p.metadata['source'], p.metadata['platform'], history_hours=history_hours,
-                             depth_bottom_m=p.metadata.get('attributes',{}).get('depth_bottom_m') if p.name=='soil_moisture_surface' else None)
+                             depth_bottom_m=p.metadata.get('attributes',{}).get('depth_bottom_m') if p.name=='soil_moisture_surface' else None,
+                             method=p.method)
     from ..observations import Variable
     v = Variable(**registry); check_variable(v)
     count = int(p.valid.sum())
