@@ -1,0 +1,31 @@
+name: source-snapshot
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/autonomous-training-v070']
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Archive exact source and Git object history
+        run: |
+          mkdir -p outputs/source
+          git archive --format=tar HEAD > outputs/source/source.tar
+          git bundle create outputs/source/source.bundle HEAD
+          git rev-parse HEAD HEAD^{tree} > outputs/source/revision.txt
+          git ls-tree -r HEAD > outputs/source/tree.txt
+          cd outputs/source
+          sha256sum source.tar source.bundle > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-snapshot
+          path: outputs/source
+          retention-days: 14
+          if-no-files-found: error
