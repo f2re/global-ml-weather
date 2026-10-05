@@ -10,7 +10,7 @@ import time
 import urllib.request
 from playwright.sync_api import sync_playwright, expect
 
-EXPECTED_SOURCES = {'local_observations', 'satdump', 'graphcast', 'noaa_isd',
+EXPECTED_SOURCES = {'ghcnh', 'local_observations', 'satdump', 'graphcast', 'noaa_isd',
                     'era5_cds', 'satellite_manifest', 'arktika_worker'}
 root=Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory() as temporary:
