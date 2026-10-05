@@ -1,0 +1,62 @@
+name: autonomous-provider-reference
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feature/autonomous-training-v070']
+    paths: ['.github/workflows/autonomous-provider-reference.yml']
+permissions:
+  contents: read
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: f2re/arktika-worker
+          ref: 9750212dadf6c8ed5276ba4f155e15e18b88b362
+          path: upstream-arktika
+          persist-credentials: false
+      - name: Preserve reviewed supplier source without executing it
+        run: |
+          mkdir -p outputs/provider-reference
+          git -C upstream-arktika archive --format=tar HEAD > outputs/provider-reference/arktika-source.tar
+          git -C upstream-arktika rev-parse HEAD > outputs/provider-reference/arktika-revision.txt
+      - name: Fetch bounded official NOAA references
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import Request,urlopen
+          from datetime import datetime,timezone
+          import hashlib,json
+          out=Path('outputs/provider-reference'); report={}
+          base='https://www.ncei.noaa.gov/oa/global-historical-climatology-network/hourly/'
+          sources={'ghcnh_DOCUMENTATION.pdf':base+'doc/ghcnh_DOCUMENTATION.pdf',
+                   'ghcnh-columns.pdf':base+'doc/ghcnh-columns.pdf',
+                   'stations.txt':base+'doc/ghcnh-station-list.txt',
+                   'station-2020.psv':base+'access/by-year/2020/psv/GHCNh_USW00014933_2020.psv'}
+          for name,url in sources.items():
+              row={'url':url,'status':'failed'};report[name]=row
+              try:
+                  with urlopen(Request(url,headers={'User-Agent':'global-ml-weather-adapter-acceptance'}),timeout=60) as r:
+                      data=r.read(50_000_001)
+                      if not data or len(data)>50_000_000:raise ValueError('Reference exceeds the explicit size bound')
+                      (out/name).write_bytes(data)
+                      row.update(status='downloaded',bytes=len(data),sha256=hashlib.sha256(data).hexdigest(),http_status=r.status,
+                                 acquired_at=datetime.now(timezone.utc).isoformat(),response_url=r.geturl())
+              except Exception as e:row['error']=type(e).__name__+': '+str(e)[:200]
+              print(name,row['status'],flush=True)
+          (out/'receipt.json').write_text(json.dumps(report,indent=2)+'\n')
+          if any(report[name]['status']!='downloaded' for name in ('ghcnh_DOCUMENTATION.pdf','station-2020.psv')):
+              raise SystemExit('Required provider references unavailable; do not declare live acceptance')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: autonomous-provider-reference
+          path: outputs/provider-reference
+          retention-days: 30
+          if-no-files-found: error
