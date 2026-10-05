@@ -3,7 +3,7 @@
   "contract": "GLOBAL-WEATHER-CONTINUOUS-1",
   "base_commit": "e68f0c5f8f24f6c762c77aee8c0c032a9719c713",
   "base_tree": "fb09a54021214119b731aab7c9df93eac09425d7",
-  "status": "planned",
+  "status": "in_progress",
   "runtime_implemented": false,
   "required_user_fields": [
     "start_date",
@@ -22,7 +22,7 @@
     {
       "id": "C1",
       "title": "Постоянная модель, диапазоны и журнал примеров",
-      "status": "planned",
+      "status": "in_progress",
       "depends_on": [],
       "existing_files": [
         "global_weather/autonomous/plan.py",
@@ -35,7 +35,14 @@
         "A17",
         "A24"
       ],
-      "evidence": []
+      "evidence": [
+        "tests/test_continuous.py",
+        "docs/CONTINUOUS_TRAINING.md"
+      ],
+      "remaining_scope": [
+        "C2-coordinated checkpoint and committed-use writer",
+        "integration with the continuous preparation/training executor"
+      ]
     },
     {
       "id": "C2",
@@ -385,5 +392,17 @@
       "status": "not_executed",
       "evidence": []
     }
+  },
+  "implemented_components": [
+    "C1_campaign_range_registry",
+    "C1_stable_sample_identity",
+    "C1_temporal_roles",
+    "C1_usage_intent_ledger",
+    "C1_metadata_API_CLI"
+  ],
+  "execution": {
+    "independent_agents_started": false,
+    "mode": "single_executor",
+    "role_handoffs": "agents/tasks/continuous-c1.md"
   }
 }

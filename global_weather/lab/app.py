@@ -154,6 +154,8 @@ def create_app(workspace=None, *, testing=False, arktika_root=None):
     register(app, queue)
     from .autonomous_ui import register as register_autonomous
     register_autonomous(app, autonomous, arktika_root)
+    from .continuous_ui import register as register_continuous
+    register_continuous(app, queue.root)
     static = Path(__file__).with_name('static')
     app.mount('/static', StaticFiles(directory=static), name='static')
     @app.get('/')
