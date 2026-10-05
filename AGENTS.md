@@ -94,6 +94,9 @@ python scripts/check_docs.py --strict
 
 ## Роли и публикация
 
+Следуйте [порядку публикации](agents/PUBLICATION_CONTRACT.md), `GLOBAL-WEATHER-PUBLISH-1`.
+Это постоянная инструкция проекта для повторных сессий.
+
 Реестр ролей находится в `global_weather/lab/agents.py`.
 Инструкции находятся в `agents/`, определения Claude Code — в `.claude/agents/`.
 Диспетчер действий не является автономной группой языковых моделей.

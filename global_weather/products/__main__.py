@@ -25,7 +25,10 @@ REQUIRED = {
 }
 
 
+OPTIONAL_INPUTS = {'cloud_liquid_water_path': {'covariance'}}
+
 def calculate(job_path, output):
+    job_hash = sha256(job_path)
     job = read_json(job_path)
     required = {'schema','product','inputs','available_at','availability_reference','data_kind'}
     if (not isinstance(job,dict) or not required.issubset(job)
@@ -34,7 +37,9 @@ def calculate(job_path, output):
     if not isinstance(job['availability_reference'],str) or not job['availability_reference'].strip():
         raise ValueError('Нужна ссылка на доказательство времени готовности.')
     name = job['product']
-    if name not in REQUIRED or not isinstance(job['inputs'],dict) or set(job['inputs']) != set(REQUIRED[name]):
+    if (name not in REQUIRED or not isinstance(job['inputs'],dict)
+            or not set(REQUIRED[name]).issubset(job['inputs'])
+            or set(job['inputs'])-set(REQUIRED[name])-OPTIONAL_INPUTS.get(name,set())):
         raise ValueError('Отсутствуют необходимые входы либо есть неизвестные поля.')
     root = Path(job_path).absolute().parent
     paths = {k: resolve(root,v) for k,v in job['inputs'].items()}
@@ -59,10 +64,12 @@ def calculate(job_path, output):
                      'cloud_top_height': cloud_height, 'cloud_liquid_water_path': liquid_water_path,
                      'land_surface_temperature': surface_temperature}
         p = functions[name](**fields,**kwargs)
-    metadata = dict(p.metadata,availability_reference=job['availability_reference'],job_sha256=sha256(job_path))
+    metadata = dict(p.metadata,availability_reference=job['availability_reference'],job_sha256=job_hash)
     p = replace(p,metadata=metadata)
     for k,path in paths.items():
         if sha256(path) != job['inputs'][k]['sha256']: raise ValueError('Вход изменился при расчёте.')
+    if sha256(job_path) != job_hash:
+        raise ValueError('Задание изменилось при расчёте.')
     checksum = save_product(output,p)
     return dict(status='product_calculated',product=p.name,method=p.method,
                 valid_pixels=int(p.valid.sum()),invalid_pixels=int((~p.valid).sum()),
@@ -77,10 +84,18 @@ def main(argv=None):
     c=commands.add_parser('export');c.add_argument('--product',required=True);c.add_argument('--geometry',required=True)
     c.add_argument('--output',required=True);c.add_argument('--registry-output',required=True)
     c.add_argument('--history-hours',type=int);c.add_argument('--max-records',type=int,default=100000)
+    for command in ('preflight', 'batch'):
+        c=commands.add_parser(command);c.add_argument('--plan',required=True)
+        c.add_argument('--output',required=command=='batch')
     c=commands.add_parser('from-capsule');c.add_argument('--capsule',required=True);c.add_argument('--output',required=True)
     c.add_argument('--geometry-output');c.add_argument('--data-kind',choices=('real','synthetic'),required=True)
     args=parser.parse_args(argv)
-    if args.command=='catalog': report={k: asdict(v) for k,v in CATALOG.items()}
+    if args.command in ('preflight','batch'):
+        from .workflow import preflight, run_batch
+        report = preflight(args.plan) if args.command=='preflight' else run_batch(args.plan,args.output)
+        if args.command=='preflight' and args.output:
+            exclusive_bytes(args.output, lambda f:f.write((canonical(report)+'\n').encode()))
+    elif args.command=='catalog': report={k: asdict(v) for k,v in CATALOG.items()}
     elif args.command=='calculate': report=calculate(args.job,args.output)
     elif args.command=='from-capsule':
         from .bridge import from_capsule
@@ -91,6 +106,8 @@ def main(argv=None):
         report=export_product(args.product,args.geometry,args.output,history_hours=args.history_hours,max_records=args.max_records)
         exclusive_bytes(args.registry_output,lambda f:f.write((canonical(report['registry'])+'\n').encode()))
     print(json.dumps(report,ensure_ascii=False,indent=2,allow_nan=False))
+    if args.command in ('preflight','batch') and report['status']=='blocked':
+        raise SystemExit(2)
 
 
 if __name__=='__main__': main()

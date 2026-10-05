@@ -76,6 +76,11 @@ def check_record(record, var, issue):
         raise ValueError('Физически недопустимое значение продукции.')
     if not utc(issue)-timedelta(hours=var.history_hours) < utc(record['observed_at']) <= utc(issue):
         raise ValueError('Продукт устарел.')
+    lower = utc(issue)-timedelta(hours=max(12,var.history_hours))
+    for dependency in meta['dependencies']:
+        start = dependency.get('temporal_support',{}).get('start',dependency['observed_at'])
+        if utc(start) <= lower:
+            raise ValueError('Вход продукции выходит за окно, учтённое при разделении выборки.')
     if var.product == 'soil_moisture_surface':
         a = meta.get('attributes', {})
         if a.get('depth_top_m') != 0 or a.get('depth_bottom_m') != var.product_depth_m:
@@ -84,12 +89,16 @@ def check_record(record, var, issue):
     return meta
 
 
-def export_product(product_path, geometry_path, output, *, variable=None, history_hours=None, max_records=100000):
+def export_product(product_path, geometry_path, output, *, variable=None, history_hours=None, max_records=100000, max_output_bytes=64*1024**2):
     """All valid pixels or explicit failure, no silent sampling or fake geometry.
 
     Geometry NPZ: latitude, longitude, view_zenith_deg, footprint_km, grid_id.
     It must be independently prepared on exactly the product raster grid.
     """
+    if type(max_output_bytes) is not int or not 1 <= max_output_bytes <= 256*1024**2:
+        raise ValueError('Неверный предел размера экспорта.')
+    regular(product_path); regular(geometry_path)
+    product_hash = sha256(product_path); geometry_hash = sha256(geometry_path)
     p = load_product(product_path); g = arrays(geometry_path)
     if set(g) != {'latitude','longitude','view_zenith_deg','footprint_km','grid_id'}:
         raise ValueError('Нужны координаты, реальная геометрия и идентификатор сетки.')
@@ -99,7 +108,8 @@ def export_product(product_path, geometry_path, output, *, variable=None, histor
         raise ValueError('Источник не зарегистрирован.')
     var = variable or ':'.join([p.metadata['source'], p.metadata['platform'], p.name, p.method])
     registry = variable_spec(p.name, p.metadata['source'], p.metadata['platform'], history_hours=history_hours,
-                             depth_bottom_m=p.metadata.get('attributes',{}).get('depth_bottom_m') if p.name=='soil_moisture_surface' else None)
+                             depth_bottom_m=p.metadata.get('attributes',{}).get('depth_bottom_m') if p.name=='soil_moisture_surface' else None,
+                             method=p.method)
     from ..observations import Variable
     v = Variable(**registry); check_variable(v)
     count = int(p.valid.sum())
@@ -111,8 +121,10 @@ def export_product(product_path, geometry_path, output, *, variable=None, histor
             or ((g['view_zenith_deg'][p.valid] < 0) | (g['view_zenith_deg'][p.valid] >= 90)).any()
             or (g['footprint_km'][p.valid] <= 0).any()):
         raise ValueError('Недопустимые координаты или геометрия.')
-    product_hash = sha256(product_path); geometry_hash = sha256(geometry_path)
+    if sha256(product_path) != product_hash or sha256(geometry_path) != geometry_hash:
+        raise ValueError('Исходник изменился при чтении.')
     def write(stream):
+        written = 0
         for index in np.ndindex(p.values.shape):
             if not p.valid[index]: continue
             stable = digest([p.metadata['source'],p.metadata['platform'],p.name,p.method,p.metadata['primary_sha256'],p.metadata['observed_at'],index])
@@ -124,7 +136,11 @@ def export_product(product_path, geometry_path, output, *, variable=None, histor
                        uncertainty=None if not np.isfinite(p.uncertainty[index]) else float(p.uncertainty[index]))
             for k in ('latitude','longitude','view_zenith_deg','footprint_km'): rec[k] = float(g[k][index])
             check_record(rec, v, p.metadata['available_at'])
-            stream.write((canonical(rec)+'\n').encode())
+            encoded = (canonical(rec)+'\n').encode()
+            written += len(encoded)
+            if written > max_output_bytes:
+                raise ValueError('Превышен размер экспорта; уменьшите область явным оператором.')
+            stream.write(encoded)
         if sha256(product_path) != product_hash or sha256(geometry_path) != geometry_hash:
             raise ValueError('Исходник изменился при экспорте.')
     exclusive_bytes(output, write)

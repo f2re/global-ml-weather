@@ -41,6 +41,21 @@ def require_hash(value):
     return value
 
 
+def temporal_support(metadata, observed_at, available_at):
+    """Validate the actual support of a composite without refreshing its age."""
+    support = metadata.get('temporal_support')
+    if support is None:
+        if metadata.get('composite') is True:
+            raise ValueError('Для составного поля нужны начало и конец временного интервала.')
+        return None
+    if not isinstance(support, dict) or set(support) != {'start', 'end'}:
+        raise ValueError('Временная поддержка должна содержать start и end.')
+    start, end = utc(support['start']), utc(support['end'])
+    if not start <= utc(observed_at) <= end <= utc(available_at):
+        raise ValueError('Временная поддержка поля нарушает причинность.')
+    return {'start': start.isoformat(), 'end': end.isoformat()}
+
+
 @dataclass(frozen=True)
 class Field:
     values: np.ndarray
@@ -67,6 +82,7 @@ class Field:
             raise ValueError('Готовность раньше измерения.')
         require_hash(self.source_sha256)
         canonical(self.metadata)
+        temporal_support(self.metadata, self.observed_at, self.available_at)
         u = None if self.uncertainty is None else np.asarray(self.uncertainty, dtype=float)
         if u is not None and (u.shape != x.shape or (m & ((u < 0) | np.isinf(u))).any()):
             raise ValueError('Некорректная погрешность. Неизвестная погрешность обозначается NaN.')
@@ -80,9 +96,13 @@ class Field:
         return self
 
     def dependency(self):
-        return dict(sha256=self.source_sha256, quantity=self.quantity,
+        item = dict(sha256=self.source_sha256, quantity=self.quantity,
                     observed_at=utc(self.observed_at).isoformat(),
                     available_at=utc(self.available_at).isoformat())
+        support = temporal_support(self.metadata, self.observed_at, self.available_at)
+        if support is not None:
+            item['temporal_support'] = support
+        return item
 
 
 @dataclass(frozen=True)
@@ -173,6 +193,7 @@ def validate_metadata(meta, *, name, method, issue_time=None):
         raise ValueError('Главный источник отсутствует среди зависимостей.')
     for d in deps:
         require_hash(d['sha256'])
+        temporal_support(d, d['observed_at'], d['available_at'])
         if utc(d['observed_at']) > utc(d['available_at']) or utc(d['available_at']) > ready:
             raise ValueError('Нарушена причинность входов продукции.')
     if issue_time is not None and (ready > utc(issue_time) or observed > utc(issue_time)):

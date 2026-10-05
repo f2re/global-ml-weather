@@ -127,7 +127,7 @@ def cloud_height(cloud_temperature: Field, temperature_profile: Field, height_pr
 
 
 def liquid_water_path(optical_depth: Field, effective_radius: Field, liquid_single_layer: Field,
-                      *, available_at, data_kind):
+                      *, available_at, data_kind, covariance: Field | None = None):
     """LWP=(2/3)*rho_water*tau*r_eff for a vertically homogeneous liquid layer.
 
     tau and r_eff must already be retrieved with a sensor-specific radiative
@@ -146,12 +146,34 @@ def liquid_water_path(optical_depth: Field, effective_radius: Field, liquid_sing
     factor = 2/3 * 1000.
     value = factor*tau.values*re.values
     uncertainty = None
+    dependencies = [tau, re, liquid_single_layer]
+    method = 'homogeneous-liquid-lwp-v1'
+    error_assumption = 'conditional_independent_input_errors'
+    if covariance is not None:
+        covariance.require('covariance_optical_depth_effective_radius', 'm')
+        valid &= aligned(tau, covariance, max_skew_seconds=60.)
+        qc[~valid] |= int(QC.MISSING)
+        if tau.uncertainty is None or re.uncertainty is None:
+            raise ValueError('Для ковариации нужны обе стандартные неопределённости.')
+        # Cov(tau, r) has units m. It is not a dimensionless correlation.
+        bound = tau.uncertainty*re.uncertainty
+        known = np.isfinite(bound) & np.isfinite(covariance.values)
+        admissible = known & (np.abs(covariance.values) <= bound + 1e-12*np.maximum(bound, 1e-30))
+        physical &= admissible
+        qc[valid & ~admissible] |= int(QC.DOMAIN)
+        dependencies.append(covariance)
+        method = 'homogeneous-liquid-lwp-cov-v1'
+        error_assumption = 'conditional_first_order_covariance_not_total_error'
     if tau.uncertainty is not None and re.uncertainty is not None:
-        uncertainty = factor*np.sqrt((re.values*tau.uncertainty)**2+(tau.values*re.uncertainty)**2)
-    return result('cloud_liquid_water_path', 'homogeneous-liquid-lwp-v1', value,
-                  valid & ok & physical, qc, dependencies=[tau, re, liquid_single_layer], uncertainty=uncertainty,
+        variance = (re.values*tau.uncertainty)**2+(tau.values*re.uncertainty)**2
+        if covariance is not None:
+            variance = variance + 2*tau.values*re.values*covariance.values
+        # Only roundoff can make a PSD quadratic form slightly negative.
+        uncertainty = factor*np.sqrt(np.maximum(variance, 0.))
+    return result('cloud_liquid_water_path', method, value,
+                  valid & ok & physical, qc, dependencies=dependencies, uncertainty=uncertainty,
                   assumptions=['liquid_only_not_ice_or_vapour', 'vertically_homogeneous_effective_radius',
-                               'conditional_independent_input_errors', 'optical_retrieval_required'],
+                               error_assumption, 'optical_retrieval_required'],
                   **_identity(tau, available_at, data_kind))
 
 
