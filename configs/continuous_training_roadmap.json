@@ -40,14 +40,13 @@
         "docs/CONTINUOUS_TRAINING.md"
       ],
       "remaining_scope": [
-        "C2-coordinated checkpoint and committed-use writer",
-        "integration with the continuous preparation/training executor"
+        "integration with automatic source preparation and training (C3-C5)"
       ]
     },
     {
       "id": "C2",
       "title": "Согласованная фиксация шагов и восстановление",
-      "status": "planned",
+      "status": "in_progress",
       "depends_on": [
         "C1"
       ],
@@ -63,7 +62,21 @@
         "A22",
         "A28"
       ],
-      "evidence": []
+      "evidence": [
+        "tests/test_continuous_checkpoints.py",
+        "docs/CONTINUOUS_CHECKPOINTS.md"
+      ],
+      "implemented_scope": [
+        "durable optimizer-step generations and atomic committed-use ledger",
+        "single-writer fencing and poisoned-session recovery",
+        "current/previous retention and consistent workspace backup",
+        "actual adaptive-model bridge for local prepared blocks"
+      ],
+      "remaining_scope": [
+        "automatic C3-C5 source/preparation integration",
+        "explicit recovery branch when exact current-generation backup is unavailable",
+        "physical CUDA acceptance and independent storage fault testing"
+      ]
     },
     {
       "id": "C3",
@@ -251,26 +264,35 @@
     "A05": {
       "scenario": "Убить процесс внутри блока",
       "expected": "Восстанавливаются веса, оптимизатор, RNG и точная сохранённая позиция",
-      "status": "not_executed",
-      "evidence": []
+      "status": "component_tests_passed",
+      "evidence": [
+        "tests/test_continuous_checkpoints.py"
+      ]
     },
     "A06": {
       "scenario": "Оборвать запись либо повредить зафиксированную контрольную точку",
       "expected": "Веса и журнал восстанавливаются согласованно; старая генерация не используется с новым курсором",
-      "status": "not_executed",
-      "evidence": []
+      "status": "partially_verified",
+      "evidence": [
+        "tests/test_continuous_checkpoints.py",
+        "docs/CONTINUOUS_CHECKPOINTS.md"
+      ]
     },
     "A07": {
       "scenario": "Сбой между файловой публикацией и SQLite",
       "expected": "Нет ложной отметки обученных данных и двойного применения шага",
-      "status": "not_executed",
-      "evidence": []
+      "status": "component_tests_passed",
+      "evidence": [
+        "tests/test_continuous_checkpoints.py"
+      ]
     },
     "A08": {
       "scenario": "Перезапустить сервер после фиксации последнего шага",
       "expected": "Блок восстанавливается как завершённый без повторной оптимизации",
-      "status": "not_executed",
-      "evidence": []
+      "status": "component_tests_passed",
+      "evidence": [
+        "tests/test_continuous_checkpoints.py"
+      ]
     },
     "A09": {
       "scenario": "Потерять доступ CDS или GPTL",
@@ -353,8 +375,10 @@
     "A22": {
       "scenario": "Обучить маленькую модель с прерыванием и без него",
       "expected": "На детерминированном CPU совпадают веса, оптимизатор, курсор и журнал",
-      "status": "not_executed",
-      "evidence": []
+      "status": "component_tests_passed",
+      "evidence": [
+        "tests/test_continuous_checkpoints.py"
+      ]
     },
     "A23": {
       "scenario": "Пройти настоящие источники",
@@ -389,8 +413,11 @@
     "A28": {
       "scenario": "Полностью потерять диск",
       "expected": "Восстановление возможно только из согласованной резервной копии; внешняя гарантия не выдумывается",
-      "status": "not_executed",
-      "evidence": []
+      "status": "partially_verified",
+      "evidence": [
+        "tests/test_continuous_checkpoints.py",
+        "docs/CONTINUOUS_CHECKPOINTS.md"
+      ]
     }
   },
   "implemented_components": [
@@ -398,11 +425,16 @@
     "C1_stable_sample_identity",
     "C1_temporal_roles",
     "C1_usage_intent_ledger",
-    "C1_metadata_API_CLI"
+    "C1_metadata_API_CLI",
+    "C2_durable_step_checkpoints",
+    "C2_committed_usage_ledger",
+    "C2_fenced_single_writer",
+    "C2_consistent_checkpoint_backup",
+    "C2_prepared_weather_block_bridge"
   ],
   "execution": {
     "independent_agents_started": false,
     "mode": "single_executor",
-    "role_handoffs": "agents/tasks/continuous-c1.md"
+    "role_handoffs": "agents/tasks/continuous-c2.md"
   }
 }

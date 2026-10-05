@@ -49,3 +49,8 @@ def register(app, workspace):
     @app.get('/api/learning/samples')
     def samples(after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200)):
         return call(store.samples, after=after, limit=limit)
+
+
+    @app.get('/api/learning/checkpoints')
+    def checkpoints(after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200)):
+        return call(store.checkpoints, after=after, limit=limit)

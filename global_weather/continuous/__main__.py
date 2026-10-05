@@ -1,4 +1,4 @@
-"""Register date ranges and inspect C1 metadata. This CLI does not train."""
+"""Register date ranges, inspect persistence, or train an admitted local block."""
 from __future__ import annotations
 
 import argparse
@@ -18,25 +18,32 @@ def main(argv=None):
     add.add_argument('--end-date', required=True)
     add.add_argument('--request-key')
     actions.add_parser('state', help='Прочитать состояние и границы реализации')
-    for name in ('ranges', 'events', 'samples'):
+    for name in ('ranges', 'events', 'samples', 'checkpoints'):
         sub = actions.add_parser(name)
         sub.add_argument('--after', type=int, default=0)
         sub.add_argument('--limit', type=int, default=100)
     blocks = actions.add_parser('blocks')
     blocks.add_argument('--after-date')
     blocks.add_argument('--limit', type=int, default=100)
+    prepared = actions.add_parser('train-prepared', help='Обучить локальный блок с фиксацией каждого шага')
+    prepared.add_argument('--dataset', type=Path, required=True)
+    prepared.add_argument('--max-steps', type=int)
+    prepared.add_argument('--pass-number', type=int, default=0)
     args = parser.parse_args(argv)
     try:
         store = CampaignStore(args.workspace)
         if args.action == 'add-range':
             result = store.add_range(args.start_date, args.end_date, request_key=args.request_key)
+        elif args.action == 'train-prepared':
+            from .prepared import train_prepared_block
+            result = train_prepared_block(store, args.dataset, pass_number=args.pass_number, max_steps=args.max_steps)
         elif args.action == 'state':
             result = store.state()
         elif args.action == 'blocks':
             result = store.blocks(after_date=args.after_date, limit=args.limit)
         else:
             # Selection is from argparse's fixed actions, never a module or shell command.
-            reader = {'ranges': store.ranges, 'events': store.events, 'samples': store.samples}[args.action]
+            reader = {'ranges': store.ranges, 'events': store.events, 'samples': store.samples, 'checkpoints': store.checkpoints}[args.action]
             result = reader(after=args.after, limit=args.limit)
     except (ValueError, sqlite3.Error, OSError) as exc:
         parser.exit(2, f'Ошибка журнала программы: {exc}\n')

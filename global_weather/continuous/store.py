@@ -1,8 +1,7 @@
 """Transactional campaign/range registry and the C1 data-use ledger.
 
-This module never trains, downloads, or declares an example trained. C2 must
-publish checkpoints and usage events in one coordinated commit before the
-reserved training ledger can acquire entries. The old trainer is unchanged.
+Registration does not train or download. The C2 step executor alone publishes
+checkpoint generations and usage events. The old epoch trainer is unchanged.
 """
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ from .contracts import (canonical, fingerprint, check_range, calendar_date,
                         identifier, SPLIT_VERSION)
 
 APPLICATION_ID = 0x47574331
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 DDL = (
     '''CREATE TABLE campaign (
@@ -135,7 +134,7 @@ class CampaignStore:
         with self._connection() as db:
             version = db.execute('PRAGMA user_version').fetchone()[0]
             app_id = db.execute('PRAGMA application_id').fetchone()[0]
-            if version not in (0, SCHEMA_VERSION) or app_id not in (0, APPLICATION_ID):
+            if version not in (0, 1, SCHEMA_VERSION) or app_id not in (0, APPLICATION_ID):
                 raise ValueError('Неизвестная версия базы. Автоматическая перезапись запрещена.')
             mode = db.execute('PRAGMA journal_mode').fetchone()[0]
             if mode.lower() != 'wal':
@@ -147,7 +146,7 @@ class CampaignStore:
                 # Re-read inside the write transaction: another constructor
                 # may have initialized the same empty database in the meantime.
                 version = db.execute('PRAGMA user_version').fetchone()[0]
-                if version not in (0, SCHEMA_VERSION):
+                if version not in (0, 1, SCHEMA_VERSION):
                     raise ValueError('Версия базы изменилась при открытии.')
                 if version == 0:
                     if db.execute("SELECT 1 FROM sqlite_master WHERE type='table'").fetchone():
@@ -160,6 +159,10 @@ class CampaignStore:
                                 BEFORE {operation} ON {table} BEGIN
                                 SELECT RAISE(ABORT,'immutable campaign history'); END''')
                     db.execute(f'PRAGMA application_id={APPLICATION_ID}')
+                    db.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
+                if version in (0, 1):
+                    from .journal_schema import migrate
+                    migrate(db)
                     db.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
                 if db.execute('PRAGMA application_id').fetchone()[0] != APPLICATION_ID:
                     raise ValueError('База не принадлежит программе обучения.')
@@ -260,11 +263,13 @@ class CampaignStore:
                       for name, table in [('requests', 'ranges'), ('samples', 'samples'),
                                           ('planned_uses', 'usage_plan'), ('committed_uses', 'training_events')]}
             days = db.execute('SELECT coalesce(sum(end_day-start_day+1),0) FROM intervals').fetchone()[0]
+            checkpoint = self._checkpoint(db)
             return {'schema': 'continuous-state-1', 'campaign': self._campaign(db),
                     'requested_days': days, **counts,
                     'last_event': db.execute('SELECT coalesce(max(seq),0) FROM events').fetchone()[0],
-                    'training_ready': False, 'execution_status': 'awaiting_C2_C5_executor',
-                    'model_initialized': False, 'historical_independence_verified': False}
+                    'training_ready': False, 'execution_status': 'awaiting_C3_C5_automatic_preparation',
+                    'model_initialized': checkpoint is not None, 'checkpoint': checkpoint,
+                    'step_persistence_available': True, 'historical_independence_verified': False}
 
     @staticmethod
     def _pagination(after, limit):
@@ -315,10 +320,17 @@ class CampaignStore:
                     roles[role] += 1
                 sample_count = db.execute('SELECT count(*) FROM samples WHERE issue_time>=? AND issue_time<?',
                                           (stamp, date.fromordinal(day + 1).isoformat())).fetchone()[0]
+                planned = db.execute('''SELECT count(*) FROM usage_plan u JOIN samples s ON s.id=u.sample_id
+                    WHERE issue_time>=? AND issue_time<?''', (stamp, date.fromordinal(day+1).isoformat())).fetchone()[0]
+                committed = db.execute('''SELECT count(*) FROM training_events e JOIN usage_plan u ON e.use_id=u.id
+                    JOIN samples s ON s.id=u.sample_id WHERE issue_time>=? AND issue_time<?''',
+                    (stamp, date.fromordinal(day+1).isoformat())).fetchone()[0]
+                progress = ('not_started' if not committed else 'registered_uses_committed'
+                            if planned == committed else 'partially_committed')
                 items.append({'id': fingerprint({'campaign': campaign['id'], 'day': stamp}),
                               'date': stamp, 'issue_roles': roles, 'registered_samples': sample_count,
                               'catalog_status': 'not_checked', 'preparation_status': 'not_started',
-                              'training_status': 'not_started'})
+                              'training_status': progress, 'planned_uses': planned, 'committed_uses': committed})
             return {'items': items, 'next_after_date': items[-1]['date'] if len(days) > limit else None}
 
     def register_sample(self, descriptor):
@@ -350,8 +362,10 @@ class CampaignStore:
                         db.execute('INSERT OR IGNORE INTO assets VALUES (?,?)', (asset_id, canonical(asset)))
                         db.execute('INSERT INTO sample_assets VALUES (?,?,?)', (identity, asset_id, kind))
                 self._event(db, 'sample_registered', {'sample_id': identity, 'role': role})
+            committed = db.execute('''SELECT count(*) FROM training_events e
+                JOIN usage_plan u ON u.id=e.use_id WHERE sample_id=?''', (identity,)).fetchone()[0]
             return {'id': identity, 'role': role, 'replayed': existed,
-                    'physically_admitted': False, 'training_committed': False}
+                    'physically_admitted': False, 'training_committed': bool(committed)}
 
     def plan_use(self, sample_id, *, pass_number=0):
         """Idempotent intent only. No interface can label this intent as trained."""
@@ -374,8 +388,9 @@ class CampaignStore:
                 db.execute('INSERT INTO usage_plan(id,sample_id,stage,pass_number,created_at) VALUES (?,?,?,?,?)',
                            (identity, sample_id, 'base', pass_number, self._now().isoformat()))
                 self._event(db, 'usage_planned', {'use_id': identity, 'sample_id': sample_id, 'pass_number': pass_number})
+            committed = db.execute('SELECT 1 FROM training_events WHERE use_id=?', (identity,)).fetchone()
             return {'id': identity, 'sample_id': sample_id, 'pass_number': pass_number,
-                    'status': 'planned_not_trained', 'replayed': old is not None}
+                    'status': 'committed' if committed else 'planned_not_trained', 'replayed': old is not None}
 
     def samples(self, *, after=0, limit=100):
         self._pagination(after, limit)
@@ -388,3 +403,27 @@ class CampaignStore:
                 WHERE samples.seq>? ORDER BY samples.seq LIMIT ?''', (after, limit + 1)).fetchall()
             return {'items': [dict(r) for r in rows[:limit]],
                     'next_after': rows[limit - 1]['seq'] if len(rows) > limit else None}
+
+
+    @staticmethod
+    def _checkpoint(db):
+        import json
+        row = db.execute('''SELECT d.manifest_json FROM checkpoint_head h
+            JOIN checkpoint_details d ON d.generation_id=h.generation_id WHERE h.singleton=1''').fetchone()
+        if row is None:
+            return None
+        manifest = json.loads(row[0])
+        return {k: manifest[k] for k in ('id', 'step_number', 'cursor', 'parent_id')}
+
+    def checkpoints(self, *, after=0, limit=100):
+        import json
+        self._pagination(after, limit)
+        with self.transaction() as db:
+            rows = db.execute('''SELECT step_number, manifest_json FROM checkpoint_details
+                WHERE step_number>=? ORDER BY step_number LIMIT ?''', (after, limit+1)).fetchall()
+            items = []
+            for row in rows[:limit]:
+                m = json.loads(row['manifest_json'])
+                items.append({k: m[k] for k in ('id', 'step_number', 'parent_id', 'cursor', 'use_ids')})
+            return {'items': items,
+                    'next_after': rows[limit-1]['step_number']+1 if len(rows)>limit else None}

@@ -35,7 +35,9 @@
     "docs/audits/2026-10-05-continuous-training-flow.md",
     "docs/CONTINUOUS_TRAINING.md",
     "agents/tasks/continuous-c1.md",
-    "global_weather/continuous/AGENTS.md"
+    "global_weather/continuous/AGENTS.md",
+    "docs/CONTINUOUS_CHECKPOINTS.md",
+    "agents/tasks/continuous-c2.md"
   ],
   "scope_note": "Active operational documentation and agent instructions. Historical reports retain their evidence.",
   "target_interpretation": "Approximately 80% is a stylistic request, not measured official standard compliance.",
