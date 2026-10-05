@@ -1,0 +1,25 @@
+{
+  "start": "2020-01-01T12:00:00Z",
+  "end": "2020-01-31T12:00:00Z",
+  "issue_interval_hours": 24,
+  "horizon_hours": 6,
+  "step_hours": 3,
+  "mesh_level": 2,
+  "source_grid_degrees": 2.5,
+  "station_count": 8,
+  "stations": [],
+  "train_fraction": 0.7,
+  "validation_fraction": 0.15,
+  "latency_minutes": 60,
+  "archive_assumption_accepted": true,
+  "network": true,
+  "max_download_gib": 8.0,
+  "minimum_target_coverage": 0.99,
+  "max_runtime_hours": 24,
+  "training": {
+    "device": "auto",
+    "epochs": 5,
+    "hidden": 16,
+    "threads": 2
+  }
+}

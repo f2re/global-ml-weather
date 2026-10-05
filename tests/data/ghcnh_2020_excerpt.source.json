@@ -1,0 +1,8 @@
+{
+  "source": "https://www.ncei.noaa.gov/oa/global-historical-climatology-network/hourly/access/by-year/2020/psv/GHCNh_USW00014933_2020.psv",
+  "source_sha256": "22b30d3aa4c62c89f8f3a0cd58a5408fa5db5e822708e3a31bda2aedfaa75f4b",
+  "excerpt_sha256": "be114477f84157488e485d99f850ef7500ba15290c3ffdd9916fb8ba230c2ee4",
+  "selection": "first 4 data records; 47 named columns retained (station/time/coordinates and six measurements with source/QC metadata); values unchanged; UTF-8 PSV with LF",
+  "data_kind": "real",
+  "acquired_at": "2026-10-05T02:50:00Z"
+}

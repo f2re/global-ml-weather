@@ -1,4 +1,4 @@
-"""CPU reference trainer, immutable epoch snapshots, explicit held-out evaluation.
+"""Device-aware reference trainer, immutable epoch snapshots, explicit held-out evaluation.
 
 The trainer is not an operational weather service or proof of forecast skill.
 No download, arbitrary command, pickle payload or test-set model selection occurs.
@@ -17,12 +17,14 @@ import uuid
 import numpy as np
 import torch
 from .dataset import PreparedDataset, integer
+from ..devices import select_device, device_identity
 from .io import atomic_json, artifact, digest, local_path, read_json, reference, sha256, write_arrays
 from ..vertical import PRESSURE_HPA, PROFILE_VARIABLES, PROFILE_UNITS, SURFACE_VARIABLES, SURFACE_UNITS
 
 
 @dataclass(frozen=True)
 class TrainConfig:
+    device: str = "auto"
     epochs: int = 2
     hidden: int = 16
     latent_slots: int = 8
@@ -38,6 +40,7 @@ class TrainConfig:
     curriculum: tuple = ()
 
     def validate(self, ds):
+        select_device(self.device)
         integer(self.epochs, 1, 10000); integer(self.hidden, 8, 512)
         if self.hidden % 4 or self.latent_slots not in (4, 8, 16, 38):
             raise ValueError('Неверные размеры скрытого состояния.')
@@ -96,7 +99,7 @@ def software():
     root = package.parent
     import sys
     return {'torch': str(torch.__version__), 'numpy': np.__version__, 'python': sys.version.split()[0],
-            'scipy': importlib.metadata.version('scipy'), 'device': 'cpu',
+            'scipy': importlib.metadata.version('scipy'), 'device_policy': 'explicit_runtime',
             'source_sha256': {p.relative_to(root).as_posix(): sha256(p) for p in sorted(package.rglob('*.py'))}}
 
 
@@ -175,19 +178,20 @@ def evaluate_model(ds, model, split, horizon, *, detailed=True):
     ds.assert_unchanged()
     from ..losses import forecast_loss
     samples = ds.subset(split); values = []; scores = ScoreAccumulator()
-    elevation = torch.as_tensor(ds.elevation, dtype=torch.float32)
-    land = torch.as_tensor(ds.land, dtype=torch.float32)
-    area = torch.tensor(ds.grid().areas_m2/ds.grid().areas_m2.mean(), dtype=torch.float32)
+    device = model.xyz.device
+    elevation = torch.as_tensor(ds.elevation, dtype=torch.float32, device=device)
+    land = torch.as_tensor(ds.land, dtype=torch.float32, device=device)
+    area = torch.tensor(ds.grid().areas_m2/ds.grid().areas_m2.mean(), dtype=torch.float32, device=device)
     model.eval()
     with torch.inference_mode():
         for sample in samples:
-            obs = ds.packed(sample); targets = target_tensors(ds, sample, horizon)
+            obs = ds.packed(sample).to(device); targets = target_tensors(ds, sample, horizon).to(device)
             targets.validate(model)
             initial = None
             lookup = {lead: i for i, lead in enumerate(targets.lead_hours)}
             for frame in model(obs, elevation, land, horizon_hours=horizon):
                 if initial is None:
-                    initial = (frame.profiles.numpy().copy(), frame.surface.numpy().copy())
+                    initial = (frame.profiles.detach().cpu().numpy().copy(), frame.surface.detach().cpu().numpy().copy())
                 if frame.lead_hours == 0 or frame.lead_hours not in lookup:
                     continue
                 i = lookup[frame.lead_hours]
@@ -198,15 +202,15 @@ def evaluate_model(ds, model, split, horizon, *, detailed=True):
                                      pressure_pa=model.pressure_pa, step_hours=ds.step)
                 values.append(float(loss))
                 if detailed:
-                    pp, ss = frame.profiles.numpy(), frame.surface.numpy()
-                    tp, ts = targets.profiles[i].numpy(), targets.surface[i].numpy()
-                    pm, sm = targets.profile_mask[i].numpy(), targets.surface_mask[i].numpy()
+                    pp, ss = frame.profiles.detach().cpu().numpy(), frame.surface.detach().cpu().numpy()
+                    tp, ts = targets.profiles[i].detach().cpu().numpy(), targets.surface[i].detach().cpu().numpy()
+                    pm, sm = targets.profile_mask[i].detach().cpu().numpy(), targets.surface_mask[i].detach().cpu().numpy()
                     for k, (name, units) in enumerate(zip(PROFILE_VARIABLES, PROFILE_UNITS)):
                         for j, pressure in enumerate(PRESSURE_HPA):
                             scores.add(frame.lead_hours, name, units, pp[:, j, k], tp[:, j, k], pm[:, j, k],
-                                       area.numpy(), initial[0][:, j, k], pressure)
+                                       area.detach().cpu().numpy(), initial[0][:, j, k], pressure)
                     for k, (name, units) in enumerate(zip(SURFACE_VARIABLES, SURFACE_UNITS)):
-                        scores.add(frame.lead_hours, name, units, ss[:, k], ts[:, k], sm[:, k], area.numpy(),
+                        scores.add(frame.lead_hours, name, units, ss[:, k], ts[:, k], sm[:, k], area.detach().cpu().numpy(),
                                    initial[1][:, k] if name != 'precipitation_step' else None)
     if not values or not np.isfinite(values).all():
         raise ValueError('Нет пригодных будущих целей для оценки.')
@@ -246,6 +250,8 @@ def _load_training_state(run, ds, cfg):
         raise ValueError('Неизвестная схема продолжения.')
     if state.get('dataset_fingerprint') != ds.fingerprint or state.get('config_fingerprint') != digest(cfg.identity()):
         raise ValueError('Продолжение требует той же выборки и конфигурации.')
+    if state.get('runtime') != device_identity(select_device(cfg.device)):
+        raise ValueError('Устройство изменилось: продолжение требует прежнего устройства и CUDA-среды.')
     if state['software'] != software():
         raise ValueError('Изменились исходники или численная среда. Создайте новый эксперимент.')
     if state['data_kind'] != ds.kind:
@@ -253,10 +259,12 @@ def _load_training_state(run, ds, cfg):
     return state
 
 
-def train(dataset_path, output, cfg, *, resume=False, progress=event):
+def train(dataset_path, output, cfg, *, resume=False, progress=event, cancelled=None):
     from ..training import train_step
     from ..checkpoints import save_checkpoint, load_checkpoint
     ds = PreparedDataset(dataset_path); estimate = cfg.validate(ds)
+    device = select_device(cfg.device)
+    runtime = device_identity(device)
     environment = software()
     ds.subset('train'); ds.subset('validation')
     torch.set_num_threads(cfg.threads); torch.manual_seed(cfg.seed)
@@ -275,7 +283,7 @@ def train(dataset_path, output, cfg, *, resume=False, progress=event):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise ValueError('Эксперимент уже исполняется.') from exc
-        model = make_model(ds, cfg)
+        model = make_model(ds, cfg).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
         previous = 0; best = None; best_score = math.inf; stale = 0
         history = []
@@ -284,19 +292,21 @@ def train(dataset_path, output, cfg, *, resume=False, progress=event):
             load_checkpoint(artifact(output, state['weights'], limit=512*1024**2), model)
             opt = torch.load(artifact(output, state['optimizer'], limit=512*1024**2), map_location='cpu', weights_only=True)
             _finite_state(opt)
-            optimizer.load_state_dict(opt['optimizer']); torch.set_rng_state(opt['torch_rng'])
+            optimizer.load_state_dict(opt['optimizer']); torch.set_rng_state(opt['torch_rng'].cpu())
+            if device.type == 'cuda':
+                torch.cuda.set_rng_state_all([v.cpu() for v in opt['cuda_rng']])
             previous, best, best_score, stale = state['epoch'], state['best'], state['best_score'], state['stale']
             history = state['history']
-            if previous >= cfg.epochs:
+            if previous > cfg.epochs or previous == cfg.epochs and (output/'report.json').exists():
                 raise ValueError('Нет новых эпох для продолжения.')
-            if stale >= cfg.patience:
+            if stale >= cfg.patience and (output/'report.json').exists():
                 raise ValueError('Сработала ранняя остановка; продолжение требует нового эксперимента.')
         else:
             atomic_json(output/'setup.json', {'config': asdict(cfg), 'dataset_fingerprint': ds.fingerprint,
-                                             'data_kind': ds.kind, 'software': software(),
+                                             'data_kind': ds.kind, 'software': software(), 'runtime': runtime,
                                              'estimated_activation_bytes': estimate, 'status': 'research_training'})
-        elevation, land = (torch.as_tensor(a, dtype=torch.float32) for a in (ds.elevation, ds.land))
-        for epoch in range(previous+1, cfg.epochs+1):
+        elevation, land = (torch.as_tensor(a, dtype=torch.float32, device=device) for a in (ds.elevation, ds.land))
+        for epoch in range(previous+1, (previous if stale >= cfg.patience else cfg.epochs)+1):
             ds.assert_unchanged()
             if software() != environment:
                 raise ValueError('Исходники изменились во время обучения.')
@@ -304,8 +314,10 @@ def train(dataset_path, output, cfg, *, resume=False, progress=event):
             horizon = cfg.training_horizon(epoch)
             order = list(ds.subset('train')); random.Random(cfg.seed+epoch).shuffle(order)
             for index, sample in enumerate(order):
-                result = train_step(model, optimizer, ds.packed(sample), elevation, land,
-                                    target_tensors(ds, sample, horizon), grad_clip=cfg.grad_clip,
+                if cancelled and cancelled():
+                    raise InterruptedError('Обучение остановлено; продолжение начнётся с последней завершённой эпохи.')
+                result = train_step(model, optimizer, ds.packed(sample).to(device), elevation, land,
+                                    target_tensors(ds, sample, horizon).to(device), grad_clip=cfg.grad_clip,
                                     physics_weight=cfg.physics_weight)
                 losses.append(result['loss'])
                 progress('training', epoch=epoch, sample=index+1, samples=len(order), loss=result['loss'])
@@ -326,7 +338,8 @@ def train(dataset_path, output, cfg, *, resume=False, progress=event):
                 raise FileExistsError('Неоднозначная эпоха после прерывания. Сохранённые данные не перезаписываются.')
             try:
                 save_checkpoint(temporary/'weights.pt', model)
-                _torch_save(temporary/'optimizer.pt', {'optimizer': optimizer.state_dict(), 'torch_rng': torch.get_rng_state()})
+                _torch_save(temporary/'optimizer.pt', {'optimizer': optimizer.state_dict(), 'torch_rng': torch.get_rng_state(),
+                                                      'cuda_rng': torch.cuda.get_rng_state_all() if device.type == 'cuda' else []})
                 atomic_json(temporary/'metrics.json', entry)
                 temporary.rename(destination)
             except Exception:
@@ -335,7 +348,7 @@ def train(dataset_path, output, cfg, *, resume=False, progress=event):
                 best_score = score; best = reference(output, destination/'weights.pt')
             state = {'schema': 'weather-training-state-1', 'epoch': epoch, 'history': history,
                      'config': asdict(cfg), 'config_fingerprint': digest(cfg.identity()),
-                     'dataset_fingerprint': ds.fingerprint, 'data_kind': ds.kind, 'software': software(),
+                     'dataset_fingerprint': ds.fingerprint, 'data_kind': ds.kind, 'software': software(), 'runtime': runtime,
                      'weights': reference(output, destination/'weights.pt'),
                      'optimizer': reference(output, destination/'optimizer.pt'),
                      'best': best, 'best_score': best_score, 'stale': stale}
@@ -344,7 +357,7 @@ def train(dataset_path, output, cfg, *, resume=False, progress=event):
             atomic_json(output/'best.json', {'weights': best, 'config': asdict(cfg), 'data_kind': ds.kind,
                                              'dataset_fingerprint': ds.fingerprint,
                                              'selection': 'validation_only', 'best_score': best_score,
-                                             'software': environment,
+                                             'software': environment, 'runtime': runtime,
                                              'selection_end_utc': max(
                                                  s.issue + timedelta(hours=cfg.horizon_hours)
                                                  for s in ds.samples if s.split in ('train', 'validation')).isoformat(),
@@ -372,7 +385,7 @@ def load_trained(ds, run):
         raise ValueError('Исходники или численная среда отличаются от обучения.')
     cfg = config_from_json(info['config']); cfg.validate(ds)
     torch.set_num_threads(cfg.threads)
-    model = make_model(ds, cfg)
+    model = make_model(ds, cfg).to(select_device(cfg.device))
     load_checkpoint(artifact(run, info['weights'], limit=512*1024**2), model)
     model.eval()
     return model, cfg, info
@@ -406,25 +419,26 @@ def forecast(dataset_path, run, sample_id, output, *, horizon_hours=72):
     sample = next((s for s in ds.samples if s.id == sample_id), None)
     if sample is None:
         raise ValueError('Неизвестный пример.')
-    obs = ds.packed(sample)
+    device = model.xyz.device
+    obs = ds.packed(sample).to(device)
     output = Path(output); output.mkdir(parents=True, exist_ok=False)
     ds.grid().save(output/'grid.npz')
-    elevation, land = (torch.as_tensor(a, dtype=torch.float32) for a in (ds.elevation, ds.land))
+    elevation, land = (torch.as_tensor(a, dtype=torch.float32, device=device) for a in (ds.elevation, ds.land))
     leads = []; diagnostics = []
     from ..lab.metrics import physical_diagnostics
     with torch.inference_mode():
         for frame in model(obs, elevation, land, horizon_hours=horizon_hours):
             if not torch.isfinite(frame.profiles).all() or not torch.isfinite(frame.surface).all():
                 raise FloatingPointError('Неконечный прогноз.')
-            write_arrays(output/f'frame_{frame.lead_hours:03d}.npz', profiles=frame.profiles.numpy(),
-                         surface=frame.surface.numpy(), profile_mask=frame.profile_mask.numpy(),
-                         surface_mask=frame.surface_mask.numpy(), pressure_hpa=np.array(PRESSURE_HPA),
+            write_arrays(output/f'frame_{frame.lead_hours:03d}.npz', profiles=frame.profiles.detach().cpu().numpy(),
+                         surface=frame.surface.detach().cpu().numpy(), profile_mask=frame.profile_mask.detach().cpu().numpy(),
+                         surface_mask=frame.surface_mask.detach().cpu().numpy(), pressure_hpa=np.array(PRESSURE_HPA),
                          profile_variables=np.array(PROFILE_VARIABLES), profile_units=np.array(PROFILE_UNITS),
                          surface_variables=np.array(SURFACE_VARIABLES), surface_units=np.array(SURFACE_UNITS),
                          issue_time=sample.issue.isoformat(), valid_time=frame.valid_time.isoformat())
             leads.append(frame.lead_hours)
             diagnostics.append({'lead_hours': frame.lead_hours, **physical_diagnostics(
-                frame.profiles.numpy(), frame.surface.numpy(), model.pressure_pa.numpy(), ds.grid().areas_m2)})
+                frame.profiles.detach().cpu().numpy(), frame.surface.detach().cpu().numpy(), model.pressure_pa.detach().cpu().numpy(), ds.grid().areas_m2)})
     ds.assert_unchanged()
     report = {'status': 'research_forecast', 'data_kind': ds.kind, 'sample_id': sample.id,
               'issue_time': sample.issue.isoformat(), 'lead_hours': leads,

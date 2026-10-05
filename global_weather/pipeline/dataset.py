@@ -228,6 +228,12 @@ class PreparedDataset:
             raise ValueError('Удельная влажность вне физического диапазона.')
         if (s[..., 6][sm[..., 6]] < 0).any() or ((s[..., 7][sm[..., 7]] < 0) | (s[..., 7][sm[..., 7]] > 1)).any():
             raise ValueError('Осадки или облачная доля вне допустимого диапазона.')
+        policy = self.manifest.get('target_coverage')
+        if policy is not None:
+            if not isinstance(policy, dict) or set(policy) != {'minimum'}:
+                raise ValueError('Неверная политика покрытия целей.')
+            from .coverage import check_coverage
+            check_coverage(data, policy['minimum'])
         return data
 
     def packed(self, sample):

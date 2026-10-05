@@ -22,6 +22,12 @@ class Targets:
     grid_fingerprint: str
     pressure_pa: torch.Tensor
 
+    def to(self, device):
+        from dataclasses import fields
+        return type(self)(**{f.name: (getattr(self, f.name).to(device)
+                           if isinstance(getattr(self, f.name), torch.Tensor) else getattr(self, f.name))
+                           for f in fields(self)})
+
     def validate(self,model):
         if self.grid_fingerprint != model.grid_fingerprint or not torch.equal(self.pressure_pa,model.pressure_pa):
             raise ValueError('Target grid/pressure axis mismatch.')

@@ -18,16 +18,22 @@ from ..connectors import CATALOG
 from ..connectors.local import inventory, MAX_BYTES
 
 
-def create_app(workspace=None, *, testing=False):
+def create_app(workspace=None, *, testing=False, arktika_root=None):
     queue = RunQueue(workspace or os.environ.get('WEATHER_LAB_HOME', 'outputs/lab'))
+    from ..autonomous.service import Experiments
+    autonomous = Experiments(queue.root)
     token = secrets.token_urlsafe(32)
     @asynccontextmanager
     async def lifespan(app):
         queue.start()
-        try: yield
+        try:
+            autonomous.start()
+            try: yield
+            finally: autonomous.close()
         finally: queue.close()
     app = FastAPI(title='Испытания глобальной модели', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.queue = queue
+    app.state.autonomous = autonomous
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost'] + (['testserver'] if testing else []))
 
     @app.middleware('http')
@@ -146,6 +152,8 @@ def create_app(workspace=None, *, testing=False):
         return path.read_text(encoding='utf-8')
     from .pipeline_ui import register
     register(app, queue)
+    from .autonomous_ui import register as register_autonomous
+    register_autonomous(app, autonomous, arktika_root)
     static = Path(__file__).with_name('static')
     app.mount('/static', StaticFiles(directory=static), name='static')
     @app.get('/')
@@ -154,6 +162,7 @@ def create_app(workspace=None, *, testing=False):
         text = text.replace('GLOBAL-ML-WEATHER / 0.3', 'GLOBAL-ML-WEATHER / 0.4')
         text = text.replace('<b>Обученных весов нет</b>', '<b>Точность не подтверждена</b>')
         text = text.replace('</nav>', '</nav><a class="textlink" href="/training">Обучение и проверка выборки →</a>', 1)
+        text = text.replace('</nav>', '<a href="/experiments">Реальные данные и обучение</a></nav>', 1)
         return HTMLResponse(text)
     return app
 
@@ -162,10 +171,11 @@ def main(argv=None):
     import uvicorn
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace', type=Path, default=Path('outputs/lab'))
+    parser.add_argument('--arktika-root', type=Path, help='Разрешённый каталог экспортированных продуктов arktika-worker; только чтение')
     parser.add_argument('--port', type=int, default=8765)
     args = parser.parse_args(argv)
     if not 1024 <= args.port <= 65535: parser.error('Нужен непривилегированный порт.')
-    uvicorn.run(create_app(args.workspace), host='127.0.0.1', port=args.port, workers=1, access_log=False)
+    uvicorn.run(create_app(args.workspace, arktika_root=args.arktika_root), host='127.0.0.1', port=args.port, workers=1, access_log=False)
 
 
 if __name__ == '__main__': main()

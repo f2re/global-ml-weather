@@ -1,0 +1,9 @@
+{
+  "repository": "f2re/arktika-worker",
+  "revision": "9750212dadf6c8ed5276ba4f155e15e18b88b362",
+  "files": {
+    "network.py": "463f9817335704cfefe2f8fcc06be04c2400741c597ca1b4e116bac0935d5dd0",
+    "model.py": "fa5e6205ac6a32ed83a0b6254afe2efce8e799836c61765486041149a9fcfeb8",
+    "auth.py": "9c7d579a5d2e39f0df2bc73d3c0a6a9dc40c24d2fa7401803b7e0db4259ba142"
+  }
+}

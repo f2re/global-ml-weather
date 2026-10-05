@@ -10,3 +10,13 @@ data/
 *.pt
 *.npz
 .env
+
+credentials.json
+.cdsapirc
+*.receipt.json
+
+# Only this provenance-bearing NOAA excerpt belongs in Git, not training data.
+!tests/data/
+tests/data/*
+!tests/data/ghcnh_2020_excerpt.psv
+!tests/data/ghcnh_2020_excerpt.source.json

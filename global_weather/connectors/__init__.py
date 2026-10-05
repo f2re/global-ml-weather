@@ -1,5 +1,6 @@
 """Explicit data acquisition and admission. No network calls at import time."""
 CATALOG = [
+    dict(id='ghcnh', title='NOAA GHCNh · станции', capability='PSV v1.1, QC, ветер, температура и давление; автономная подготовка', access='public_https', state='implemented', limitation='Архивная задержка явно моделируется; оперативная доступность не подтверждена.'),
     dict(id='local_observations', title='Станции и аэрология · JSONL', capability='Проверка контракта, времени и масок', access='local', state='implemented', limitation='Не создаёт отсутствующие профили; физическое качество проверяется отдельно.'),
     dict(id='satdump', title='SatDump · ваша release/1.2.2', capability='Родные dataset.json, product.cbor, каналы, hrpt30/dump46, отчёты приборов', access='local', state='native_transport_only', limitation='Проверяется совместимость структуры; DN/презентационные PNG не допускаются как K. МТВЗА требует калибровки и антенного оператора.'),
     dict(id='graphcast', title='GraphCast · статистики ERA5', capability='Загрузка mean/std с контрольными суммами; импорт существующим модулем', access='public_https', state='implemented_not_live_verified', limitation='Недостаточно для полного набора величин; fit_period требуется подтвердить.'),

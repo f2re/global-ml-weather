@@ -37,11 +37,14 @@ jobs:
       - run: python -m pip install -e '.[lab,browser]'
       - run: python -m playwright install --with-deps chromium
       - run: python scripts/browser-test.py
+      - run: python scripts/autonomous-browser-test.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: lab-browser-screenshots
-          path: outputs/browser
+          path: |
+            outputs/browser
+            outputs/autonomous-browser
   producer-contracts:
     runs-on: ubuntu-latest
     steps:

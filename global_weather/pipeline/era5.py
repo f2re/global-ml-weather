@@ -175,11 +175,11 @@ def prepare_targets(pressure_path, surface_path, output, *, issue_time, mesh_lev
         raise ValueError('Целевой массив превышает предел. Используйте меньшую сетку для этого адаптера.')
     profiles = np.full((*shape, 37, 6), np.nan, np.float32)
     surface = np.full((*shape, 8), np.nan, np.float32)
-    paths = (Path(pressure_path), Path(surface_path))
+    paths = [Path(p) for value in (pressure_path, surface_path) for p in (value if isinstance(value, (list, tuple)) else [value])]
     hashes = {str(p): sha256(p) for p in paths}
-    pf = CFField(pressure_path)
+    pf = CFCollection(pressure_path) if isinstance(pressure_path, (list,tuple)) else CFField(pressure_path)
     try:
-        sf = CFField(surface_path)
+        sf = CFCollection(surface_path) if isinstance(surface_path, (list,tuple)) else CFField(surface_path)
         try:
             for i, lead in enumerate(leads):
                 when = issue+timedelta(hours=lead)
@@ -244,3 +244,48 @@ def prepare_static(source, output, *, mesh_level):
               'dynamic_surface_state_included': False, 'artifact_sha256': sha256(Path(output))}
     atomic_json(Path(output).with_suffix('.provenance.json'), report)
     return report
+
+
+class CFCollection:
+    """Lazy time/variable dispatch. No Dask or full-archive concatenation."""
+    def __init__(self, paths):
+        import xarray as xr
+        from collections import OrderedDict
+        self.entries=[];self.opened=OrderedDict()
+        for path in paths:
+            with xr.open_dataset(path) as ds:
+                times={}
+                for name,variable in ds.data_vars.items():
+                    axes=[a for a in ('time','valid_time') if a in variable.dims]
+                    if len(axes)!=1:continue
+                    stamps=ds[axes[0]].values.astype('datetime64[ns]')
+                    if len(np.unique(stamps))!=len(stamps):raise ValueError('Повторные сроки исходного файла.')
+                    times[name]=set(int(x.astype('int64')) for x in stamps)
+                self.entries.append((Path(path),times))
+
+    def _field(self, aliases, when):
+        stamp=int(np.datetime64(when.replace(tzinfo=None),'ns').astype('int64'))
+        matches=[p for p,times in self.entries if any(stamp in times.get(a,set()) for a in aliases)]
+        if len(matches)>1:raise ValueError('Перекрывающиеся файлы ERA5 для одной величины и срока.')
+        if not matches:return None
+        p=matches[0]
+        if p not in self.opened:
+            if len(self.opened)>=3:self.opened.popitem(last=False)[1].close()
+            self.opened[p]=CFField(p)
+        self.opened.move_to_end(p)
+        return self.opened[p]
+
+    def values(self, aliases, units, xyz, *, when=None, **kw):
+        field=self._field(aliases,when)
+        return field.values(aliases,units,xyz,when=when,**kw) if field else np.full(len(xyz),np.nan,np.float32)
+
+    def wind(self, u_aliases, v_aliases, xyz, *, when=None, **kw):
+        field=self._field(u_aliases,when);other=self._field(v_aliases,when)
+        if field is None or other is None:
+            missing=np.full(len(xyz),np.nan,np.float32);return missing,missing.copy()
+        if field is not other:raise ValueError('Компоненты ветра должны быть в одном согласованном файле.')
+        return field.wind(u_aliases,v_aliases,xyz,when=when,**kw)
+
+    def close(self):
+        for field in self.opened.values():field.close()
+        self.opened.clear()
