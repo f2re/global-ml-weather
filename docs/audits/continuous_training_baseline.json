@@ -1,0 +1,71 @@
+{
+  "default": {
+    "accepted": true,
+    "sample_count": 29,
+    "station_count": 8
+  },
+  "2000_2005": {
+    "accepted": false,
+    "reason": "Нужен архивный период до 366 суток, заканчивающийся не менее 90 дней назад."
+  },
+  "range_extension_changes_split_assignments": {
+    "changed": [
+      {
+        "sample": "issue-20200123T12",
+        "old": "validation",
+        "new": "train"
+      },
+      {
+        "sample": "issue-20200124T12",
+        "old": "validation",
+        "new": "train"
+      },
+      {
+        "sample": "issue-20200125T12",
+        "old": "validation",
+        "new": "train"
+      },
+      {
+        "sample": "issue-20200126T12",
+        "old": "validation",
+        "new": "train"
+      },
+      {
+        "sample": "issue-20200128T12",
+        "old": "test",
+        "new": "train"
+      },
+      {
+        "sample": "issue-20200129T12",
+        "old": "test",
+        "new": "train"
+      },
+      {
+        "sample": "issue-20200130T12",
+        "old": "test",
+        "new": "train"
+      },
+      {
+        "sample": "issue-20200131T12",
+        "old": "test",
+        "new": "train"
+      }
+    ],
+    "old_fingerprint": "bc84294fe1471211c00320b55974c4eaea2e6fe718b2dae39823386787ac3077",
+    "new_fingerprint": "5f1b503fcde29dd56b0562f483d14f8af3401c56bcb76b76b4d86a06d1540153"
+  },
+  "changed_plan_resume": {
+    "accepted": false,
+    "reason": "План изменён; создайте новый эксперимент."
+  },
+  "historical_norms": {
+    "accepted": false,
+    "reason": "Normalisation fitting overlaps test period or lacks timezone.",
+    "fit_period": {
+      "start": "1979-01-02T00:00:00+00:00",
+      "end": "2015-12-31T23:59:59.999999+00:00"
+    }
+  },
+  "scope": "Existing e68f0c5 runtime contracts; no acquisition or real weather training",
+  "base": "e68f0c5f8f24f6c762c77aee8c0c032a9719c713"
+}

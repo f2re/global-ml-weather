@@ -122,3 +122,5 @@ python scripts/check_docs.py --strict
 Не публикуйте секреты, вымышленные нормы и большие массивы в истории Git.
 
 Для автономного обучения применяйте [GLOBAL-WEATHER-AUTO-1](docs/AUTONOMOUS_TRAINING_PLAN.md).
+
+Для нового сценария «только даты» применяйте [GLOBAL-WEATHER-CONTINUOUS-1](agents/CONTINUOUS_TRAINING_CONTRACT.md).

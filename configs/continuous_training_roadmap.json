@@ -1,0 +1,389 @@
+{
+  "schema": "continuous-training-roadmap-1",
+  "contract": "GLOBAL-WEATHER-CONTINUOUS-1",
+  "base_commit": "e68f0c5f8f24f6c762c77aee8c0c032a9719c713",
+  "base_tree": "fb09a54021214119b731aab7c9df93eac09425d7",
+  "status": "planned",
+  "runtime_implemented": false,
+  "required_user_fields": [
+    "start_date",
+    "end_date"
+  ],
+  "defaults": {
+    "station_selection": "all_available_quality_admitted_in_bounded_batches",
+    "device": "auto_cuda_first",
+    "logical_block": "utc_day",
+    "prefetch_blocks": 2,
+    "checkpoint_boundary": "each_completed_optimizer_step",
+    "maximum_calendar_range_days": null,
+    "remote_access_guaranteed": false
+  },
+  "tasks": [
+    {
+      "id": "C1",
+      "title": "Постоянная модель, диапазоны и журнал примеров",
+      "status": "planned",
+      "depends_on": [],
+      "existing_files": [
+        "global_weather/autonomous/plan.py",
+        "global_weather/autonomous/service.py"
+      ],
+      "acceptance": [
+        "A01",
+        "A03",
+        "A04",
+        "A17",
+        "A24"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "C2",
+      "title": "Согласованная фиксация шагов и восстановление",
+      "status": "planned",
+      "depends_on": [
+        "C1"
+      ],
+      "existing_files": [
+        "global_weather/pipeline/runner.py",
+        "global_weather/checkpoints.py"
+      ],
+      "acceptance": [
+        "A05",
+        "A06",
+        "A07",
+        "A08",
+        "A22",
+        "A28"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "C3",
+      "title": "Провайдеры, карта доступности и задачи устранения",
+      "status": "planned",
+      "depends_on": [
+        "C1"
+      ],
+      "existing_files": [
+        "global_weather/connectors/__init__.py",
+        "global_weather/providers/satellites.py"
+      ],
+      "acceptance": [
+        "A02",
+        "A09",
+        "A10",
+        "A11"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "C4",
+      "title": "Блочная подготовка, общие источники и удалённые задания",
+      "status": "planned",
+      "depends_on": [
+        "C2",
+        "C3"
+      ],
+      "existing_files": [
+        "global_weather/autonomous/execute.py",
+        "global_weather/providers/era5.py",
+        "global_weather/providers/ghcnh.py"
+      ],
+      "acceptance": [
+        "A12",
+        "A13",
+        "A19",
+        "A20",
+        "A25",
+        "A26"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "C5",
+      "title": "Постоянные выборки, фиксированные нормы и оценка",
+      "status": "planned",
+      "depends_on": [
+        "C1",
+        "C4"
+      ],
+      "existing_files": [
+        "global_weather/pipeline/fit.py",
+        "global_weather/pipeline/dataset.py",
+        "global_weather/normalization.py"
+      ],
+      "acceptance": [
+        "A17",
+        "A18",
+        "A24",
+        "A27"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "C6",
+      "title": "Арктика-М и Электро-Л до физического допуска",
+      "status": "planned",
+      "depends_on": [
+        "C3",
+        "C4",
+        "C5"
+      ],
+      "existing_files": [
+        "global_weather/providers/satellites.py",
+        "global_weather/connectors/ecosystem.py",
+        "global_weather/multimodal/integration.py"
+      ],
+      "acceptance": [
+        "A11",
+        "A15",
+        "A16",
+        "A23"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "C7",
+      "title": "Спутниковое дообучение и контроль забывания",
+      "status": "planned",
+      "depends_on": [
+        "C2",
+        "C5",
+        "C6"
+      ],
+      "existing_files": [
+        "global_weather/multimodal/model.py",
+        "global_weather/checkpoints.py"
+      ],
+      "acceptance": [
+        "A14",
+        "A15",
+        "A16",
+        "A22"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "C8",
+      "title": "Интерфейс только с датами и живой картой обеспеченности",
+      "status": "planned",
+      "depends_on": [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5"
+      ],
+      "existing_files": [
+        "global_weather/lab/autonomous_ui.py",
+        "global_weather/lab/static/experiments.html",
+        "global_weather/lab/static/experiments.js"
+      ],
+      "acceptance": [
+        "A01",
+        "A04",
+        "A09",
+        "A10",
+        "A21",
+        "A27"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "C9",
+      "title": "Сбойная и реальная приёмка, затем публикация",
+      "status": "planned",
+      "depends_on": [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C7",
+        "C8"
+      ],
+      "existing_files": [
+        ".github/workflows/tests.yml",
+        "agents/PUBLICATION_CONTRACT.md"
+      ],
+      "acceptance": [
+        "A22",
+        "A23",
+        "A28"
+      ],
+      "evidence": []
+    }
+  ],
+  "acceptance_scenarios": {
+    "A01": {
+      "scenario": "Ввести только даты 2000–2005",
+      "expected": "Планируется многолетний период без ручного выбора станций",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A02": {
+      "scenario": "Нет пригодных спутников за исторический период",
+      "expected": "Причина видна; базовое обучение продолжается на допустимых источниках",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A03": {
+      "scenario": "Расширить диапазон с пересечением",
+      "expected": "Зафиксированные примеры не используются повторно без отдельного прохода",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A04": {
+      "scenario": "Повторить тот же запрос после потери ответа",
+      "expected": "Не создаются дубликаты заданий и обучающих событий",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A05": {
+      "scenario": "Убить процесс внутри блока",
+      "expected": "Восстанавливаются веса, оптимизатор, RNG и точная сохранённая позиция",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A06": {
+      "scenario": "Оборвать запись либо повредить зафиксированную контрольную точку",
+      "expected": "Веса и журнал восстанавливаются согласованно; старая генерация не используется с новым курсором",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A07": {
+      "scenario": "Сбой между файловой публикацией и SQLite",
+      "expected": "Нет ложной отметки обученных данных и двойного применения шага",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A08": {
+      "scenario": "Перезапустить сервер после фиксации последнего шага",
+      "expected": "Блок восстанавливается как завершённый без повторной оптимизации",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A09": {
+      "scenario": "Потерять доступ CDS или GPTL",
+      "expected": "Создаётся одна обновляемая задача с причиной и решением",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A10": {
+      "scenario": "Восстановить доступ",
+      "expected": "Возобновляются зависимые задания без пересоздания модели",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A11": {
+      "scenario": "Повтор страницы STAC либо усечённая выдача",
+      "expected": "Период помечается неполностью проверенным, а не пустым",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A12": {
+      "scenario": "Пропустить час осадков либо поздний целевой срок",
+      "expected": "Отложены затронутые примеры; отсутствующая цель не становится нулём",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A13": {
+      "scenario": "Изменить данные поставщика",
+      "expected": "Новая ревизия не заменяет использованный файл без записи происхождения",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A14": {
+      "scenario": "Перейти к спутниковому этапу с 2024 года",
+      "expected": "Сохраняется атмосферная история; доступны только допущенные новые входы",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A15": {
+      "scenario": "Нет спутников для обязательного спутникового этапа",
+      "expected": "Этап блокируется; приземное обучение не выдаётся за спутниковое",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A16": {
+      "scenario": "Добавить ранее не обучавшийся прибор",
+      "expected": "Контролируемая миграция, отдельные нормы и проверка градиентов",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A17": {
+      "scenario": "Сменить диапазон и попытаться использовать прежний тест",
+      "expected": "Постоянные роли и защитные интервалы сохраняются",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A18": {
+      "scenario": "Запустить исторический тест до конца импортированных норм",
+      "expected": "Нормы отклоняются; предлагается допустимая подготовка из train",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A19": {
+      "scenario": "Уменьшить свободную VRAM",
+      "expected": "Сохраняется научная постановка; изменение численной среды не скрывается",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A20": {
+      "scenario": "Закончить место на диске",
+      "expected": "Предзагрузка останавливается раньше утраты состояния обучения",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A21": {
+      "scenario": "Показать 6 лет на мобильной ширине",
+      "expected": "Агрегация и пагинация без потери статусов и переполнения",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A22": {
+      "scenario": "Обучить маленькую модель с прерыванием и без него",
+      "expected": "На детерминированном CPU совпадают веса, оптимизатор, курсор и журнал",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A23": {
+      "scenario": "Пройти настоящие источники",
+      "expected": "Квитанции и границы доказательств отделены от подставных тестов",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A24": {
+      "scenario": "Добавить более ранний диапазон после расчёта норм",
+      "expected": "Совместимость обучения и независимость исторической оценки проверяются раздельно",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A25": {
+      "scenario": "Источник содержит больше станций, чем один пакет",
+      "expected": "Все пригодные станции учитываются; размер пакета не превращается в предел выборки",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A26": {
+      "scenario": "Возобновить удалённую заявку ERA5",
+      "expected": "Сохраняется идентификатор задания; повторный запуск не отправляет ту же заявку заново",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A27": {
+      "scenario": "Модель ещё не получила независимых контрольных примеров",
+      "expected": "Метрики отсутствуют; исследовательские веса не объявляются проверенными",
+      "status": "not_executed",
+      "evidence": []
+    },
+    "A28": {
+      "scenario": "Полностью потерять диск",
+      "expected": "Восстановление возможно только из согласованной резервной копии; внешняя гарантия не выдумывается",
+      "status": "not_executed",
+      "evidence": []
+    }
+  }
+}

@@ -30,7 +30,9 @@
     "docs/PRODUCT_WORKFLOW.md",
     "docs/protocols/*.md",
     "docs/AUTONOMOUS_TRAINING.md",
-    "docs/AUTONOMOUS_TRAINING_PLAN.md"
+    "docs/AUTONOMOUS_TRAINING_PLAN.md",
+    "docs/CONTINUOUS_TRAINING_PLAN.md",
+    "docs/audits/2026-10-05-continuous-training-flow.md"
   ],
   "scope_note": "Active operational documentation and agent instructions. Historical reports retain their evidence.",
   "target_interpretation": "Approximately 80% is a stylistic request, not measured official standard compliance.",
