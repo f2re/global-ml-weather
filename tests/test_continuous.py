@@ -238,7 +238,7 @@ def test_sample_outside_range_duplicate_sources_and_unknown_fields(tmp_path):
     assert s.state()['samples']==0
 
 
-@pytest.mark.parametrize('name',['learning.sqlite3','learning.sqlite3-wal','learning.sqlite3-shm'])
+@pytest.mark.parametrize('name',['learning.sqlite3','learning.sqlite3-wal','learning.sqlite3-shm','initialize.lock'])
 def test_database_and_sidecar_symlinks_rejected(tmp_path,name):
     root=tmp_path/'continuous';root.mkdir()
     target=tmp_path/'outside';target.write_text('keep')
@@ -353,3 +353,16 @@ def test_source_credentials_urls_and_nonfinite_fields_are_not_accepted(tmp_path)
     with pytest.raises(ValueError):
         s.register_sample(d)
     assert s.state()['samples']==0
+
+
+def test_many_connections_tolerate_sqlite_sidecar_cleanup(tmp_path):
+    # A short single run can miss removal of -journal/-wal between path probes.
+    for trial in range(20):
+        directory = tmp_path / str(trial)
+        def add(_):
+            return store(directory).add_range('2000-01-01','2005-12-31')
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            rows = list(pool.map(add, range(12)))
+        assert len({row['id'] for row in rows}) == 1
+        assert sum(not row['replayed'] for row in rows) == 1
+        assert store(directory).state()['requested_days'] == 2192

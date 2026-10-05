@@ -9,6 +9,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
 import os
+import fcntl
 from pathlib import Path
 import sqlite3
 import stat
@@ -82,22 +83,36 @@ class CampaignStore:
         self._safe_paths()
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._safe_paths()
-        # Reserve a private regular file without following an existing link.
-        try:
-            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-        except FileExistsError:
+        # Serialize initial WAL/schema setup across threads and processes.
+        # SQLite handles ordinary transactions; this lock only guards setup.
+        lock_fd = os.open(self.root / 'initialize.lock',
+                          os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        with os.fdopen(lock_fd, 'a+b') as lock:
+            info = os.fstat(lock.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise ValueError('Небезопасный файл блокировки инициализации.')
+            fcntl.flock(lock, fcntl.LOCK_EX)
             self._safe_paths()
-        else:
-            os.close(fd)
-        self._initialize()
+            try:
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            except FileExistsError:
+                self._safe_paths()
+            else:
+                os.close(fd)
+            self._initialize()
 
     def _safe_paths(self):
-        for path in (self.path, *self.path.parents,
+        for path in (self.path, self.root / 'initialize.lock', *self.path.parents,
                      *(Path(str(self.path) + suffix) for suffix in ('-wal', '-shm', '-journal'))):
-            if path.is_symlink():
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
+                # SQLite legitimately removes its sidecars when the final
+                # connection closes. Do not race exists() against stat().
+                continue
+            if stat.S_ISLNK(info.st_mode):
                 raise ValueError('Символическая ссылка в хранилище программы запрещена.')
-            if path.exists() and path not in self.path.parents:
-                info = path.stat()
+            if path not in self.path.parents:
                 if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
                     raise ValueError('Хранилище должно содержать обычные файлы без жёстких ссылок.')
 
@@ -122,7 +137,9 @@ class CampaignStore:
             app_id = db.execute('PRAGMA application_id').fetchone()[0]
             if version not in (0, SCHEMA_VERSION) or app_id not in (0, APPLICATION_ID):
                 raise ValueError('Неизвестная версия базы. Автоматическая перезапись запрещена.')
-            mode = db.execute('PRAGMA journal_mode=WAL').fetchone()[0]
+            mode = db.execute('PRAGMA journal_mode').fetchone()[0]
+            if mode.lower() != 'wal':
+                mode = db.execute('PRAGMA journal_mode=WAL').fetchone()[0]
             if mode.lower() != 'wal':
                 raise ValueError('SQLite не включила WAL; выберите локальное хранилище.')
             db.execute('BEGIN IMMEDIATE')
