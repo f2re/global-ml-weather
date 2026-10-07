@@ -70,6 +70,48 @@ def test_no_implicit_archive_assumption():
     with pytest.raises(ValueError):parse_plan({'command':'rm -rf'})
 
 
+def test_station_capacity_is_bounded_at_1024():
+    assert plan(station_count=1024).checked()['spec']['station_count']==1024
+    stations=[f'USW{i:08d}' for i in range(1024)]
+    assert len(plan(stations=stations).checked()['spec']['stations'])==1024
+    with pytest.raises(ValueError):plan(station_count=1025).checked()
+    with pytest.raises(ValueError):plan(stations=stations+['USW00001024']).checked()
+
+
+def test_spatial_candidates_reaches_deeper_layers_and_keeps_pilot_order():
+    from global_weather.autonomous.execute import spatial_candidates
+    stations=[{'id':f'USW{cell:02d}{depth:06d}', 'latitude':-80+cell*30,
+               'longitude':-170} for cell in range(4) for depth in range(9)]
+    first_five=[f'USW{cell:02d}{depth:06d}' for depth in range(5) for cell in range(4)]
+    assert spatial_candidates(stations,20)==first_five
+    assert spatial_candidates(stations,8)==[first_five[i] for i in np.linspace(0,19,8,dtype=int)]
+    all_candidates=spatial_candidates(stations,100)
+    assert all_candidates[:20]==first_five
+    assert len(all_candidates)==36 and len(set(all_candidates))==36
+    assert all_candidates[20:24]==[f'USW{cell:02d}{5:06d}' for cell in range(4)]
+    assert len(spatial_candidates(stations,23))==23
+    assert spatial_candidates([],1024)==[]
+
+
+def test_observations_writer_streams_and_checks_utf8_bytes(tmp_path,monkeypatch):
+    from global_weather.autonomous import execute as executor
+    monkeypatch.setattr(executor,'MAX_OBSERVATIONS_JSONL',10)
+    path=tmp_path/'input.jsonl'
+    rows=iter([('аб',),('вг',)])  # Two five-byte lines, including newlines.
+    assert executor.write_observations(path,rows)==2
+    assert path.read_bytes()=='аб\nвг\n'.encode('utf-8')
+    consumed=[]
+    def too_many():
+        for text in ('аб','вг','д','never'):
+            consumed.append(text)
+            yield (text,)
+    with pytest.raises(ValueError,match='бюджет JSONL'):
+        executor.write_observations(path,too_many())
+    assert path.stat().st_size==10 and consumed==['аб','вг','д']
+    with pytest.raises(ValueError,match='Нет доступных наблюдений'):
+        executor.write_observations(path,iter(()))
+
+
 @pytest.mark.parametrize('code,source,ok',[('1','223',True),('4','223',False),('5','223',False),('5','313',True),
     ('r','313',False),('1;r','313',False),('','223',True),('z','223',False),('A','313',False),('1','unknown',False)])
 def test_source_aware_qc(code,source,ok):assert qc_good(code,source)==ok

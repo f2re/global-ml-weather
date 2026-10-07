@@ -1,0 +1,35 @@
+{
+  "schema": "remote-research-passport-1",
+  "experiment_id": "R2-scale-2021",
+  "hypothesis": "More geographically distributed observations and a full seasonal cycle reduce analysis and forecast error relative to the small R1 pilot.",
+  "plan": "configs/remote_scale_r2.json",
+  "source_revision": "recorded_by_execution_evidence",
+  "selection": "epoch_by_validation_only; no hyperparameter selection on test",
+  "baseline": "persistence_of_same_model_initial_analysis; precipitation_excluded",
+  "limits": {
+    "cache_gib": 384,
+    "experiment_directory_gib": 700,
+    "minimum_free_disk_gib": 64,
+    "ram_gib": 96,
+    "runtime_days": 14,
+    "gpu_count": 1,
+    "maximum_attempts": 3
+  },
+  "scientific_limits": [
+    "R2 changes several factors and is a scale experiment, not a causal ablation.",
+    "Station availability and quality determine whether 1024 stations can be admitted.",
+    "Six-hour issue windows overlap within each split and are not independent weather episodes.",
+    "Split boundaries retain 84-hour guards; final test uses a new period after R1.",
+    "Historical arrival times are assumed, not observed.",
+    "ERA5 supplies targets, not missing input observations.",
+    "Satellite channels remain quarantined until physical admission.",
+    "No independent numerical-weather baseline or scientific acceptance is claimed."
+  ],
+  "modernization_stages": [
+    "R2: enlarge validated station limits, stream prepared observation files, run full-year training.",
+    "R3: diagnose initial-analysis error, normalization, coverage and error by region and pressure.",
+    "R4: bounded validation-only search over learning rate, width and latent slots; shared source archive.",
+    "R5: admit profiles and calibrated satellites, repeat finalists with multiple seeds and a new test period.",
+    "R6: implement and compare HEALPix candidate using common targets and measured resources."
+  ]
+}

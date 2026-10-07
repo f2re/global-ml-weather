@@ -39,7 +39,7 @@ class Experiment:
         integer(self.horizon_hours,1,72);integer(self.step_hours,1,6);integer(self.issue_interval_hours,1,168)
         if self.step_hours not in (1,3,6) or self.horizon_hours%self.step_hours:
             raise ValueError("Горизонт должен быть кратен шагу 1, 3 или 6 часов.")
-        integer(self.mesh_level,0,5);integer(self.station_count,1,128);integer(self.latency_minutes,0,720)
+        integer(self.mesh_level,0,5);integer(self.station_count,1,1024);integer(self.latency_minutes,0,720)
         integer(self.max_runtime_hours,1,336)
         if self.source_grid_degrees not in (0.25,0.5,1.,2.5):
             raise ValueError("Шаг исходной ERA5: 0.25, 0.5, 1 или 2.5 градуса.")
@@ -53,7 +53,7 @@ class Experiment:
             raise ValueError("Подтвердите архивный исследовательский режим: задержка поступления моделируется, а не измерена.")
         if type(self.network) is not bool:raise ValueError("Разрешение сети должно быть логическим.")
         from ..providers.ghcnh import station_url
-        if not isinstance(self.stations,(tuple,list)) or len(self.stations)>128 or len(set(self.stations))!=len(self.stations):
+        if not isinstance(self.stations,(tuple,list)) or len(self.stations)>1024 or len(set(self.stations))!=len(self.stations):
             raise ValueError("Неверный список станций.")
         for station in self.stations:station_url(station,start.year)
         cfg=self.train_config()

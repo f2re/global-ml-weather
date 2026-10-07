@@ -39,6 +39,26 @@ def test_json_ambiguity_rejected(text):
     with pytest.raises(ValueError):parse_json(text)
 
 
+def test_observation_budget_is_separate_from_manifest_budget(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from global_weather.pipeline import dataset,io as pipeline_io
+    assert dataset.MAX_OBSERVATIONS_JSONL==256*1024**2
+    assert pipeline_io.MAX_JSON==32*1024**2
+    monkeypatch.setattr(pipeline_io,'MAX_JSON',8)
+    monkeypatch.setattr(dataset,'MAX_OBSERVATIONS_JSONL',32)
+    path=tmp_path/'observations.jsonl'
+    path.write_text('\n'*32,encoding='utf-8')
+    ds=PreparedDataset.__new__(PreparedDataset);ds.root=tmp_path;ds.registry={}
+    sample=SimpleNamespace(observations=reference(tmp_path,path))
+    assert ds.records(sample)==[]
+    with pytest.raises(ValueError,match='ограниченным'):
+        read_json(path)
+    path.write_text('\n'*33,encoding='utf-8')
+    sample.observations=reference(tmp_path,path)
+    with pytest.raises(ValueError,match='слишком велик'):
+        ds.records(sample)
+
+
 def test_arrays_reject_objects_and_duplicate_members(tmp_path):
     p=tmp_path/'objects.npz';np.savez(p,x=np.array([{}],dtype=object))
     with pytest.raises(ValueError):read_arrays(p)

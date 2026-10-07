@@ -9,6 +9,8 @@ from .io import artifact, digest, read_json, read_arrays, parse_json, MAX_JSON
 from ..products.ingest import maximum_history, record_history
 from ..vertical import PRESSURE_HPA, PROFILE_VARIABLES, PROFILE_UNITS, SURFACE_VARIABLES, SURFACE_UNITS
 
+MAX_OBSERVATIONS_JSONL = 256 * 1024**2
+
 
 def utc(value):
     if not isinstance(value, str):
@@ -143,7 +145,7 @@ class PreparedDataset:
         return result
 
     def records(self, sample):
-        path = artifact(self.root, sample.observations, limit=MAX_JSON)
+        path = artifact(self.root, sample.observations, limit=MAX_OBSERVATIONS_JSONL)
         result = []
         with path.open(encoding='utf-8') as f:
             for number, text in enumerate(f, 1):

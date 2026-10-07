@@ -1,0 +1,33 @@
+{
+  "start": "2021-01-01T12:00:00Z",
+  "end": "2021-12-31T18:00:00Z",
+  "issue_interval_hours": 6,
+  "horizon_hours": 72,
+  "step_hours": 3,
+  "mesh_level": 3,
+  "source_grid_degrees": 1.0,
+  "station_count": 1024,
+  "stations": [],
+  "train_fraction": 0.7,
+  "validation_fraction": 0.15,
+  "latency_minutes": 60,
+  "archive_assumption_accepted": true,
+  "network": true,
+  "max_download_gib": 384.0,
+  "minimum_target_coverage": 0.99,
+  "max_runtime_hours": 336,
+  "training": {
+    "device": "auto",
+    "epochs": 100,
+    "hidden": 64,
+    "latent_slots": 8,
+    "seed": 17,
+    "learning_rate": 0.0001,
+    "weight_decay": 0.01,
+    "grad_clip": 1.0,
+    "physics_weight": 0.0,
+    "patience": 15,
+    "threads": 8,
+    "memory_budget_mib": 12000
+  }
+}

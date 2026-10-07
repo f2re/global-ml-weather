@@ -14,7 +14,7 @@ import shutil
 import sqlite3
 import tempfile
 from ..pipeline.io import atomic_json, read_json, sha256, digest, reference, artifact
-from ..pipeline.dataset import utc, PreparedDataset
+from ..pipeline.dataset import utc, PreparedDataset, MAX_OBSERVATIONS_JSONL
 from .plan import parse_plan
 
 
@@ -84,7 +84,31 @@ def spatial_candidates(stations, count):
         import numpy as np
         indices=np.linspace(0,len(ordered)-1,count,dtype=int)
         ordered=[ordered[i] for i in indices]
+    else:
+        # Keep the pilot's first five layers and their spatial order. Larger
+        # requests continue round-robin through every populated catalog layer.
+        for depth in range(5,max((len(rows) for rows in cells.values()),default=0)):
+            layer=[cells[key][depth]['id'] for key in sorted(cells) if depth<len(cells[key])]
+            needed=count-len(ordered)
+            if needed<len(layer):
+                import numpy as np
+                layer=[layer[i] for i in np.linspace(0,len(layer)-1,needed,dtype=int)]
+            ordered.extend(layer)
+            if len(ordered)>=count:break
     return ordered
+
+
+def write_observations(path, records):
+    """Stream SQL rows, enforcing the UTF-8 artifact budget before each write."""
+    count=0;size=0
+    with Path(path).open('wb') as stream:
+        for row in records:
+            line=(row[0]+'\n').encode('utf-8')
+            if size+len(line)>MAX_OBSERVATIONS_JSONL:
+                raise ValueError('Вход выпуска превышает бюджет JSONL.')
+            stream.write(line);size+=len(line);count+=1
+    if not count:raise ValueError('Нет доступных наблюдений выпуска '+Path(path).stem)
+    return count
 
 
 def execute(plan_path, root, *, cds_key=None, cancelled=None):
@@ -192,10 +216,8 @@ def execute(plan_path, root, *, cds_key=None, cancelled=None):
                     stages.progress('prepare',sample=sample['id'],number=number+1,total=len(plan['samples']))
                     issue=utc(sample['issue_time']);name=sample['id'];observations=out/(name+'.jsonl');target=out/(name+'.npz')
                     records=db.execute('SELECT record FROM observations WHERE observed>? AND observed<=? AND available<=? ORDER BY observed,id',
-                                        ((issue-timedelta(hours=12)).isoformat(),issue.isoformat(),issue.isoformat())).fetchall()
-                    if not records:raise ValueError('Нет доступных наблюдений выпуска '+name)
-                    observations.write_text(''.join(row[0]+'\n' for row in records),encoding='utf-8')
-                    if observations.stat().st_size>32*1024**2:raise ValueError('Вход выпуска превышает бюджет JSONL.')
+                                        ((issue-timedelta(hours=12)).isoformat(),issue.isoformat(),issue.isoformat()))
+                    record_count=write_observations(observations,records)
                     needed={(issue+timedelta(hours=h)).date().isoformat() for h in range(experiment.horizon_hours+1)}
                     inputs={kind:[p for day in sorted(needed) for p in by_date[day][kind]] for kind in ('pressure','surface')}
                     prepare_targets(inputs['pressure'],inputs['surface'],target,issue_time=issue.isoformat(),
@@ -204,7 +226,7 @@ def execute(plan_path, root, *, cds_key=None, cancelled=None):
                     checked=check_coverage(read_arrays(target),experiment.minimum_target_coverage)
                     coverage_path=out/(name+'.coverage.json')
                     atomic_json(coverage_path,checked)
-                    coverage.append({'sample':name,'records':len(records),'targets':reference(out,coverage_path)})
+                    coverage.append({'sample':name,'records':record_count,'targets':reference(out,coverage_path)})
                     samples.append(dict(sample,observations=reference(out,observations),targets=reference(out,target),
                         provenance={'observations':'NOAA GHCNh; see provider receipts',
                                     'targets':'ECMWF ERA5 CDS; immutable request and checksum receipts',

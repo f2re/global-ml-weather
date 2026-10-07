@@ -1,0 +1,25 @@
+[Unit]
+Description=Bounded global weather R2 data acquisition and research training
+StartLimitIntervalSec=1209600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=/home/user/global-ml-weather-r2
+ExecStart=/home/user/global-ml-weather/.venv/bin/python /home/user/global-ml-weather-r2/scripts/remote-research-runner.py --expected-sha @SHA@ --deadline @DEADLINE@
+Environment=OMP_NUM_THREADS=8
+Environment=CUDA_VISIBLE_DEVICES=0
+KillMode=control-group
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=300
+RuntimeMaxSec=1209600
+MemoryMax=96G
+CPUQuota=800%
+TasksMax=512
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
