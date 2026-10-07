@@ -17,7 +17,7 @@ import uuid
 import numpy as np
 import torch
 from .dataset import PreparedDataset, integer
-from ..devices import select_device, device_identity
+from ..devices import select_device, configure_training_numerics, training_runtime_identity
 from .io import atomic_json, artifact, digest, local_path, read_json, reference, sha256, write_arrays
 from ..vertical import PRESSURE_HPA, PROFILE_VARIABLES, PROFILE_UNITS, SURFACE_VARIABLES, SURFACE_UNITS
 
@@ -250,8 +250,8 @@ def _load_training_state(run, ds, cfg):
         raise ValueError('Неизвестная схема продолжения.')
     if state.get('dataset_fingerprint') != ds.fingerprint or state.get('config_fingerprint') != digest(cfg.identity()):
         raise ValueError('Продолжение требует той же выборки и конфигурации.')
-    if state.get('runtime') != device_identity(select_device(cfg.device)):
-        raise ValueError('Устройство изменилось: продолжение требует прежнего устройства и CUDA-среды.')
+    if state.get('runtime') != training_runtime_identity(select_device(cfg.device)):
+        raise ValueError('Устройство или численная среда изменились: продолжение требует прежних настроек воспроизводимости.')
     if state['software'] != software():
         raise ValueError('Изменились исходники или численная среда. Создайте новый эксперимент.')
     if state['data_kind'] != ds.kind:
@@ -264,10 +264,12 @@ def train(dataset_path, output, cfg, *, resume=False, progress=event, cancelled=
     from ..checkpoints import save_checkpoint, load_checkpoint
     ds = PreparedDataset(dataset_path); estimate = cfg.validate(ds)
     device = select_device(cfg.device)
-    runtime = device_identity(device)
+    configure_training_numerics(device)
+    torch.set_num_threads(cfg.threads)
+    runtime = training_runtime_identity(device)
     environment = software()
     ds.subset('train'); ds.subset('validation')
-    torch.set_num_threads(cfg.threads); torch.manual_seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
     for s in ds.samples:
         if s.split in ('train', 'validation'):
             ds.targets(s); ds.packed(s)
@@ -310,6 +312,8 @@ def train(dataset_path, output, cfg, *, resume=False, progress=event, cancelled=
             ds.assert_unchanged()
             if software() != environment:
                 raise ValueError('Исходники изменились во время обучения.')
+            if training_runtime_identity(device) != runtime:
+                raise ValueError('Численная среда изменилась во время обучения.')
             begin = time.monotonic(); losses = []
             horizon = cfg.training_horizon(epoch)
             order = list(ds.subset('train')); random.Random(cfg.seed+epoch).shuffle(order)
@@ -331,6 +335,8 @@ def train(dataset_path, output, cfg, *, resume=False, progress=event, cancelled=
             history.append(entry)
             if software() != environment:
                 raise ValueError('Исходники изменились во время эпохи.')
+            if training_runtime_identity(device) != runtime:
+                raise ValueError('Численная среда изменилась во время эпохи.')
             epochs = output/'epochs'; epochs.mkdir(exist_ok=True)
             temporary = epochs/('pending-'+uuid.uuid4().hex); temporary.mkdir()
             destination = epochs/f'{epoch:06d}'
@@ -384,8 +390,12 @@ def load_trained(ds, run):
     if info.get('software') != software():
         raise ValueError('Исходники или численная среда отличаются от обучения.')
     cfg = config_from_json(info['config']); cfg.validate(ds)
+    device = select_device(cfg.device)
+    configure_training_numerics(device)
     torch.set_num_threads(cfg.threads)
-    model = make_model(ds, cfg).to(select_device(cfg.device))
+    if info.get('runtime') != training_runtime_identity(device):
+        raise ValueError('Устройство или численная среда отличаются от обучения.')
+    model = make_model(ds, cfg).to(device)
     load_checkpoint(artifact(run, info['weights'], limit=512*1024**2), model)
     model.eval()
     return model, cfg, info
