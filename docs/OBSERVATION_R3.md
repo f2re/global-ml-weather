@@ -13,7 +13,7 @@
 Обучающий модуль не получает пути ERA5 и не открывает её файлы.
 
 Исходный кэш 2021 года читается из остановленного R2 без изменения файлов.
-Новый кэш хранится в `outputs/remote-r3-stations/cache`.
+Новый кэш хранится в `outputs/remote-r3-v2-stations/cache`.
 Загрузка ограничена 16 ГиБ; каталог нового опыта ограничен 96 ГиБ.
 Минимальный свободный остаток диска составляет 64 ГиБ.
 Служба ограничивает RAM до 96 ГиБ, CPU до восьми ядер и срок до 14 суток.
@@ -31,7 +31,7 @@
 ```bash
 systemctl --user status global-weather-r3.service
 journalctl --user -u global-weather-r3.service --no-pager -n 30
-cat ~/global-ml-weather-r3/outputs/remote-r3-execution/evidence.json
+cat ~/global-ml-weather-r3/outputs/remote-r3-v2-execution/evidence.json
 ```
 
 Журнал различает программные проверки, загрузку, подготовку, обучение и test.

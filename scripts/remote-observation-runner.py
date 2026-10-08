@@ -112,8 +112,8 @@ def main(argv=None):
     parser.add_argument("--deadline", required=True)
     args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[1]
-    output = root / "outputs/remote-r3-stations"
-    logs = root / "outputs/remote-r3-execution"
+    output = root / "outputs/remote-r3-v2-stations"
+    logs = root / "outputs/remote-r3-v2-execution"
     plan = root / "configs/observation_r3_training.json"
     deadline = datetime.fromisoformat(args.deadline)
     if deadline.tzinfo is None:
@@ -163,10 +163,10 @@ def main(argv=None):
         report["status"] = "running"
         save(evidence, report)
         python = sys.executable
-        env = dict(os.environ, OMP_NUM_THREADS="8", CUDA_VISIBLE_DEVICES="0")
+        env = dict(os.environ, OMP_NUM_THREADS="8", CUDA_VISIBLE_DEVICES="0", CUBLAS_WORKSPACE_CONFIG=":4096:8")
         report["environment_limits"] = {"OMP_NUM_THREADS": "8", "CUDA_VISIBLE_DEVICES": "0"}
         report["resource_limits"] = {"cache_gib": 16, "directory_gib": 96, "minimum_free_disk_gib": 64}
-        smoke = "outputs/remote-r3-checks"
+        smoke = "outputs/remote-r3-v2-checks"
         checks = [
             ("pytest", ["-m", "pytest", "-q"]),
             ("contracts", ["-m", "pytest", "tests/test_ecosystem.py", "tests/test_agent_contracts.py",

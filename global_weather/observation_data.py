@@ -40,7 +40,7 @@ def _sources(cache):
 
 
 def _records(path):
-    if path.is_symlink() or 'era5' in str(path).lower():
+    if path.is_symlink() or any(part.lower() == 'era5' for part in path.parts) or path.name.lower().startswith('era5'):
         raise ValueError('Only immutable GHCNh observation sources are admitted.')
     if path.suffix == '.psv':
         receipt = read_json(path.with_suffix('.psv.receipt.json'))

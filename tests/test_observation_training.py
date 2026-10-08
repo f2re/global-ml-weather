@@ -15,6 +15,20 @@ from global_weather.observation_model import (
 )
 
 
+@pytest.fixture(autouse=True)
+def restore_numerical_policy_after_test():
+    deterministic = torch.are_deterministic_algorithms_enabled()
+    warn_only = torch.is_deterministic_algorithms_warn_only_enabled()
+    tf32 = torch.backends.cuda.matmul.allow_tf32
+    threads = torch.get_num_threads()
+    try:
+        yield
+    finally:
+        torch.use_deterministic_algorithms(deterministic, warn_only=warn_only)
+        torch.backends.cuda.matmul.allow_tf32 = tf32
+        torch.set_num_threads(threads)
+
+
 def records_at(timestamp, offset=0., *, station="USW00000001", delay=60):
     observed = data.utc(timestamp)
     bases = (280., 270., 3., 4., 99000., 101000.)
