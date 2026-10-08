@@ -5,8 +5,10 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -366,3 +368,46 @@ def test_many_connections_tolerate_sqlite_sidecar_cleanup(tmp_path):
         assert len({row['id'] for row in rows}) == 1
         assert sum(not row['replayed'] for row in rows) == 1
         assert store(directory).state()['requested_days'] == 2192
+
+
+@pytest.mark.parametrize('replacement', ['missing', 'regular', 'symlink', 'hardlink'])
+def test_unlinked_sidecar_revalidates_current_path(tmp_path, monkeypatch, replacement):
+    s = store(tmp_path)
+    sidecar = Path(str(s.path) + '-wal')
+    original = Path.lstat
+    calls = 0
+
+    def probe(path, *args, **kwargs):
+        nonlocal calls
+        if path != sidecar:
+            return original(path, *args, **kwargs)
+        calls += 1
+        if calls == 1:
+            return SimpleNamespace(st_mode=stat.S_IFREG | 0o600, st_nlink=0)
+        if replacement == 'missing':
+            raise FileNotFoundError(path)
+        mode = stat.S_IFLNK if replacement == 'symlink' else stat.S_IFREG
+        return SimpleNamespace(st_mode=mode | 0o600, st_nlink=2 if replacement == 'hardlink' else 1)
+
+    monkeypatch.setattr(Path, 'lstat', probe)
+    if replacement in ('missing', 'regular'):
+        s._safe_paths()
+    else:
+        with pytest.raises(ValueError):
+            s._safe_paths()
+    assert calls == 2
+
+
+@pytest.mark.parametrize('name', ['learning.sqlite3', 'initialize.lock'])
+def test_unlinked_persistent_store_files_remain_rejected(tmp_path, monkeypatch, name):
+    s = store(tmp_path)
+    original = Path.lstat
+
+    def probe(path, *args, **kwargs):
+        if path == s.root / name:
+            return SimpleNamespace(st_mode=stat.S_IFREG | 0o600, st_nlink=0)
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'lstat', probe)
+    with pytest.raises(ValueError):
+        s._safe_paths()

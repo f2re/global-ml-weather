@@ -101,14 +101,22 @@ class CampaignStore:
             self._initialize()
 
     def _safe_paths(self):
+        sidecars = tuple(Path(str(self.path) + suffix) for suffix in ('-wal', '-shm', '-journal'))
         for path in (self.path, self.root / 'initialize.lock', *self.path.parents,
-                     *(Path(str(self.path) + suffix) for suffix in ('-wal', '-shm', '-journal'))):
+                     *sidecars):
             try:
                 info = path.lstat()
             except FileNotFoundError:
                 # SQLite legitimately removes its sidecars when the final
                 # connection closes. Do not race exists() against stat().
                 continue
+            if path in sidecars and stat.S_ISREG(info.st_mode) and info.st_nlink == 0:
+                # An inode can lose its final link while lstat is resolving it.
+                # Revalidate the current path; never admit a replacement link.
+                try:
+                    info = path.lstat()
+                except FileNotFoundError:
+                    continue
             if stat.S_ISLNK(info.st_mode):
                 raise ValueError('Символическая ссылка в хранилище программы запрещена.')
             if path not in self.path.parents:
