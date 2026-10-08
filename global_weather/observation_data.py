@@ -268,14 +268,45 @@ class ObservationDataset:
         self.manifest=read_json(self.root/'dataset.json')
         if self.manifest.get('schema')!='native-station-dataset-1':
             raise ValueError('Unknown observation dataset schema.')
+        roles={'input':'GHCNh','target':'GHCNh','norm':'train_GHCNh','static':None,
+               'external_verification':'ERA5_separate_frozen_model_only'}
+        if (self.manifest.get('data_kind')!='real' or self.manifest.get('source_roles')!=roles or
+                self.manifest.get('variables')!=list(NATIVE_VARIABLES) or
+                self.manifest.get('units')!=list(UNITS)):
+            raise ValueError('Observation source roles, units or native variables differ.')
         for file,key in [('norm.json','norm_sha256'),('hourly.npz','hourly_sha256'),('observations.sqlite','records_sha256')]:
             if sha256(self.root/file)!=self.manifest[key]:
                 raise ValueError('Observation dataset artifact changed.')
         self.norm=read_json(self.root/'norm.json');self.mean=np.asarray(self.norm['mean'],dtype=np.float32)
         self.std=np.asarray(self.norm['std'],dtype=np.float32)
+        if (self.norm.get('schema')!='native-station-norm-1' or self.norm.get('data_kind')!='real' or
+                self.norm.get('method')!='unique_hourly_station_variable_means_population_std' or
+                self.norm.get('period')!=[START.isoformat(),TRAIN_END.isoformat()] or
+                self.norm.get('variables')!=list(NATIVE_VARIABLES) or self.norm.get('units')!=list(UNITS) or
+                self.mean.shape!=(6,) or self.std.shape!=(6,) or not np.isfinite(self.mean).all() or
+                not np.isfinite(self.std).all() or (self.std<=0).any()):
+            raise ValueError('Invalid or non-train observation normalization.')
         with np.load(self.root/'hourly.npz',allow_pickle=False) as data:
             self.values=data['values'];self.mask=data['mask'];self.available=data['available_seconds']
         self.samples=self.manifest['samples']
+        station_ids=[station['id'] for station in self.manifest['stations']]
+        if not 1<=len(station_ids)<=1024 or len(set(station_ids))!=len(station_ids):
+            raise ValueError('Invalid native station inventory.')
+        shape=(HOURS,len(self.manifest['stations']),6)
+        if (self.values.shape!=shape or self.mask.shape!=shape or self.available.shape!=shape or
+                self.mask.dtype!=bool or not np.isfinite(self.values[self.mask]).all()):
+            raise ValueError('Invalid hourly observation arrays.')
+        boundaries={'train':(START,TRAIN_END),'validation':(TRAIN_END,VAL_END),'test':(VAL_END,END)}
+        seen=set()
+        for row in self.samples:
+            issue=utc(row['issue']);split=row['split']
+            if split not in boundaries:
+                raise ValueError('Unknown chronological split.')
+            begin,end=boundaries[split]
+            if (type(row['hour']) is not int or not begin<=issue-timedelta(hours=12) or not issue+timedelta(hours=72)<end or
+                    row['hour']!=(issue-START).total_seconds()/3600 or issue in seen):
+                raise ValueError('Observation windows cross the frozen chronological split.')
+            seen.add(issue)
         self.latlon=np.asarray([[s['latitude'],s['longitude']] for s in self.manifest['stations']],dtype=np.float32)
 
     def subset(self,split):

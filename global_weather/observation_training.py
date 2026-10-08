@@ -148,18 +148,21 @@ def _train(dataset_path, output, config):
         indices = list(dataset.subset('train')); random.shuffle(indices)
         for index in indices:
             x, xm, y, ym = tensors(dataset.sample(index), device)
-            if not ym.any(): continue
+            if not ym.any() or not xm.any(): continue
             optimizer.zero_grad(set_to_none=True)
             result = model(x, xm)
             objective = loss(result.native_normalized, y, ym)
             if not torch.isfinite(objective): raise FloatingPointError('Nonfinite loss')
             objective.backward()
+            current_nonzero = False
             for name, parameter in model.named_parameters():
                 if parameter.grad is not None:
                     if not torch.isfinite(parameter.grad).all(): raise FloatingPointError('Nonfinite gradient: ' + name)
-                    gradient_report[name] = gradient_report.get(name, False) or bool(parameter.grad.abs().sum() > 0)
+                    nonzero = bool(parameter.grad.abs().sum() > 0)
+                    current_nonzero |= nonzero
+                    gradient_report[name] = gradient_report.get(name, False) or nonzero
                 else: gradient_report.setdefault(name, False)
-            if not any(gradient_report.values()): raise FloatingPointError('No finite nonzero gradients')
+            if not current_nonzero: raise FloatingPointError('No finite nonzero gradients')
             torch.nn.utils.clip_grad_norm_(model.parameters(), config['gradient_clip'], error_if_nonfinite=True)
             optimizer.step(); train_losses.append(float(objective.detach()))
         if not train_losses: raise ValueError('No training observations')

@@ -2,8 +2,6 @@
 import builtins
 from datetime import timedelta
 import json
-from pathlib import Path
-import sqlite3
 
 import numpy as np
 import pytest
@@ -113,10 +111,72 @@ def test_revoked_latest_revision_does_not_resurrect_old_measurement(tmp_path):
     (cache / "observations.jsonl").write_text(
         json.dumps(row) + "\n" + json.dumps(withdrawn) + "\n", encoding="utf-8")
     database = tmp_path / "unique.sqlite"
-    data._unique(cache, database, train_only=True)
-    with sqlite3.connect(database) as connection:
-        retained = connection.execute("SELECT record FROM observations").fetchall()
-    assert not retained, "The highest invalid revision must withdraw an old valid observation."
+    with pytest.raises(ValueError, match="revision|Revoked|issue-aware"):
+        data._unique(cache, database, train_only=True)
+
+
+def test_reader_rejects_era5_target_role_before_first_training(tmp_path):
+    ds = prepared(tmp_path)
+    manifest = dict(ds.manifest)
+    manifest["source_roles"] = dict(manifest["source_roles"], target="ERA5")
+    (ds.root / "dataset.json").write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="role|source|GHCNh|ERA5"):
+        data.ObservationDataset(ds.root)
+
+
+def test_checkpoint_rejects_traversal_and_mutated_bytes(tmp_path):
+    with pytest.raises(ValueError, match="reference"):
+        training.checkpoint_path(tmp_path, {"directory": "../../elsewhere", "epoch": 1,
+                                            "sha256": "0" * 64})
+    folder = tmp_path / "epoch-0001"
+    folder.mkdir()
+    path = folder / "state.pt"
+    path.write_bytes(b"original")
+    ref = {"directory": folder.name, "epoch": 1, "sha256": training.digest(path)}
+    assert training.checkpoint_path(tmp_path, ref) == path
+    path.write_bytes(b"changed")
+    with pytest.raises(ValueError, match="hash"):
+        training.checkpoint_path(tmp_path, ref)
+
+
+def test_training_forbids_era5_and_recovers_best_after_latest_publication(tmp_path, monkeypatch):
+    ds = prepared(tmp_path / "data")
+    real_dataset = data.ObservationDataset
+    class ShortDataset(real_dataset):
+        def subset(self, split):
+            assert split != "test", "Training or epoch selection requested final test."
+            candidates = super().subset(split)
+            usable = [i for i in candidates if self.sample(i)["target_mask"].any()
+                      and (split != "train" or self.sample(i)["input_mask"].any())]
+            return usable[:1]
+    monkeypatch.setattr(training, "ObservationDataset", ShortDataset)
+    original_import = builtins.__import__
+    def guarded(name, *args, **kwargs):
+        if "era5" in name.lower() or "import_climatology" in name:
+            raise AssertionError("Training accessed reanalysis: " + name)
+        return original_import(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, "__import__", guarded)
+    original_save = training.save
+    interrupted = []
+    def fail_between_pointers(path, value):
+        if str(path).endswith("best.json") and not interrupted:
+            interrupted.append(True)
+            raise OSError("Simulated interruption after latest publication")
+        return original_save(path, value)
+    monkeypatch.setattr(training, "save", fail_between_pointers)
+    config = dict(mesh_level=0, hidden=8, threads=1, seed=17, learning_rate=.001,
+                  weight_decay=0., gradient_clip=1., epochs=1, patience=2)
+    output = tmp_path / "training"
+    with pytest.raises(OSError, match="Simulated interruption"):
+        training.train(ds.root, output, config)
+    assert (output / "latest.json").exists()
+    assert not (output / "best.json").exists()
+    training.train(ds.root, output, config)
+    best = json.loads((output / "best.json").read_text())
+    latest = json.loads((output / "latest.json").read_text())
+    assert best == latest
+    assert best["epoch"] == 1
+    assert json.loads((output / "complete.json").read_text())["scientific_acceptance"] is False
 
 
 def test_station_loss_excludes_missing_nan_and_weights_variables_equally():
