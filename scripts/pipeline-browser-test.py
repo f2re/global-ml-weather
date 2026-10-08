@@ -30,7 +30,11 @@ with tempfile.TemporaryDirectory() as tmp:
                 executable=os.environ.get('GLOBAL_WEATHER_CHROMIUM')
                 if executable is not None and executable not in ('/usr/bin/chromium','/usr/bin/chromium-browser'):
                     raise ValueError('Use a verified system Chromium path for remote tests.')
-                browser=p.chromium.launch(headless=True, executable_path=executable)
+                browser_env=dict(os.environ)
+                compatibility=Path('/home/user/global-weather-browser-runtime/compat/usr/lib/x86_64-linux-gnu')
+                if (compatibility/'libffi.so.6').is_file():
+                    browser_env['LD_LIBRARY_PATH']=str(compatibility)
+                browser=p.chromium.launch(headless=True, executable_path=executable, env=browser_env)
                 page=browser.new_page(viewport={'width':1500,'height':1050});errors=[]
                 page.on('pageerror',lambda e:errors.append(str(e)))
                 try:
