@@ -1,6 +1,9 @@
 {
   "schema": "remote-research-passport-1",
   "experiment_id": "R2-scale-2021",
+  "status": "superseded_before_training",
+  "superseded_by": "docs/decisions/0005-observation-supervision.md",
+  "operator_direction": "Real observation inputs and targets; ERA5 only for separate verification. R2 service disabled; preserve cache.",
   "hypothesis": "More geographically distributed observations and a full seasonal cycle reduce analysis and forecast error relative to the small R1 pilot.",
   "plan": "configs/remote_scale_r2.json",
   "source_revision": "recorded_by_execution_evidence",

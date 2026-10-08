@@ -1,0 +1,37 @@
+{
+  "schema": "research-direction-1",
+  "experiment_id": "R3-observation-supervision",
+  "status": "implementation_required",
+  "execution_ready": false,
+  "decision": "docs/decisions/0005-observation-supervision.md",
+  "training_inputs": "real_observations_only",
+  "training_targets": "real_future_observations_only",
+  "normalization": "training_observations_only",
+  "epoch_selection": "station_validation_only",
+  "era5_role": "separate_frozen_model_verification_only",
+  "initialization": "new_weights; no ERA5-trained warm start",
+  "static_fields": "independently_verified_DEM_and_land_mask",
+  "preserved_scope": {"history_hours": 12, "horizon_hours": 72, "pressure_levels": 37, "global_state": true},
+  "station_selection": {
+    "basis": "training_period_or_separate_admission_period_only",
+    "criteria": ["variable_QC", "usable_issue_window_coverage", "future_station_target_coverage", "coordinates_and_instrument_heights", "regional_and_elevation_representation"],
+    "thresholds": "freeze after training-period coverage audit; never use final test to choose stations",
+    "replacement": "preserve partial valid measurements; select replacement in a comparable region and elevation range"
+  },
+  "implementation_order": [
+    "audit station coverage and define chronological multi-season splits",
+    "implement sparse station targets and a validated observation operator",
+    "implement station losses, training-only observed statistics and station validation",
+    "implement manifest source-role enforcement and reject ERA5 access during training",
+    "add admitted vertical observations and verify nonzero gradients for all branches and outputs",
+    "run a bounded short remote experiment with new weights",
+    "train finalists and execute station test and separate ERA5 verification"
+  ],
+  "blocked_acceptance": [
+    "station-target trainer and operator not implemented",
+    "GHCNh instrument height metadata not yet admitted",
+    "no admitted vertical-observation training source",
+    "seasonal train coverage and independent periods not fixed",
+    "no independent forecast-quality acceptance"
+  ]
+}
