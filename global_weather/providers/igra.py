@@ -40,15 +40,28 @@ def station_url(station):
     return BASE+'data/data-por/'+station+'-data.txt.zip'
 
 
-def station_inventory(path):
+def station_inventory(path, *, report=None):
     stations=[]
+    report=report if report is not None else {}
     # NOAA's inventory uses UTF-8 station names and 88 CHARACTER columns.
     # Slice after decoding: e.g. Š occupies two bytes but one name column.
-    for line in Path(path).read_text(encoding='utf-8').splitlines():
+    for line_number,line in enumerate(Path(path).read_text(encoding='utf-8').splitlines(),1):
         if not line.strip():continue
         if len(line)!=88:raise ValueError('Invalid IGRA station inventory column count.')
         if not line[:41].isascii() or not line[71:].isascii():
             raise ValueError('Non-ASCII IGRA station inventory outside the station name.')
+        # One observed NOAA row has every station/geometry field blank and only
+        # the year/count tail present. It is anonymous malformed metadata, not
+        # a mobile coordinate sentinel and not an admissible station.
+        if not line[:72].strip():
+            first,last,count=int(line[72:76]),int(line[77:81]),int(line[82:88])
+            if first>last or count<0 or line[76]!=' ' or line[81]!=' ':
+                raise ValueError('Malformed anonymous IGRA inventory tail.')
+            report['anonymous_catalog_rows']=report.get('anonymous_catalog_rows',0)+1
+            report.setdefault('quarantined_rows',[]).append({'line_number':line_number,
+                'reason':'blank_station_identity_and_geometry','first_year':first,'last_year':last,
+                'reported_sounding_count':count})
+            continue
         identity=line[:11];lat=float(line[12:20]);lon=float(line[21:30])
         first,last=int(line[72:76]),int(line[77:81])
         if not ID.fullmatch(identity):raise ValueError('Invalid inventory ID.')
@@ -278,7 +291,8 @@ def acquire(cache,output,*,network=False,station_limit=32,minimum_train_profiles
     list_path,list_receipt=fetch(LIST_FORMAT_URL,'igra2-list-format.txt',1_000_000)
     sources=[{'path':str(path),'role':'format_or_inventory',**receipt} for path,receipt in
              ((catalog,catalog_receipt),(format_path,format_receipt),(list_path,list_receipt))]
-    candidates=spatial_candidates(station_inventory(catalog));selected=[];failures=[]
+    inventory_qc={}
+    candidates=spatial_candidates(station_inventory(catalog,report=inventory_qc));selected=[];failures=[]
     output.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.igra-acquire-',dir=output.parent) as temporary:
         stage=Path(temporary);database=stage/'unique.sqlite';size=0
@@ -334,6 +348,7 @@ def acquire(cache,output,*,network=False,station_limit=32,minimum_train_profiles
         manifest={'schema':'igra-observation-archive-1','provider':'NOAA_IGRA2','data_kind':'real',
                   'station_limit':station_limit,'minimum_train_profiles':minimum_train_profiles,
                   'stations':selected,'failures':failures,'sources':sources,
+                  'inventory_qc':inventory_qc,
                   'requested_years':[2021,2022],'archive_layout':'full_period_of_record_filtered_to_requested_years',
                   'admission_period':[START.isoformat(),TRAIN_END.isoformat()],
                   'source_roles':{'input':'NOAA_IGRA2','target':'NOAA_IGRA2','norm':'train_NOAA_IGRA2',

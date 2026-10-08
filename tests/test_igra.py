@@ -180,6 +180,29 @@ def test_inventory_utf8_name_keeps_character_columns_and_strict_structural_field
     with pytest.raises(UnicodeDecodeError):igra.station_inventory(path)
 
 
+def test_inventory_quarantines_only_observed_anonymous_row_pattern(tmp_path):
+    # The observed official-cache row has no ID, coordinates or name, only a tail.
+    anonymous=' '*72+'1946 2025  70410'
+    assert len(anonymous)==88
+    line=list(' '*88)
+    for start,end,text in [(1,11,STATION),(13,20,' 40.0000'),(22,30,' -75.0000'),
+                           (32,37,' 123.0'),(42,71,'TEST'.ljust(30)),
+                           (73,76,'2021'),(78,81,'2021'),(83,88,'000001')]:
+        line[start-1:end]=text
+    valid=''.join(line)
+    path=tmp_path/'inventory.txt';path.write_text(anonymous+'\n'+valid+'\n',encoding='utf-8')
+    report={};stations=igra.station_inventory(path,report=report)
+    assert [station['id'] for station in stations]==[STATION]
+    assert report=={'anonymous_catalog_rows':1,'quarantined_rows':[{'line_number':1,
+        'reason':'blank_station_identity_and_geometry','first_year':1946,'last_year':2025,
+        'reported_sounding_count':70410}]}
+    for bad in (anonymous[:72]+'oops'+anonymous[76:],
+                'BAD'.ljust(11)+anonymous[11:],
+                valid[:12]+' '*8+valid[20:]):
+        path.write_text(bad+'\n',encoding='utf-8')
+        with pytest.raises(ValueError):igra.station_inventory(path)
+
+
 def test_acquire_with_synthetic_provider_and_resume_hash_gate(tmp_path,monkeypatch):
     line=list(' '*88)
     for start,end,text in [(1,11,STATION),(13,20,' 40.0000'),(22,30,' -75.0000'),
