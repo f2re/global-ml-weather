@@ -75,6 +75,28 @@ def test_missing_and_qc_flags_preserve_other_variables(tmp_path):
     assert {record['variable']:record['value'] for record in records}=={'u':0.,'v':0.}
 
 
+def test_undocumented_surface_wind_only_row_is_quarantined_without_losing_profile(tmp_path):
+    # Exact observed NOAA pattern; code 0 is not declared supported by the format.
+    raw='01 -9999  -9999 -9999 -9999 -9999 -9999    90    41 '
+    from collections import Counter
+    report=Counter()
+    path=text_source(tmp_path,header(count=2)+raw+'\n'+level())
+    profile=list(igra.iter_profiles(path,report=report))[0]
+    records=normalized(profile)
+    assert len(profile['levels'])==1
+    assert {record['variable'] for record in records}=={'temperature','specific_humidity','u','v','geopotential'}
+    assert all(record['pressure_pa']==50000 for record in records)
+    assert report['quarantined_undocumented_01_surface_without_vertical_coordinate']==1
+    assert report['omitted_levels']==1 and report['profiles']==1
+    # A real pressure, QA-removed field or another unknown type cannot be coerced.
+    invalid=[ '01'+level()[2:], raw[:9]+f'{50000:6d}'+raw[15:],
+              raw[:16]+f'{-8888:5d}'+raw[21:], '41'+raw[2:] ]
+    for row in invalid:
+        path=text_source(tmp_path,header()+row+'\n')
+        with pytest.raises(ValueError,match='Invalid IGRA level type'):
+            list(igra.iter_profiles(path))
+
+
 def test_release_partial_minute_and_midnight_are_explicit(tmp_path):
     path=text_source(tmp_path,header(release=1199)+level())
     profile=list(igra.iter_profiles(path))[0];records=normalized(profile)
@@ -228,6 +250,7 @@ def test_acquire_with_synthetic_provider_and_resume_hash_gate(tmp_path,monkeypat
     manifest=igra.acquire(cache,output,station_limit=1,minimum_train_profiles=1)
     assert manifest['provider']=='NOAA_IGRA2' and manifest['omega_supported'] is False
     assert manifest['stations'][0]['train_profiles']==1
+    assert manifest['stations'][0]['source_qc']['profiles']==1
     assert (output/'observations.jsonl').is_file()
     calls=len(requested)
     assert igra.acquire(cache,output,station_limit=1,minimum_train_profiles=1)==manifest

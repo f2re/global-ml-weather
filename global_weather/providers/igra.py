@@ -160,8 +160,21 @@ def _header(line):
     return profile,count
 
 
+def _unlocated_surface_wind(line):
+    """Recognize one observed, undocumented code-01 archive row for quarantine."""
+    if len(line)<51 or line[:2]!='01':return False
+    # Require the exact observed missing-source pattern, not QA-removed values,
+    # a usable pressure/height, another unsupported level type or invented axes.
+    missing=all(int(line[first-1:last])==-9999 for first,last in
+                ((4,8),(10,15),(17,21),(23,27),(29,33),(35,39)))
+    if not missing or any(line[index]!=' ' for index in (15,21,27)):return False
+    direction,speed=int(line[40:45]),int(line[46:51])
+    return 0<=direction<=360 and 0<=speed<=2000
+
+
 def _level(line,actual_launch):
     if len(line)<51:raise ValueError('Truncated IGRA level.')
+    if _unlocated_surface_wind(line):return None
     if line[0] not in '123' or line[1] not in '012':raise ValueError('Invalid IGRA level type.')
     pressure=_number(line,10,15);pflag=line[15];zflag=line[21];tflag=line[27]
     if pressure is None or not 1<=pressure<=120000 or pflag not in ' AB':return None
@@ -226,6 +239,8 @@ def iter_profiles(path, *, years=(2021,2022), report=None, expected_station=None
                 except StopIteration as exc:raise ValueError('Truncated IGRA sounding.') from exc
                 if line.startswith('#'):raise ValueError('IGRA level count does not match header.')
                 if wanted:
+                    if _unlocated_surface_wind(line):
+                        report['quarantined_undocumented_01_surface_without_vertical_coordinate']+=1
                     level=_level(line,profile['launch_time'] is not None)
                     if level is not None:profile['levels'].append(level)
                     else:report['omitted_levels']+=1
@@ -339,6 +354,7 @@ def acquire(cache,output,*,network=False,station_limit=32,minimum_train_profiles
                         if size+len(line)>MAX_OUTPUT:raise ValueError('IGRA normalized JSONL budget exhausted.')
                         result.write(line);size+=len(line)
                 if sha256(archive)!=before:raise ValueError('IGRA archive changed during processing.')
+                selected[-1]['source_qc']=dict(report)
                 if len(selected)>=station_limit:break
         if len(selected)<station_limit:
             atomic_json(cache/'admission-failure.json',{'requested':station_limit,'selected':selected,'failures':failures})
