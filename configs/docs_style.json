@@ -43,7 +43,11 @@
     "docs/SATELLITE_ACQUISITION.md",
     "docs/decisions/0005-observation-supervision.md",
     "docs/decisions/0006-station-native-pilot.md",
-    "docs/OBSERVATION_R3.md"
+    "docs/OBSERVATION_R3.md",
+    "docs/OBSERVATION_DRIVEN_TRAINING.md",
+    "agents/tasks/continuous-c3-observations.md",
+    "docs/decisions/0007-observation-stage-integration.md",
+    "docs/PROFILE_R4.md"
   ],
   "scope_note": "Active operational documentation and agent instructions. Historical reports retain their evidence.",
   "target_interpretation": "Approximately 80% is a stylistic request, not measured official standard compliance.",

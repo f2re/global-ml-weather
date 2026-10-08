@@ -22,6 +22,10 @@ from .observation_data import ObservationDataset
 from .observation_model import StationObservationModel
 
 
+# Preserve the new main planning API alongside the executable native pilot.
+from .observation_stages import (TrainingStage, default_training_stages,
+    stage_plan_payload, partition_observation_groups, validate_stage_transition)
+
 def digest(path):
     h = hashlib.sha256()
     with Path(path).open('rb') as stream:

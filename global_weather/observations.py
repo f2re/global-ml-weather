@@ -15,6 +15,7 @@ import torch
 from .contracts import ObservationEvent, RadiometrySpec, select_as_issued
 from .grid import SphereGrid, unit_xyz
 from .vertical import validate_levels
+from .observation_identity import observation_identity
 
 SOURCES = ('station', 'radiosonde', 'electro_l', 'arktika_m', 'meteor_msu_mr', 'meteor_mtvza')
 SATELLITES = frozenset(SOURCES[2:])
@@ -141,8 +142,12 @@ def pack_observations(records, grid: SphereGrid, pressure_pa, issue_time,
     rejected = {}
     def reject(reason):
         rejected[reason] = rejected.get(reason,0)+1
-    for rec in records:
+    for original in records:
         try:
+            if not isinstance(original, dict):
+                raise ValueError('invalid_contract')
+            rec = dict(original)
+            rec['observation_id'] = observation_identity(rec)
             source, name = rec['source'],rec['variable']
             if source not in SOURCES or name not in variables:
                 raise ValueError('unknown_source_or_variable')

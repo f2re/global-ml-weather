@@ -1,5 +1,6 @@
 """Browser test of prepared data, training, test evaluation and trained forecast."""
 import json
+import os
 from pathlib import Path
 import socket
 import subprocess
@@ -26,7 +27,10 @@ with tempfile.TemporaryDirectory() as tmp:
                 except OSError:time.sleep(.1)
             else:raise RuntimeError('Server did not start')
             with sync_playwright() as p:
-                browser=p.chromium.launch(headless=True)
+                executable=os.environ.get('GLOBAL_WEATHER_CHROMIUM')
+                if executable is not None and executable not in ('/usr/bin/chromium','/usr/bin/chromium-browser'):
+                    raise ValueError('Use a verified system Chromium path for remote tests.')
+                browser=p.chromium.launch(headless=True, executable_path=executable)
                 page=browser.new_page(viewport={'width':1500,'height':1050});errors=[]
                 page.on('pageerror',lambda e:errors.append(str(e)))
                 try:

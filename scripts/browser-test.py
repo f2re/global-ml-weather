@@ -10,7 +10,7 @@ import time
 import urllib.request
 from playwright.sync_api import sync_playwright, expect
 
-EXPECTED_SOURCES = {'ghcnh', 'local_observations', 'satdump', 'graphcast', 'noaa_isd',
+EXPECTED_SOURCES = {'ghcnh', 'local_observations', 'upper_air_coordinate', 'satdump', 'graphcast', 'noaa_isd',
                     'era5_cds', 'satellite_manifest', 'arktika_worker'}
 root=Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory() as temporary:
@@ -31,7 +31,10 @@ with tempfile.TemporaryDirectory() as temporary:
             assert {item['id'] for item in connectors} == EXPECTED_SOURCES
             assert len(connectors) == len(EXPECTED_SOURCES)
             with sync_playwright() as p:
-                browser=p.chromium.launch(headless=True)
+                executable=os.environ.get('GLOBAL_WEATHER_CHROMIUM')
+                if executable is not None and executable not in ('/usr/bin/chromium','/usr/bin/chromium-browser'):
+                    raise ValueError('Use a verified system Chromium path for remote tests.')
+                browser=p.chromium.launch(headless=True, executable_path=executable)
                 page=browser.new_page(viewport={'width':1600,'height':1100})
                 errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
                 target=root/'outputs'/'browser';target.mkdir(parents=True,exist_ok=True)
