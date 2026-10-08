@@ -1,5 +1,7 @@
 # Правила файлов ролей
 
+Для всей разработки обязателен [GLOBAL-WEATHER-OBSERVATIONS-1](OBSERVATION_CONTRACT.md).
+
 Каждая роль обязана читать `agents/OPERATING_CONTRACT.md` (`GLOBAL-WEATHER-OPS-1`).
 Каждая роль обязана ссылаться на `docs/protocols/05-ecosystem-compatibility.md`.
 Требование распространяется на файлы `agents/` и `.claude/agents/`.

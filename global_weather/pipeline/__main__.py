@@ -28,6 +28,11 @@ def main(argv=None):
     p.add_argument('--confirm-utc', action='store_true'); p.add_argument('--precipitation-kind', choices=['hourly_increment'])
     p = sub.add_parser('prepare-static'); p.add_argument('--netcdf', type=Path, required=True)
     p.add_argument('--mesh-level', type=int, required=True); p.add_argument('--output', type=Path, required=True)
+    p = sub.add_parser('normalize-upper-air'); p.add_argument('--profile', type=Path, required=True)
+    p.add_argument('--output', type=Path, required=True); p.add_argument('--acquired-at', required=True)
+    p.add_argument('--availability-mode', choices=['reported','assumed_latency','archive_acquisition'], default='reported')
+    p.add_argument('--latency-minutes', type=int)
+    p = sub.add_parser('training-stages'); p.add_argument('--output', type=Path)
     args = parser.parse_args(argv)
     if args.command == 'demo-dataset':
         from .fixture import create_fixture
@@ -70,9 +75,27 @@ def main(argv=None):
                                   issue_time=args.issue_time, mesh_level=args.mesh_level,
                                   horizon_hours=args.horizon_hours, step_hours=args.step_hours,
                                   confirm_utc=args.confirm_utc, precipitation_kind=args.precipitation_kind)
-    else:
+    elif args.command == 'prepare-static':
         from .era5 import prepare_static
         result = prepare_static(args.netcdf, args.output, mesh_level=args.mesh_level)
+    elif args.command == 'normalize-upper-air':
+        from ..providers.upper_air import normalize_profile
+        if args.output.exists():
+            raise FileExistsError('Выходной JSONL не перезаписывается.')
+        records = normalize_profile(read_json(args.profile), acquired_at=args.acquired_at,
+                                    availability_mode=args.availability_mode,
+                                    latency_minutes=args.latency_minutes)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        with args.output.open('x', encoding='utf-8') as stream:
+            for record in records:
+                stream.write(json.dumps(record, ensure_ascii=False, allow_nan=False, separators=(',', ':'))+'\n')
+        result = {'status': 'upper_air_normalized', 'records': len(records),
+                  'station_identifier_required': False, 'output': str(args.output)}
+    else:
+        from ..observation_training import stage_plan_payload
+        result = stage_plan_payload()
+        if args.output:
+            atomic_json(args.output, result)
     print(json.dumps(result, ensure_ascii=False, allow_nan=False, indent=2))
 
 

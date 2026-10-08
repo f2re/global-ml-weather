@@ -37,7 +37,9 @@
     "agents/tasks/continuous-c1.md",
     "global_weather/continuous/AGENTS.md",
     "docs/CONTINUOUS_CHECKPOINTS.md",
-    "agents/tasks/continuous-c2.md"
+    "agents/tasks/continuous-c2.md",
+    "docs/OBSERVATION_DRIVEN_TRAINING.md",
+    "agents/tasks/continuous-c3-observations.md"
   ],
   "scope_note": "Active operational documentation and agent instructions. Historical reports retain their evidence.",
   "target_interpretation": "Approximately 80% is a stylistic request, not measured official standard compliance.",

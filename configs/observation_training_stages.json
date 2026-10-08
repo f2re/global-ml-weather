@@ -1,0 +1,22 @@
+{
+  "schema": "observation-training-policy-1",
+  "era5": {
+    "role": "dense_teacher_and_secondary_validation",
+    "allowed_operational_input": false,
+    "allowed_stages": ["S0-theory", "S1-observation-encoder", "S2-observation-space", "S3-cycling", "S4-independent-validation"]
+  },
+  "observations": {
+    "station_identifier_required": false,
+    "required_metadata": ["source", "variable", "observed_at", "available_at", "latitude", "longitude", "units"],
+    "upper_air_additional_metadata": ["pressure_pa"],
+    "identity_preference": ["provider_message_id", "profile_id", "platform_id", "coordinate_time_fallback"],
+    "actual_level_time_and_position_preferred": true
+  },
+  "stages": [
+    {"id": "S0-theory", "gradient": true, "primary_target": "ERA5", "deployment_equivalent": false},
+    {"id": "S1-observation-encoder", "gradient": true, "primary_target": "ERA5 analysis", "deployment_equivalent": false},
+    {"id": "S2-observation-space", "gradient": true, "primary_target": "withheld future observations", "deployment_equivalent": true},
+    {"id": "S3-cycling", "gradient": true, "primary_target": "future observations after cycling", "deployment_equivalent": true},
+    {"id": "S4-independent-validation", "gradient": false, "primary_target": "unseen observations; ERA5 secondary", "deployment_equivalent": true}
+  ]
+}

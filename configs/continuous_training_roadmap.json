@@ -81,13 +81,20 @@
     {
       "id": "C3",
       "title": "Провайдеры, карта доступности и задачи устранения",
-      "status": "planned",
+      "status": "in_progress",
       "depends_on": [
         "C1"
       ],
       "existing_files": [
         "global_weather/connectors/__init__.py",
-        "global_weather/providers/satellites.py"
+        "global_weather/providers/satellites.py",
+        "global_weather/observation_identity.py",
+        "global_weather/providers/upper_air.py",
+        "global_weather/analysis/observation_operator.py",
+        "global_weather/observation_training.py",
+        "configs/observation_training_stages.json",
+        "tests/test_observation_driven.py",
+        "docs/OBSERVATION_DRIVEN_TRAINING.md"
       ],
       "acceptance": [
         "A02",
@@ -95,7 +102,13 @@
         "A10",
         "A11"
       ],
-      "evidence": []
+      "evidence": [
+        "Coordinate-native identity does not require station_id.",
+        "Upper-air levels retain actual coordinates, observed_at and available_at.",
+        "Observation operator interpolates in sphere, log-pressure and actual time.",
+        "S0-S4 training policy keeps ERA5 out of deployment inputs.",
+        "Modular tests cover stationless, incomplete and off-synoptic profiles."
+      ]
     },
     {
       "id": "C4",

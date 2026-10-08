@@ -2,6 +2,8 @@
 
 ## Перед работой
 
+Применяйте [GLOBAL-WEATHER-OBSERVATIONS-1](agents/OBSERVATION_CONTRACT.md) при любой разработке модели и конвейера.
+
 Прочитайте `agents/OPERATING_CONTRACT.md` с идентификатором `GLOBAL-WEATHER-OPS-1`.
 Для обучения прочитайте `agents/PIPELINE_CONTRACT.md` с идентификатором `GLOBAL-WEATHER-TRAIN-1`.
 Для продукции применяйте `GLOBAL-WEATHER-PRODUCTS-1`.
