@@ -47,7 +47,8 @@
     "docs/OBSERVATION_DRIVEN_TRAINING.md",
     "agents/tasks/continuous-c3-observations.md",
     "docs/decisions/0007-observation-stage-integration.md",
-    "docs/PROFILE_R4.md"
+    "docs/PROFILE_R4.md",
+    "docs/R4_EXECUTION_REPORT.md"
   ],
   "scope_note": "Active operational documentation and agent instructions. Historical reports retain their evidence.",
   "target_interpretation": "Approximately 80% is a stylistic request, not measured official standard compliance.",
