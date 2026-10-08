@@ -157,6 +157,29 @@ def test_inventory_filters_only_train_period_and_diversifies_cells(tmp_path):
     assert candidates[-1]['id']==rows[1]['id']
 
 
+def test_inventory_utf8_name_keeps_character_columns_and_strict_structural_fields(tmp_path):
+    # Synthetic fixed-width reconstruction of the names found in NOAA's cache.
+    name='BEOGRAD/KOŠUTNJAK'
+    line=list(' '*88)
+    for start,end,text in [(1,11,'RIM00013275'),(13,20,' 44.7714'),(22,30,'  20.4244'),
+                           (32,37,' 203.0'),(42,71,name.ljust(30)),
+                           (73,76,'1971'),(78,81,'2026'),(83,88,' 40125')]:
+        line[start-1:end]=text
+    text=''.join(line)
+    assert len(text)==88 and len(text.encode('utf-8'))==89
+    path=tmp_path/'inventory.txt';path.write_text(text+'\n',encoding='utf-8')
+    result=igra.station_inventory(path)
+    assert result==[{'id':'RIM00013275','latitude':44.7714,'longitude':20.4244,
+                    'elevation_m':203.,'name':name,'first_year':1971,'last_year':2026}]
+    # Unicode decimal numerals must never silently extend the numeric format.
+    malformed=text[:72]+'١'+text[73:]
+    path.write_text(malformed+'\n',encoding='utf-8')
+    with pytest.raises(ValueError,match='outside the station name'):
+        igra.station_inventory(path)
+    path.write_bytes((text+'\n').encode('cp1250'))
+    with pytest.raises(UnicodeDecodeError):igra.station_inventory(path)
+
+
 def test_acquire_with_synthetic_provider_and_resume_hash_gate(tmp_path,monkeypatch):
     line=list(' '*88)
     for start,end,text in [(1,11,STATION),(13,20,' 40.0000'),(22,30,' -75.0000'),

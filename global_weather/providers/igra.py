@@ -42,9 +42,13 @@ def station_url(station):
 
 def station_inventory(path):
     stations=[]
-    for line in Path(path).read_text(encoding='ascii').splitlines():
+    # NOAA's inventory uses UTF-8 station names and 88 CHARACTER columns.
+    # Slice after decoding: e.g. Š occupies two bytes but one name column.
+    for line in Path(path).read_text(encoding='utf-8').splitlines():
         if not line.strip():continue
-        if len(line)<88:raise ValueError('Truncated IGRA station inventory.')
+        if len(line)!=88:raise ValueError('Invalid IGRA station inventory column count.')
+        if not line[:41].isascii() or not line[71:].isascii():
+            raise ValueError('Non-ASCII IGRA station inventory outside the station name.')
         identity=line[:11];lat=float(line[12:20]);lon=float(line[21:30])
         first,last=int(line[72:76]),int(line[77:81])
         if not ID.fullmatch(identity):raise ValueError('Invalid inventory ID.')
