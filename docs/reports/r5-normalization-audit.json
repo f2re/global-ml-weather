@@ -1,0 +1,623 @@
+{
+  "schema": "profile-normalization-audit-1",
+  "utc": "2026-10-09T06:23:42.968477+00:00",
+  "audit_commit": "b64139e691b99aada29a380b18649e4dc67e468b",
+  "checkpoint_training_commit": "8939d0280ef85cdd2daa5f56cb82d795e6bd1837",
+  "checkpoint_sha256": "f467b23a6a26c36f8467b71817c1903fa2372c05563b761f07bf8eaba16cf062",
+  "dataset_manifest_sha256": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+  "script_sha256": "207c3159d53935f8ed1b0619382bacceaa6d66e9651aa2955b8a1a462133303c",
+  "device": "CPU, one thread; read-only diagnostic, not production numerical replay",
+  "seconds": 31.512101207859814,
+  "active_norms": [
+    {
+      "variable": "temperature",
+      "units": "K",
+      "count": 636228,
+      "mean": 238.0869023368962,
+      "std": 28.187384723771835,
+      "minimum_pressure_pa": 20.0,
+      "maximum_pressure_pa": 103800.0
+    },
+    {
+      "variable": "specific_humidity",
+      "units": "kg kg-1",
+      "count": 620883,
+      "mean": 0.0012514572818013087,
+      "std": 0.0028041012900225973,
+      "minimum_pressure_pa": 20.0,
+      "maximum_pressure_pa": 103800.0
+    },
+    {
+      "variable": "u",
+      "units": "m s-1",
+      "count": 819401,
+      "mean": 8.877970509760903,
+      "std": 16.700903938694925,
+      "minimum_pressure_pa": 10.0,
+      "maximum_pressure_pa": 103600.0
+    },
+    {
+      "variable": "v",
+      "units": "m s-1",
+      "count": 819401,
+      "mean": -0.4828617984973969,
+      "std": 8.584195900003355,
+      "minimum_pressure_pa": 10.0,
+      "maximum_pressure_pa": 103600.0
+    },
+    {
+      "variable": "geopotential",
+      "units": "m2 s-2",
+      "count": 237104,
+      "mean": 110717.97295396589,
+      "std": 79031.1346895023,
+      "minimum_pressure_pa": 400.0,
+      "maximum_pressure_pa": 103400.0
+    }
+  ],
+  "norm_period": [
+    "2021-01-01T00:00:00+00:00",
+    "2022-01-01T00:00:00+00:00"
+  ],
+  "checkpoint_buffers_match_manifest": true,
+  "graphcast_used_by_profile_model": false,
+  "graphcast_provenance": {
+    "repository": "https://github.com/google-deepmind/weathernext",
+    "revision": "f2f2c5117d2f864e2d5e7c2f9f220db5e1049dd3",
+    "data_family": "GraphCast ERA5 normalization",
+    "artifact_sha256": {
+      "mean_by_level.nc": "e6e724b94cd27707903cdc5cf5784d420bab306f722e631f4455e25c96da9931",
+      "stddev_by_level.nc": "29f941d8c34906b87a1745f93b2308d1e169ec9bbdc4c5491479c771fe92c3cb"
+    },
+    "fit_period": {
+      "start": "1979-01-02T00:00:00+00:00",
+      "end": "2015-12-31T23:59:59.999999+00:00"
+    },
+    "source_attributes": {
+      "date_start": "1979-01-02",
+      "date_end": "2015",
+      "timestep_hours": "6",
+      "window_stride": "1"
+    },
+    "period_interpretation": "conservative_bounds_from_netcdf_attributes",
+    "license": "CC-BY-4.0; underlying ERA5 terms also apply",
+    "verified_against_expected_hashes": true,
+    "acquisition": "local_files; URLs identify intended upstream source",
+    "artifact_urls": {
+      "mean_by_level.nc": "https://storage.googleapis.com/dm_graphcast/graphcast/stats/mean_by_level.nc",
+      "stddev_by_level.nc": "https://storage.googleapis.com/dm_graphcast/graphcast/stats/stddev_by_level.nc"
+    },
+    "units_from_documented_schema": [
+      "10m_u_component_of_wind",
+      "10m_v_component_of_wind",
+      "2m_temperature",
+      "geopotential",
+      "mean_sea_level_pressure",
+      "sea_ice_cover",
+      "sea_surface_temperature",
+      "specific_humidity",
+      "surface_pressure",
+      "temperature",
+      "total_cloud_cover",
+      "total_precipitation_6hr",
+      "u_component_of_wind",
+      "v_component_of_wind",
+      "vertical_velocity"
+    ],
+    "note": "Global level statistics, not local/monthly climatology. Year-only date bounds are conservative."
+  },
+  "graphcast_attributes": {
+    "mean_by_level.nc": {
+      "date_start": "1979-01-02",
+      "date_end": "2015",
+      "timestep_hours": "6",
+      "window_stride": "1"
+    },
+    "stddev_by_level.nc": {
+      "date_start": "1979-01-02",
+      "date_end": "2015",
+      "timestep_hours": "6",
+      "window_stride": "1"
+    }
+  },
+  "affine_roundtrip": [
+    {
+      "variable": "temperature",
+      "max_error": 0.0
+    },
+    {
+      "variable": "specific_humidity",
+      "max_error": 0.0
+    },
+    {
+      "variable": "u",
+      "max_error": 0.0
+    },
+    {
+      "variable": "v",
+      "max_error": 0.0
+    },
+    {
+      "variable": "geopotential",
+      "max_error": 0.0
+    }
+  ],
+  "decode_checks": [
+    {
+      "lead_hours": 0,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0013204546412453055,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 3,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0014520600670948625,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 6,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0015840912237763405,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 9,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0016920422203838825,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 12,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0017711538821458817,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 15,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.001827359665185213,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 18,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018606602679938078,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 21,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.001877680653706193,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 24,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018852907232940197,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 27,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018880568677559495,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 30,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018891118234023452,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 33,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018885693280026317,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 36,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.001887441030703485,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 39,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018862065626308322,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 42,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.001885089324787259,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 45,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018841653363779187,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 48,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018834394868463278,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 51,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018828859319910407,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 54,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.001882473356090486,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 57,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018821674166247249,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 60,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018819408724084496,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 63,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018817732343450189,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 66,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018816496012732387,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 69,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018815583316609263,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    },
+    {
+      "lead_hours": 72,
+      "linear_inverse_max_error": {
+        "temperature": 0.0,
+        "specific_humidity": 0.0018814903451129794,
+        "u": 0.0,
+        "v": 0.0,
+        "geopotential": 0.0
+      }
+    }
+  ],
+  "humidity_post_affine_transform": {
+    "physical_input_q": [
+      0.0,
+      9.999999974752427e-07,
+      9.999999747378752e-05,
+      0.0010000000474974513,
+      0.009999999776482582
+    ],
+    "decoded_q": [
+      0.0019436548464000225,
+      0.001944154966622591,
+      0.001994100632146001,
+      0.0024879982229322195,
+      0.010078152641654015
+    ],
+    "zero_maps_to": 0.0019436548464000225,
+    "head_zero_maps_to": 0.0026386266108602285
+  },
+  "bounded_train_samples": {
+    "temperature": [
+      {
+        "pressure_pa": 100000,
+        "count": 331,
+        "mean": 291.2638972809667
+      },
+      {
+        "pressure_pa": 70000,
+        "count": 356,
+        "mean": 270.4227528089888
+      },
+      {
+        "pressure_pa": 50000,
+        "count": 331,
+        "mean": 253.5675226586103
+      },
+      {
+        "pressure_pa": 20000,
+        "count": 254,
+        "mean": 219.51496062992126
+      },
+      {
+        "pressure_pa": 10000,
+        "count": 241,
+        "mean": 213.2707468879668
+      }
+    ],
+    "specific_humidity": [
+      {
+        "pressure_pa": 100000,
+        "count": 344,
+        "mean": 0.009907621979877284
+      },
+      {
+        "pressure_pa": 70000,
+        "count": 366,
+        "mean": 0.002938328592963268
+      },
+      {
+        "pressure_pa": 50000,
+        "count": 337,
+        "mean": 0.0007809092109758156
+      },
+      {
+        "pressure_pa": 20000,
+        "count": 247,
+        "mean": 1.5931086192042135e-05
+      },
+      {
+        "pressure_pa": 10000,
+        "count": 235,
+        "mean": 4.191484329542957e-06
+      }
+    ],
+    "u": [
+      {
+        "pressure_pa": 100000,
+        "count": 216,
+        "mean": 0.23881914404873605
+      },
+      {
+        "pressure_pa": 70000,
+        "count": 232,
+        "mean": 1.690720529249083
+      },
+      {
+        "pressure_pa": 50000,
+        "count": 209,
+        "mean": 6.778084075431233
+      },
+      {
+        "pressure_pa": 20000,
+        "count": 196,
+        "mean": 13.614062005992773
+      },
+      {
+        "pressure_pa": 10000,
+        "count": 187,
+        "mean": 7.584899459661114
+      }
+    ],
+    "v": [
+      {
+        "pressure_pa": 100000,
+        "count": 215,
+        "mean": -0.2373363185160039
+      },
+      {
+        "pressure_pa": 70000,
+        "count": 232,
+        "mean": 0.11750964206799919
+      },
+      {
+        "pressure_pa": 50000,
+        "count": 208,
+        "mean": 0.7821565396653283
+      },
+      {
+        "pressure_pa": 20000,
+        "count": 196,
+        "mean": 0.49347896049358536
+      },
+      {
+        "pressure_pa": 10000,
+        "count": 187,
+        "mean": 0.004400086305420806
+      }
+    ],
+    "geopotential": [
+      {
+        "pressure_pa": 100000,
+        "count": 355,
+        "mean": 1191.8256552112675
+      },
+      {
+        "pressure_pa": 70000,
+        "count": 559,
+        "mean": 28805.60460402504
+      },
+      {
+        "pressure_pa": 50000,
+        "count": 567,
+        "mean": 54003.613051851855
+      },
+      {
+        "pressure_pa": 20000,
+        "count": 552,
+        "mean": 115552.85842155798
+      },
+      {
+        "pressure_pa": 10000,
+        "count": 574,
+        "mean": 158674.67225609755
+      }
+    ]
+  },
+  "sample_limit_per_variable": 10000,
+  "input_records_before_bound": 555,
+  "input_records_used": 555,
+  "temperature_comparison": [
+    {
+      "lead_hours": 0,
+      "pressure_hpa": 700,
+      "cells": 41,
+      "prediction_mean_k": 237.3632354736328,
+      "era5_mean_k": 277.0349426269531,
+      "r4_norm_mean_k": 238.0869023368962,
+      "graphcast_level_mean_k": 267.2038674033149
+    },
+    {
+      "lead_hours": 0,
+      "pressure_hpa": 500,
+      "cells": 42,
+      "prediction_mean_k": 237.4058380126953,
+      "era5_mean_k": 260.4816589355469,
+      "r4_norm_mean_k": 238.0869023368962,
+      "graphcast_level_mean_k": 252.79929404542665
+    },
+    {
+      "lead_hours": 0,
+      "pressure_hpa": 200,
+      "cells": 42,
+      "prediction_mean_k": 236.89443969726562,
+      "era5_mean_k": 218.77371215820312,
+      "r4_norm_mean_k": 238.0869023368962,
+      "graphcast_level_mean_k": 218.0219766728054
+    },
+    {
+      "lead_hours": 72,
+      "pressure_hpa": 700,
+      "cells": 42,
+      "prediction_mean_k": 224.84030151367188,
+      "era5_mean_k": 275.5270080566406,
+      "r4_norm_mean_k": 238.0869023368962,
+      "graphcast_level_mean_k": 267.2038674033149
+    },
+    {
+      "lead_hours": 72,
+      "pressure_hpa": 500,
+      "cells": 42,
+      "prediction_mean_k": 224.8402099609375,
+      "era5_mean_k": 259.9547119140625,
+      "r4_norm_mean_k": 238.0869023368962,
+      "graphcast_level_mean_k": 252.79929404542665
+    },
+    {
+      "lead_hours": 72,
+      "pressure_hpa": 200,
+      "cells": 42,
+      "prediction_mean_k": 224.84005737304688,
+      "era5_mean_k": 218.8277587890625,
+      "r4_norm_mean_k": 238.0869023368962,
+      "graphcast_level_mean_k": 218.0219766728054
+    }
+  ],
+  "source_hashes_before_and_after": {
+    "manifest": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+    "database": "d5e7178810fb261f427c43443c1f8f0cca2e4b328636147bf35ce6d06b7668b3",
+    "observations": "2e4af1a87192b0bb5bac5b17c6f5ba8f03a967c550b70b952bd74cc92a99f3da",
+    "admission": "2f3f8eb1b428a77c826d99e18cc82a8cb8d28cbe537ac0f230b1bd8da84cb488",
+    "era5_reference": "6d78535b7d7335440bb811e04689266fbb343a507c429ab975a4ed2808e51b06",
+    "completion": "b9f486722509d2a25ba2cf0cfd7e7e185da9a3c9cda7cc29f2282be157f3eb93",
+    "best": "1235f935a51c42d7083cac26c0d9c1f75e02deb48ddb1fe89a9482cbc9bc349b"
+  },
+  "source_hashes_unchanged": true,
+  "checkpoint_unchanged": true,
+  "scientific_acceptance": false
+}

@@ -1,0 +1,11 @@
+...............................................                          [100%]
+=============================== warnings summary ===============================
+tests/test_reference_assets.py::test_actual_upstream_bytes_and_fit_period
+  <frozen importlib._bootstrap>:241: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 16 from C header, got 96 from PyObject
+
+tests/test_reference_assets.py::test_dem_preparation_reaches_all_three_models
+  /home/user/global-ml-weather-audit-r5-v2/global_weather/model.py:34: UserWarning: Sparse invariant checks are implicitly disabled. Memory errors (e.g. SEGFAULT) will occur when operating on a sparse tensor which violates the invariants, but checks incur performance overhead. To silence this warning, explicitly opt in or out. See `torch.sparse.check_sparse_tensor_invariants.__doc__` for guidance.  (Triggered internally at /pytorch/aten/src/ATen/Context.cpp:760.)
+    adjacency = torch.sparse_coo_tensor(torch.tensor(np.stack([dst,src])),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+47 passed, 2 warnings in 6.30s
