@@ -35,7 +35,10 @@ class PressureProfileModel(nn.Module):
 
     def _decode(self,state,issue,lead):
         transformed=self.head(state)*self.std+self.mean
-        q=self.normalization.q_scale*torch.expm1(transformed[...,1]).clamp_min(0.)
+        # Mask before the nonlinear inverse: exp(invalid) can overflow and
+        # poison backward even when a later output mask removes that value.
+        q_transformed=torch.where(self.norm_support[:,1],transformed[...,1],torch.zeros_like(transformed[...,1]))
+        q=self.normalization.q_scale*torch.expm1(q_transformed).clamp_min(0.)
         values=torch.stack((transformed[...,0],q,*[transformed[...,i] for i in range(2,5)]),-1)
         profiles=torch.cat((values,values.new_full((*values.shape[:-1],1),float('nan'))),-1)
         mask=torch.cat((self.norm_support,torch.zeros(37,1,dtype=torch.bool,device=state.device)),-1)[None].expand_as(profiles)

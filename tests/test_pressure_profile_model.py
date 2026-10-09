@@ -129,3 +129,18 @@ def test_s1_uses_actual_origin_and_excludes_entire_held_profile(monkeypatch):
         return torch.tensor(1.),[1]*5
     monkeypatch.setattr(training,'objective',held_loss)
     assert float(training.reconstruction(Model(),Dataset(),targets,50,'train'))==1.
+
+
+def test_unsupported_humidity_is_masked_before_exponential_backward():
+    payload=norms().payload
+    payload['support'][0][1]=False;payload['mean'][0][1]=None;payload['std'][0][1]=None;payload['count'][0][1]=0
+    model=PressureProfileModel(build_pyramid(0)[0],PressureNormalization(payload),8)
+    state=torch.zeros(12,37,8,requires_grad=True)
+    with torch.no_grad():model.head.weight.zero_();model.head.bias[1]=1000.
+    frame=model._decode(state,START,0)
+    valid=frame.profile_variable_mask[...,1]
+    assert torch.isnan(frame.profiles[:,0,1]).all()
+    loss=frame.profiles[...,1][valid].sum()
+    loss.backward()
+    assert torch.isfinite(model.head.bias.grad).all()
+    assert torch.isfinite(state.grad).all()
