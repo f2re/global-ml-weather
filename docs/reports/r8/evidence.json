@@ -1,0 +1,413 @@
+{
+  "source_commit": "91e2e7a9b4759bbe68eb2ecd27e740b57779ee78",
+  "cwd": "/home/user/global-ml-weather-r8-v2",
+  "started_utc": "2026-10-09T11:13:51.925352+00:00",
+  "deadline_utc": "2026-10-22T10:15:00+00:00",
+  "plan_sha256": "8775dc178c48247506e23c8a802ab22ccfd763fa7f42778bc48861169b8e286f",
+  "driver_sha256": "d9cf0f5723cc0179944483a834ab1572fcb73f3ffaf8af224c374962e8fd0cf5",
+  "attempts": [
+    {
+      "number": 1,
+      "started_utc": "2026-10-09T11:13:51.925794+00:00",
+      "steps": [
+        {
+          "name": "pytest",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "-m",
+            "pytest",
+            "-q"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:13:51.929432+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "finished_utc": "2026-10-09T11:16:16.968449+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-pytest.stdout.log",
+              "sha256": "86ab1e3bae1b7291f018ed094b2914c57cd5f85ff430b1af5245073aba58fc39"
+            },
+            "stderr": {
+              "path": "attempt-01-pytest.stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        {
+          "name": "contracts",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "-m",
+            "pytest",
+            "tests/test_ecosystem.py",
+            "tests/test_agent_contracts.py",
+            "tests/test_pipeline.py",
+            "tests/test_reference_assets.py",
+            "-q"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:16:16.971972+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "finished_utc": "2026-10-09T11:16:38.981071+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-contracts.stdout.log",
+              "sha256": "33642241a8ffd80f3a7771e23c99bd18e96dc1de76d7c27cdb89b05efcb4e572"
+            },
+            "stderr": {
+              "path": "attempt-01-contracts.stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        {
+          "name": "baseline",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "-m",
+            "global_weather.cli",
+            "train-smoke",
+            "--optimizer-steps",
+            "2",
+            "--horizon-hours",
+            "72",
+            "--output",
+            "outputs/remote-r8-checks/baseline"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:16:38.984409+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "finished_utc": "2026-10-09T11:16:41.990094+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-baseline.stdout.log",
+              "sha256": "8eea5ed0379558312c4876983a0a234bffc29f2dc0c7508f2ca6586762988915"
+            },
+            "stderr": {
+              "path": "attempt-01-baseline.stderr.log",
+              "sha256": "287abba30f757c2c7d5b1eed061f45065ef13f839c38a99a431fb89bba48a2e3"
+            }
+          }
+        },
+        {
+          "name": "adaptive",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "-m",
+            "global_weather.adaptive_cli",
+            "--horizon-hours",
+            "72",
+            "--output",
+            "outputs/remote-r8-checks/adaptive"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:16:41.993877+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "finished_utc": "2026-10-09T11:16:45.002130+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-adaptive.stdout.log",
+              "sha256": "6db1eaf093fa832559852c22fd019beab85a7b63d65b40fffb024e30b4d81377"
+            },
+            "stderr": {
+              "path": "attempt-01-adaptive.stderr.log",
+              "sha256": "287abba30f757c2c7d5b1eed061f45065ef13f839c38a99a431fb89bba48a2e3"
+            }
+          }
+        },
+        {
+          "name": "multimodal",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "-m",
+            "global_weather.multimodal",
+            "selftest",
+            "--output",
+            "outputs/remote-r8-checks/multimodal"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:16:45.005772+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "finished_utc": "2026-10-09T11:16:48.011250+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-multimodal.stdout.log",
+              "sha256": "751044fe1b8af73ce859646e297b93f78b7f2c712d2df6a2c571e8dd17788593"
+            },
+            "stderr": {
+              "path": "attempt-01-multimodal.stderr.log",
+              "sha256": "287abba30f757c2c7d5b1eed061f45065ef13f839c38a99a431fb89bba48a2e3"
+            }
+          }
+        },
+        {
+          "name": "pipeline",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "scripts/pipeline-test.py"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:16:48.014440+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "finished_utc": "2026-10-09T11:16:56.022452+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-pipeline.stdout.log",
+              "sha256": "b3d1b80e5aa706a608313009bd05d80ab4d54873097ee7859db617a5c7e7e4bc"
+            },
+            "stderr": {
+              "path": "attempt-01-pipeline.stderr.log",
+              "sha256": "0d4fb5d008880cb618f1451a94d58122fe5ada6a92a9a40cec7fb23962e197e2"
+            }
+          }
+        },
+        {
+          "name": "docs",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "scripts/check_docs.py",
+            "--strict"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:16:56.026311+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "finished_utc": "2026-10-09T11:16:57.033287+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-docs.stdout.log",
+              "sha256": "39ed9aa6a17dc76799f8684754c4c067fc8c36f43af40074af3ad4b9d601061f"
+            },
+            "stderr": {
+              "path": "attempt-01-docs.stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        {
+          "name": "browser",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "scripts/browser-test.py"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:16:57.037231+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "finished_utc": "2026-10-09T11:17:05.045968+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-browser.stdout.log",
+              "sha256": "470fd00d7137a00f8ba6ce2cec252a51f2e34ec2dbd718388bec24f22a22f26d"
+            },
+            "stderr": {
+              "path": "attempt-01-browser.stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        {
+          "name": "pipeline-browser",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "scripts/pipeline-browser-test.py"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:17:05.051066+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "finished_utc": "2026-10-09T11:17:25.063109+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-pipeline-browser.stdout.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "stderr": {
+              "path": "attempt-01-pipeline-browser.stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        {
+          "name": "climate-acquisition",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "-m",
+            "global_weather.seasonal_acquisition",
+            "--output",
+            "/home/user/global-weather-climate-cache/ncep1-1991-2020",
+            "--allow-network"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:17:25.066912+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "artifact": {
+            "path": "/home/user/global-weather-climate-cache/ncep1-1991-2020/acquisition.json",
+            "sha256": "403c8b0ef11362103dc9934e5ac2df6beae37015419dd232dcc9404de36dcde0"
+          },
+          "finished_utc": "2026-10-09T11:18:18.086793+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-climate-acquisition.stdout.log",
+              "sha256": "206b8dcc2c9b811323b71a6177f442817d384a0350fba4e326e579b56a007796"
+            },
+            "stderr": {
+              "path": "attempt-01-climate-acquisition.stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        {
+          "name": "climate-preparation",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "-m",
+            "global_weather.seasonal_climatology",
+            "--source-dir",
+            "/home/user/global-weather-climate-cache/ncep1-1991-2020",
+            "--output",
+            "/home/user/global-ml-weather-r8-v2/outputs/remote-r8-stations/climatology",
+            "--mesh-level",
+            "1",
+            "--minimum-years",
+            "25"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:18:18.090206+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "artifact": {
+            "path": "/home/user/global-ml-weather-r8-v2/outputs/remote-r8-stations/climatology/manifest.json",
+            "sha256": "772af44834b1608bf4203884739fc92d3b4ef726bd6dcf401a702bf9b8cb6db8"
+          },
+          "finished_utc": "2026-10-09T11:18:22.099045+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-climate-preparation.stdout.log",
+              "sha256": "5eebea0d565ffc85e761ce6e6211d33e2ab729212ca3c06b34c2ec2aac136f26"
+            },
+            "stderr": {
+              "path": "attempt-01-climate-preparation.stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        {
+          "name": "graphcast-norms",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "-m",
+            "global_weather.profile_graphcast_normalization",
+            "--dataset",
+            "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/dataset",
+            "--output",
+            "/home/user/global-ml-weather-r8-v2/outputs/remote-r8-stations/graphcast-norms.json"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:18:22.102529+00:00",
+          "timeout_seconds": 1800,
+          "returncode": 0,
+          "status": "passed",
+          "artifact": {
+            "path": "/home/user/global-ml-weather-r8-v2/outputs/remote-r8-stations/graphcast-norms.json",
+            "sha256": "4a2a84b832d2df6db9eee9e44b9187035d84cdc22a09bfa703d42d7af6a3b97a"
+          },
+          "finished_utc": "2026-10-09T11:20:09.140332+00:00",
+          "logs": {
+            "stdout": {
+              "path": "attempt-01-graphcast-norms.stdout.log",
+              "sha256": "238b413a8abf9767ab7f5b6cf1366303f7c7eea1f6f57fc1e1641343f6c4ed46"
+            },
+            "stderr": {
+              "path": "attempt-01-graphcast-norms.stderr.log",
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        },
+        {
+          "name": "train",
+          "command": [
+            "/home/user/global-ml-weather/.venv/bin/python",
+            "-m",
+            "global_weather.profile_training_v2",
+            "--dataset",
+            "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/dataset",
+            "--norms",
+            "/home/user/global-ml-weather-r8-v2/outputs/remote-r8-stations/graphcast-norms.json",
+            "--config",
+            "/home/user/global-ml-weather-r8-v2/configs/profile_r8_training.json",
+            "--climatology",
+            "/home/user/global-ml-weather-r8-v2/outputs/remote-r8-stations/climatology",
+            "--output",
+            "/home/user/global-ml-weather-r8-v2/outputs/remote-r8-stations/training"
+          ],
+          "cwd": "/home/user/global-ml-weather-r8-v2",
+          "started_utc": "2026-10-09T11:20:09.143885+00:00",
+          "timeout_seconds": 1119260.856072
+        }
+      ]
+    }
+  ],
+  "climate_sources_sha256": "b91c97ac05e6665a384227c500ec0729e8e555118c33273a967e9526cc1dcbba",
+  "data_kind": "real",
+  "meteorologically_validated": false,
+  "environment": {
+    "python": "3.11.2 (main, Oct 11 2025, 09:33:38) [GCC 12.2.0]",
+    "platform": "Linux-6.1.141-1-generic-x86_64-with-glibc2.36",
+    "packages": {
+      "torch": "2.11.0+cu128",
+      "numpy": "2.4.6",
+      "scipy": "1.17.1",
+      "rasterio": "1.4.4",
+      "netCDF4": "1.7.4",
+      "cdsapi": "0.7.7",
+      "pytest": "9.1.1"
+    },
+    "accelerators": "GPU-2fd0e13b-e523-bf7e-bd04-32fac5d752e9, NVIDIA GeForce RTX 4090, 580.65.06\nGPU-fc554540-8abb-af15-c23b-c38c9b72aa91, NVIDIA GeForce RTX 4090, 580.65.06"
+  },
+  "status": "running",
+  "environment_limits": {
+    "OMP_NUM_THREADS": "8",
+    "CUDA_VISIBLE_DEVICES": "0"
+  },
+  "resource_limits": {
+    "new_network_bytes": 67108864,
+    "climate_expected_source_bytes": 45962671,
+    "climate_attempts_per_source": 3,
+    "climate_socket_timeout_seconds": 90,
+    "climate_phase_timeout_seconds": 1800,
+    "climate_raw_cache": "/home/user/global-weather-climate-cache/ncep1-1991-2020",
+    "shared_data_read_only": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations",
+    "directory_gib": 64,
+    "minimum_free_disk_gib": 64,
+    "gpu_shared_with_r7": true,
+    "other_jobs_termination_authorized": false
+  },
+  "source_roles": {
+    "input": "real_IGRA_measurements",
+    "target": "real_IGRA_measurements",
+    "normalization": "fixed_GraphCast_mu_sigma_37_levels",
+    "climate_context": "fixed_NOAA_NCEP1_monthly_means_1991_2020",
+    "climate_context_is_target": false,
+    "era5": "separate_frozen_verification_existing_cache_only",
+    "scientific_acceptance": false
+  }
+}

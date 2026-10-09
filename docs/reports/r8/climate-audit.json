@@ -1,0 +1,66 @@
+{
+  "captured_utc": "2026-10-09T11:19:15.774099+00:00",
+  "source_commit": "91e2e7a9b4759bbe68eb2ecd27e740b57779ee78",
+  "period": {
+    "start": "1991-01-01",
+    "end": "2020-12-31"
+  },
+  "shape": [
+    12,
+    42,
+    37,
+    5
+  ],
+  "supported_values_by_variable": [
+    16128,
+    10080,
+    16128,
+    16128,
+    16128
+  ],
+  "variables": [
+    "temperature",
+    "specific_humidity",
+    "u",
+    "v",
+    "geopotential"
+  ],
+  "units": [
+    "K",
+    "kg kg-1",
+    "m s-1",
+    "m s-1",
+    "m2 s-2"
+  ],
+  "minimum_valid_years": 25,
+  "manifest_sha256": "772af44834b1608bf4203884739fc92d3b4ef726bd6dcf401a702bf9b8cb6db8",
+  "npz_sha256": "448eec89dad1046b587f542ed636c5241922e7d650d5cf342c04acaab4884bdf",
+  "sample_time": "2021-07-01T00:00:00+00:00",
+  "sample_700hpa_range": {
+    "temperature": {
+      "minimum": 223.59399467843474,
+      "maximum": 288.9846950320116
+    },
+    "specific_humidity": {
+      "minimum": 3.6195797754115745e-05,
+      "maximum": 0.007680389150101594
+    },
+    "u": {
+      "minimum": -9.14316589786182,
+      "maximum": 16.969778533980573
+    },
+    "v": {
+      "minimum": -9.982271585308137,
+      "maximum": 2.0002316275274583
+    },
+    "geopotential": {
+      "minimum": 25615.9813794364,
+      "maximum": 31543.490637716368
+    }
+  },
+  "above_native_bounds_supported": {
+    "q_above_300hpa": false,
+    "others_above_10hpa": false
+  },
+  "scientific_acceptance": false
+}

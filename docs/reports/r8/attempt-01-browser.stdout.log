@@ -1,0 +1,1 @@
+{"page_errors": [], "mobile_overflow": false, "backend": "actual_local_http", "model": "adaptive", "connector_ids": ["arktika_worker", "era5_cds", "ghcnh", "graphcast", "local_observations", "noaa_isd", "satdump", "satellite_manifest", "upper_air_coordinate"]}

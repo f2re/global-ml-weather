@@ -1,0 +1,92 @@
+{
+  "schema": "noaa-monthly-acquisition-1",
+  "provider": "NOAA_NCEP1",
+  "period": [
+    "1991-01-01",
+    "2020-12-31"
+  ],
+  "maximum_body_bytes": 67108864,
+  "created_utc": "2026-10-09T11:17:26.202122+00:00",
+  "received_body_bytes": 56173328,
+  "files": {
+    "air.mon.ltm.1991-2020.nc": {
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/air.mon.ltm.1991-2020.nc",
+      "bytes": 9709277,
+      "sha256": "8fe6765d70e72bd99ff97dfb62c78cec69b274d3b0431f2dd8792b6bedd8496d"
+    },
+    "shum.mon.ltm.1991-2020.nc": {
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/shum.mon.ltm.1991-2020.nc",
+      "bytes": 5045372,
+      "sha256": "03bb3f078aea64ee9e227c8e792e6636c060c314a5c2b9e9927ae67f34ac13f6"
+    },
+    "uwnd.mon.ltm.1991-2020.nc": {
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/uwnd.mon.ltm.1991-2020.nc",
+      "bytes": 10927383,
+      "sha256": "39996c7f68ebbe852109990bacda3af5a9df61d398d52b579fcec63727c60b16"
+    },
+    "vwnd.mon.ltm.1991-2020.nc": {
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/vwnd.mon.ltm.1991-2020.nc",
+      "bytes": 11405646,
+      "sha256": "7ca58b72fc39bce5754c9dca4f90cd1f58830f4edf82bd1e54f8f22af4c28915"
+    },
+    "hgt.mon.ltm.1991-2020.nc": {
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/hgt.mon.ltm.1991-2020.nc",
+      "bytes": 8874993,
+      "sha256": "cc49de28e07c786878df4c1c9e9c7ac5f9ec4a7cd99abed517e3f86d54551b81"
+    }
+  },
+  "attempts": [
+    {
+      "name": "air.mon.ltm.1991-2020.nc",
+      "number": 1,
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/air.mon.ltm.1991-2020.nc",
+      "status": "passed",
+      "started_utc": "2026-10-09T11:17:26.202168+00:00",
+      "finished_utc": "2026-10-09T11:17:35.615946+00:00"
+    },
+    {
+      "name": "shum.mon.ltm.1991-2020.nc",
+      "number": 1,
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/shum.mon.ltm.1991-2020.nc",
+      "status": "passed",
+      "started_utc": "2026-10-09T11:17:35.617645+00:00",
+      "finished_utc": "2026-10-09T11:17:42.795231+00:00"
+    },
+    {
+      "name": "uwnd.mon.ltm.1991-2020.nc",
+      "number": 1,
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/uwnd.mon.ltm.1991-2020.nc",
+      "status": "passed",
+      "started_utc": "2026-10-09T11:17:42.796697+00:00",
+      "finished_utc": "2026-10-09T11:17:51.234012+00:00"
+    },
+    {
+      "name": "vwnd.mon.ltm.1991-2020.nc",
+      "number": 1,
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/vwnd.mon.ltm.1991-2020.nc",
+      "status": "failed",
+      "started_utc": "2026-10-09T11:17:51.235649+00:00",
+      "finished_utc": "2026-10-09T11:17:59.700802+00:00",
+      "exception": "ValueError",
+      "reason": "Incomplete NOAA climate file."
+    },
+    {
+      "name": "vwnd.mon.ltm.1991-2020.nc",
+      "number": 2,
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/vwnd.mon.ltm.1991-2020.nc",
+      "status": "passed",
+      "started_utc": "2026-10-09T11:17:59.702090+00:00",
+      "finished_utc": "2026-10-09T11:18:08.098040+00:00"
+    },
+    {
+      "name": "hgt.mon.ltm.1991-2020.nc",
+      "number": 1,
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/hgt.mon.ltm.1991-2020.nc",
+      "status": "passed",
+      "started_utc": "2026-10-09T11:18:08.099606+00:00",
+      "finished_utc": "2026-10-09T11:18:16.701578+00:00"
+    }
+  ],
+  "status": "verified_cached_files",
+  "verified_utc": "2026-10-09T11:18:16.702886+00:00"
+}

@@ -1,0 +1,5 @@
+{"time": "2026-10-09T11:16:51.616024+00:00", "stage": "training", "epoch": 1, "sample": 1, "samples": 3, "loss": 0.5059325695037842}
+{"time": "2026-10-09T11:16:52.244614+00:00", "stage": "training", "epoch": 1, "sample": 2, "samples": 3, "loss": 0.5184879302978516}
+{"time": "2026-10-09T11:16:53.040113+00:00", "stage": "training", "epoch": 1, "sample": 3, "samples": 3, "loss": 0.49055343866348267}
+{"time": "2026-10-09T11:16:53.493549+00:00", "stage": "epoch_completed", "epoch": 1, "training_horizon_hours": 72, "validation_horizon_hours": 72, "train_loss": 0.5049913128217062, "validation_loss": 0.5174530086417993, "elapsed_seconds": 3.1237981291487813}
+{"status": "synthetic_pipeline_passed", "forecast_leads": [0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63, 66, 69, 72], "metric_rows": 5520, "test_used_for_selection": false, "data_kind": "synthetic", "meteorologically_validated": false}

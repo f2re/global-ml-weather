@@ -1,0 +1,52 @@
+{
+  "status": "synthetic_adaptive_smoke",
+  "scientifically_validated": false,
+  "normalization": "synthetic-unscaled; NOT imported ERA5 statistics",
+  "cells": 42,
+  "latent_shape": [
+    42,
+    8,
+    16
+  ],
+  "output_pressure_levels": 37,
+  "forecast_leads": [
+    0,
+    3,
+    6,
+    9,
+    12,
+    15,
+    18,
+    21,
+    24,
+    27,
+    30,
+    33,
+    36,
+    39,
+    42,
+    45,
+    48,
+    51,
+    54,
+    57,
+    60,
+    63,
+    66,
+    69,
+    72
+  ],
+  "parameters": 17137,
+  "training": [
+    {
+      "loss": 3.968256714870222e-05,
+      "gradient_norm": 0.006603052373975515,
+      "supervised_leads": 1
+    },
+    {
+      "loss": 2.94288074655924e-05,
+      "gradient_norm": 0.0052883257158100605,
+      "supervised_leads": 1
+    }
+  ]
+}
