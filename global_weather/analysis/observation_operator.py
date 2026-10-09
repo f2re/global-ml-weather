@@ -195,6 +195,24 @@ def _sample_frame(frame, grid, record, neighbours):
                     or variable_mask.shape != frame.profiles.shape):
                 raise ValueError('invalid_profile_variable_mask')
             valid = valid & variable_mask[cells[:, None], level_tensor[None, :], k]
+        if k in (2, 3) and getattr(frame, 'wind_basis', None) == 'local_enu_vector':
+            # Components live in different local ENU bases. Interpolate the
+            # Cartesian tangent vector, then project at the measurement point.
+            pair = frame.profiles[cells[:, None], level_tensor[None, :], 2:4]
+            if variable_mask is not None:
+                valid = valid & variable_mask[cells[:, None], level_tensor[None, :], 2:4].all(-1)
+            if not bool(torch.isfinite(pair[valid]).all()):
+                raise ValueError('nonfinite_vector_prediction')
+            xyz = grid.xyz[indices]
+            lon = np.arctan2(xyz[:, 1], xyz[:, 0]); lat = np.arctan2(xyz[:, 2], np.hypot(xyz[:, 0], xyz[:, 1]))
+            east = np.column_stack((-np.sin(lon), np.cos(lon), np.zeros(len(lon))))
+            north = np.column_stack((-np.sin(lat)*np.cos(lon), -np.sin(lat)*np.sin(lon), np.cos(lat)))
+            basis = torch.as_tensor(np.stack((east, north), axis=1), dtype=values.dtype, device=device)
+            vectors = torch.einsum('clv,cvd->cld', torch.where(valid[..., None], pair, torch.zeros_like(pair)), basis)
+            qlat, qlon = np.deg2rad([record['latitude'], record['longitude']])
+            direction = ([-np.sin(qlon), np.cos(qlon), 0.] if k == 2 else
+                         [-np.sin(qlat)*np.cos(qlon), -np.sin(qlat)*np.sin(qlon), np.cos(qlat)])
+            values = vectors @ torch.as_tensor(direction, dtype=values.dtype, device=device)
         # Both bracketing levels are required. Renormalising just one level
         # would silently turn interpolation into vertical extrapolation.
         valid = valid.all(dim=1, keepdim=True).expand_as(values)
