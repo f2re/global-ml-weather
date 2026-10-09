@@ -8,7 +8,7 @@ import torch
 
 from global_weather import profile_graphcast_normalization as graphcast
 from global_weather.profile_normalization import load_normalization
-from global_weather.profile_model_v2 import PressureProfileModel
+from global_weather.profile_model_v2 import PressureProfileModel,nonnegative_humidity
 from global_weather.profile_training import VARIABLES, START
 from global_weather.grid import build_pyramid
 from global_weather.import_climatology import PINNED_HASHES
@@ -70,9 +70,11 @@ def test_graphcast_q_no_softplus_floor_and_affine_objective_gradients():
     with torch.no_grad(): model.head.weight.zero_(); model.head.bias[1] = -1000.
     frame = model._decode(torch.zeros(12, 37, 8), issue, 0)
     assert torch.equal(frame.profiles[..., 1], torch.zeros(12, 37))
-    raw = torch.tensor([0., 1e-6], requires_grad=True)
-    raw.clamp_min(0.).sum().backward()
-    assert torch.equal(raw.grad, torch.ones(2))
+    raw = torch.tensor([-1e-6,0., 1e-6], requires_grad=True)
+    projected=nonnegative_humidity(raw)
+    assert torch.equal(projected,torch.tensor([0.,0.,1e-6]))
+    projected.sum().backward()
+    assert torch.equal(raw.grad, torch.tensor([0.,1.,1.]))
     assert torch.isnan(frame.profiles[..., 5]).all()
 
 
@@ -144,3 +146,22 @@ def test_checkpoint_cannot_replace_fixed_graphcast_buffers():
     model=PressureProfileModel(build_pyramid(0)[0],graphcast.GraphCastNormalization(payload()),8)
     state=model.state_dict();state['mean']=state['mean'].clone()+1
     with pytest.raises(ValueError,match='fixed normalization'):_load_fixed_state(model,state)
+
+
+def test_humidity_projection_preserves_nonfinite_failures_and_actual_graphcast_decoder_zero_gradient():
+    nonfinite=nonnegative_humidity(torch.tensor([float('nan'),float('inf')]))
+    assert torch.isnan(nonfinite[0]) and torch.isposinf(nonfinite[1])
+    model=PressureProfileModel(build_pyramid(0)[0],graphcast.GraphCastNormalization(payload()),8)
+    # Use a representable zero of the pinned affine inverse, avoiding a
+    # round-off perturbation that would accidentally test q<0 instead of q=0.
+    normalized_zero=-model.mean[:,1]/model.std[:,1]
+    exact=torch.nonzero(normalized_zero*model.std[:,1]+model.mean[:,1]==0).flatten()
+    assert len(exact)>0
+    level=int(exact[0])
+    with torch.no_grad():
+        model.head.weight.zero_();model.head.bias.zero_();model.head.bias[1]=normalized_zero[level]
+    frame=model._decode(torch.zeros(12,37,8),START,0)
+    assert frame.profiles[0,level,1]==0
+    frame.profiles[0,level,1].backward()
+    assert torch.isfinite(model.head.bias.grad).all()
+    assert float(model.head.bias.grad[1])==pytest.approx(float(model.std[level,1]))

@@ -5,7 +5,7 @@ import pytest
 import torch
 from global_weather.grid import build_pyramid
 from global_weather.profile_normalization import PressureNormalization,SCHEMA,PERIOD
-from global_weather.profile_model_v2 import PressureProfileModel
+from global_weather.profile_model_v2 import PressureProfileModel,nonnegative_humidity
 from global_weather.profile_training_v2 import objective
 from global_weather.profile_training import VARIABLES,START
 from global_weather.vertical import PRESSURE_HPA,PROFILE_UNITS
@@ -31,10 +31,21 @@ def test_q_transform_roundtrip_zero_dry_wet_and_supported_gradients():
     n=norms()
     for q in (0.,1e-9,1e-6,.001,.02):
         assert float(n.inverse('specific_humidity',n.normalize('specific_humidity',q,70000),70000))==pytest.approx(q,abs=1e-16)
-    transformed=torch.tensor([0.,1e-9,.01],requires_grad=True)
-    physical=.003*torch.expm1(transformed).clamp_min(0.)
-    assert physical[0]==0
-    physical.sum().backward();assert torch.isfinite(transformed.grad).all() and (transformed.grad>0).all()
+    transformed=torch.tensor([-1e-9,0.,1e-9,.01],requires_grad=True)
+    physical=.003*nonnegative_humidity(torch.expm1(transformed))
+    assert physical[0]==physical[1]==0
+    physical.sum().backward()
+    expected=torch.where(transformed.detach()<0,torch.zeros_like(transformed),.003*torch.exp(transformed.detach()))
+    assert torch.isfinite(transformed.grad).all() and torch.allclose(transformed.grad,expected)
+    model=PressureProfileModel(build_pyramid(0)[0],n,8)
+    with torch.no_grad():
+        model.head.weight.zero_();model.head.bias.zero_()
+        model.head.bias[1]=-model.mean[0,1]/model.std[0,1]
+    frame=model._decode(torch.zeros(12,37,8),START,0)
+    assert frame.profiles[0,0,1]==0
+    frame.profiles[0,0,1].backward()
+    assert torch.isfinite(model.head.bias.grad).all()
+    assert float(model.head.bias.grad[1])==pytest.approx(n.q_scale*float(model.std[0,1]))
 
 
 def test_pressure_basis_survives_dynamics_and_causal_masks():

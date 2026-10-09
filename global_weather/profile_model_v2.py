@@ -12,6 +12,16 @@ from .vertical import PRESSURE_HPA
 from .profile_normalization import PressureNormalization
 
 
+def nonnegative_humidity(value: torch.Tensor) -> torch.Tensor:
+    """Project q to max(q,0), choosing the positive-side subgradient at zero.
+
+    The derivative is zero for q<0 and one for q>=0, explicitly independent of
+    PyTorch's native clamp boundary convention. NaN/+inf remain visible to the
+    numerical guards, rather than becoming apparently valid dry predictions.
+    """
+    return torch.where(value<0,torch.zeros_like(value),value)
+
+
 class PressureProfileModel(nn.Module):
     def __init__(self, grid, normalization: PressureNormalization, hidden: int = 32):
         super().__init__(); self.grid=grid; self.normalization=normalization; self.hidden=hidden
@@ -44,8 +54,8 @@ class PressureProfileModel(nn.Module):
         # Mask before the nonlinear inverse: exp(invalid) can overflow and
         # poison backward even when a later output mask removes that value.
         q_transformed=torch.where(self.norm_support[:,1],transformed[...,1],torch.zeros_like(transformed[...,1]))
-        q=(q_transformed.clamp_min(0.) if self.normalization.humidity_transform=='identity'
-           else self.normalization.q_scale*torch.expm1(q_transformed).clamp_min(0.))
+        q=(nonnegative_humidity(q_transformed) if self.normalization.humidity_transform=='identity'
+           else self.normalization.q_scale*nonnegative_humidity(torch.expm1(q_transformed)))
         values=torch.stack((transformed[...,0],q,*[transformed[...,i] for i in range(2,5)]),-1)
         profiles=torch.cat((values,values.new_full((*values.shape[:-1],1),float('nan'))),-1)
         mask=torch.cat((self.norm_support,torch.zeros(37,1,dtype=torch.bool,device=state.device)),-1)[None].expand_as(profiles)
