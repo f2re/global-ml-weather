@@ -1,0 +1,37 @@
+{
+  "captured_utc": "2026-10-09T07:37:42.860570+00:00",
+  "reason": "operator_requested_fresh_R7_fixed_GraphCast_normalization",
+  "source_commit": "0890c84b346f5e1a17a3d4e5e57f10379e887ab8",
+  "files": {
+    "/home/user/global-ml-weather-r6-v2/outputs/remote-r6-stations/training/progress.json": {
+      "sha256": "a3eba1f81135ab059d44ea2a619da3cb37a069c2ad6b9ebe1d8c900075aaf978",
+      "contents": {
+        "epoch": 2,
+        "optimizer_steps": 192,
+        "train_issues": 192,
+        "loss": 1.0863454341888428,
+        "forecast_loss": 0.8908452391624451,
+        "reconstruction_loss": 0.7820010185241699,
+        "seconds": 961.4377955505624,
+        "source_commit": "0890c84b346f5e1a17a3d4e5e57f10379e887ab8",
+        "device": "cuda"
+      }
+    },
+    "/home/user/global-ml-weather-r6-v2/outputs/remote-r6-stations/training/latest.json": {
+      "sha256": "ba7537bfa9525e7c6e76de5bb15b888d93a18b0c99a9da4a8f23413e9d867ea3",
+      "contents": {
+        "directory": "epoch-0001",
+        "epoch": 1,
+        "sha256": "50682a4dcb537c7c9d4992e4ad084b5a6a1bc9e0d0967978a5485a6232814b9d"
+      }
+    },
+    "/home/user/global-ml-weather-r6-v2/outputs/remote-r6-stations/training/best.json": {
+      "sha256": "ba7537bfa9525e7c6e76de5bb15b888d93a18b0c99a9da4a8f23413e9d867ea3",
+      "contents": {
+        "directory": "epoch-0001",
+        "epoch": 1,
+        "sha256": "50682a4dcb537c7c9d4992e4ad084b5a6a1bc9e0d0967978a5485a6232814b9d"
+      }
+    }
+  }
+}

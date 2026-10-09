@@ -1,0 +1,863 @@
+{
+  "captured_utc": "2026-10-09T07:53:24.255254+00:00",
+  "source_commit": "5c217490a0691dcbffbffbd06a3f6f91f4bd876d",
+  "tracked_changes": "",
+  "execution": {
+    "source_commit": "5c217490a0691dcbffbffbd06a3f6f91f4bd876d",
+    "cwd": "/home/user/global-ml-weather-r7",
+    "started_utc": "2026-10-09T07:43:41.179952+00:00",
+    "deadline_utc": "2026-10-22T10:15:00+00:00",
+    "plan_sha256": "8775dc178c48247506e23c8a802ab22ccfd763fa7f42778bc48861169b8e286f",
+    "driver_sha256": "142c90bffa7b304234ab913f34b821d3f277236eee16d3061a0715969265bdff",
+    "attempts": [
+      {
+        "number": 1,
+        "started_utc": "2026-10-09T07:43:41.180330+00:00",
+        "steps": [
+          {
+            "name": "pytest",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "cwd": "/home/user/global-ml-weather-r7",
+            "started_utc": "2026-10-09T07:43:41.184210+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T07:46:00.219785+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-pytest.stdout.log",
+                "sha256": "8e21cfdcf1ae46e16f40867091f5588adb5f278f38e18cf68aaa2a79bb8011d3"
+              },
+              "stderr": {
+                "path": "attempt-01-pytest.stderr.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          },
+          {
+            "name": "contracts",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "pytest",
+              "tests/test_ecosystem.py",
+              "tests/test_agent_contracts.py",
+              "tests/test_pipeline.py",
+              "tests/test_reference_assets.py",
+              "-q"
+            ],
+            "cwd": "/home/user/global-ml-weather-r7",
+            "started_utc": "2026-10-09T07:46:00.222811+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T07:46:16.229498+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-contracts.stdout.log",
+                "sha256": "e4dd8e8c7b5fe60239385c675214fd7c1051d206f77349ebc212b649bc4ba475"
+              },
+              "stderr": {
+                "path": "attempt-01-contracts.stderr.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          },
+          {
+            "name": "baseline",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "global_weather.cli",
+              "train-smoke",
+              "--optimizer-steps",
+              "2",
+              "--horizon-hours",
+              "72",
+              "--output",
+              "outputs/remote-r7-checks/baseline"
+            ],
+            "cwd": "/home/user/global-ml-weather-r7",
+            "started_utc": "2026-10-09T07:46:16.233131+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T07:46:19.237904+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-baseline.stdout.log",
+                "sha256": "8eea5ed0379558312c4876983a0a234bffc29f2dc0c7508f2ca6586762988915"
+              },
+              "stderr": {
+                "path": "attempt-01-baseline.stderr.log",
+                "sha256": "8d6a6add616ea4c63713a2035b322ca94ee9d10fd89bc5cfa485833995a11e1b"
+              }
+            }
+          },
+          {
+            "name": "adaptive",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "global_weather.adaptive_cli",
+              "--horizon-hours",
+              "72",
+              "--output",
+              "outputs/remote-r7-checks/adaptive"
+            ],
+            "cwd": "/home/user/global-ml-weather-r7",
+            "started_utc": "2026-10-09T07:46:19.241440+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T07:46:22.246510+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-adaptive.stdout.log",
+                "sha256": "6db1eaf093fa832559852c22fd019beab85a7b63d65b40fffb024e30b4d81377"
+              },
+              "stderr": {
+                "path": "attempt-01-adaptive.stderr.log",
+                "sha256": "8d6a6add616ea4c63713a2035b322ca94ee9d10fd89bc5cfa485833995a11e1b"
+              }
+            }
+          },
+          {
+            "name": "multimodal",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "global_weather.multimodal",
+              "selftest",
+              "--output",
+              "outputs/remote-r7-checks/multimodal"
+            ],
+            "cwd": "/home/user/global-ml-weather-r7",
+            "started_utc": "2026-10-09T07:46:22.252256+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T07:46:25.256252+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-multimodal.stdout.log",
+                "sha256": "751044fe1b8af73ce859646e297b93f78b7f2c712d2df6a2c571e8dd17788593"
+              },
+              "stderr": {
+                "path": "attempt-01-multimodal.stderr.log",
+                "sha256": "8d6a6add616ea4c63713a2035b322ca94ee9d10fd89bc5cfa485833995a11e1b"
+              }
+            }
+          },
+          {
+            "name": "pipeline",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "scripts/pipeline-test.py"
+            ],
+            "cwd": "/home/user/global-ml-weather-r7",
+            "started_utc": "2026-10-09T07:46:25.259961+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T07:46:32.265286+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-pipeline.stdout.log",
+                "sha256": "aa92554c8a89073c48b84081f5bd78088123f5c8cc3b503e7905e8af46f02a7f"
+              },
+              "stderr": {
+                "path": "attempt-01-pipeline.stderr.log",
+                "sha256": "0d4fb5d008880cb618f1451a94d58122fe5ada6a92a9a40cec7fb23962e197e2"
+              }
+            }
+          },
+          {
+            "name": "docs",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "scripts/check_docs.py",
+              "--strict"
+            ],
+            "cwd": "/home/user/global-ml-weather-r7",
+            "started_utc": "2026-10-09T07:46:32.268952+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T07:46:33.273471+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-docs.stdout.log",
+                "sha256": "3a7d84828de238afb1b1aaff9f052ec57138618e4999cba9c12b40f11567f01b"
+              },
+              "stderr": {
+                "path": "attempt-01-docs.stderr.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          },
+          {
+            "name": "browser",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "scripts/browser-test.py"
+            ],
+            "cwd": "/home/user/global-ml-weather-r7",
+            "started_utc": "2026-10-09T07:46:33.276887+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T07:46:41.283116+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-browser.stdout.log",
+                "sha256": "470fd00d7137a00f8ba6ce2cec252a51f2e34ec2dbd718388bec24f22a22f26d"
+              },
+              "stderr": {
+                "path": "attempt-01-browser.stderr.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          },
+          {
+            "name": "pipeline-browser",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "scripts/pipeline-browser-test.py"
+            ],
+            "cwd": "/home/user/global-ml-weather-r7",
+            "started_utc": "2026-10-09T07:46:41.286992+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T07:47:01.296130+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-pipeline-browser.stdout.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              "stderr": {
+                "path": "attempt-01-pipeline-browser.stderr.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          },
+          {
+            "name": "graphcast-norms",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "global_weather.profile_graphcast_normalization",
+              "--dataset",
+              "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/dataset",
+              "--output",
+              "/home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json"
+            ],
+            "cwd": "/home/user/global-ml-weather-r7",
+            "started_utc": "2026-10-09T07:47:01.299933+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T07:48:50.330559+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-graphcast-norms.stdout.log",
+                "sha256": "78144dd5bb8a82baf4faebc02d7b44d0acae4eeb79e48cb56b53dda713a46fcb"
+              },
+              "stderr": {
+                "path": "attempt-01-graphcast-norms.stderr.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          },
+          {
+            "name": "train",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "global_weather.profile_training_v2",
+              "--dataset",
+              "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/dataset",
+              "--norms",
+              "/home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json",
+              "--config",
+              "/home/user/global-ml-weather-r7/configs/profile_r7_training.json",
+              "--output",
+              "/home/user/global-ml-weather-r7/outputs/remote-r7-stations/training"
+            ],
+            "cwd": "/home/user/global-ml-weather-r7",
+            "started_utc": "2026-10-09T07:48:50.334538+00:00",
+            "timeout_seconds": 1131939.665418
+          }
+        ]
+      }
+    ],
+    "data_kind": "real",
+    "meteorologically_validated": false,
+    "environment": {
+      "python": "3.11.2 (main, Oct 11 2025, 09:33:38) [GCC 12.2.0]",
+      "platform": "Linux-6.1.141-1-generic-x86_64-with-glibc2.36",
+      "packages": {
+        "torch": "2.11.0+cu128",
+        "numpy": "2.4.6",
+        "scipy": "1.17.1",
+        "rasterio": "1.4.4",
+        "netCDF4": "1.7.4",
+        "cdsapi": "0.7.7",
+        "pytest": "9.1.1"
+      },
+      "accelerators": "GPU-2fd0e13b-e523-bf7e-bd04-32fac5d752e9, NVIDIA GeForce RTX 4090, 580.65.06\nGPU-fc554540-8abb-af15-c23b-c38c9b72aa91, NVIDIA GeForce RTX 4090, 580.65.06"
+    },
+    "status": "running",
+    "environment_limits": {
+      "OMP_NUM_THREADS": "8",
+      "CUDA_VISIBLE_DEVICES": "0"
+    },
+    "resource_limits": {
+      "new_network_bytes": 0,
+      "shared_data_read_only": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations",
+      "directory_gib": 64,
+      "minimum_free_disk_gib": 64
+    }
+  },
+  "pytest_summary": [
+    "-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html",
+    "727 passed, 34 warnings in 137.42s (0:02:17)"
+  ],
+  "normalization_sha256": "4a2a84b832d2df6db9eee9e44b9187035d84cdc22a09bfa703d42d7af6a3b97a",
+  "normalization_path": "/home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json",
+  "normalization_provenance": {
+    "repository": "https://github.com/google-deepmind/weathernext",
+    "revision": "f2f2c5117d2f864e2d5e7c2f9f220db5e1049dd3",
+    "data_family": "GraphCast ERA5 normalization",
+    "artifact_sha256": {
+      "mean_by_level.nc": "e6e724b94cd27707903cdc5cf5784d420bab306f722e631f4455e25c96da9931",
+      "stddev_by_level.nc": "29f941d8c34906b87a1745f93b2308d1e169ec9bbdc4c5491479c771fe92c3cb"
+    },
+    "fit_period": {
+      "start": "1979-01-02T00:00:00+00:00",
+      "end": "2015-12-31T23:59:59.999999+00:00"
+    },
+    "source_attributes": {
+      "date_start": "1979-01-02",
+      "date_end": "2015",
+      "timestep_hours": "6",
+      "window_stride": "1"
+    },
+    "period_interpretation": "conservative_bounds_from_netcdf_attributes",
+    "license": "CC-BY-4.0; underlying ERA5 terms also apply",
+    "verified_against_expected_hashes": true,
+    "acquisition": "local_files; URLs identify intended upstream source",
+    "artifact_urls": {
+      "mean_by_level.nc": "https://storage.googleapis.com/dm_graphcast/graphcast/stats/mean_by_level.nc",
+      "stddev_by_level.nc": "https://storage.googleapis.com/dm_graphcast/graphcast/stats/stddev_by_level.nc"
+    },
+    "units_from_documented_schema": [
+      "10m_u_component_of_wind",
+      "10m_v_component_of_wind",
+      "2m_temperature",
+      "geopotential",
+      "mean_sea_level_pressure",
+      "sea_ice_cover",
+      "sea_surface_temperature",
+      "specific_humidity",
+      "surface_pressure",
+      "temperature",
+      "total_cloud_cover",
+      "total_precipitation_6hr",
+      "u_component_of_wind",
+      "v_component_of_wind",
+      "vertical_velocity"
+    ],
+    "note": "Global level statistics, not local/monthly climatology. Year-only date bounds are conservative."
+  },
+  "norm_source_identity": {
+    "database_sha256": "d5e7178810fb261f427c43443c1f8f0cca2e4b328636147bf35ce6d06b7668b3",
+    "dataset_manifest_sha256": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+    "admission_sha256": "2f3f8eb1b428a77c826d99e18cc82a8cb8d28cbe537ac0f230b1bd8da84cb488",
+    "source_sha256": "2e4af1a87192b0bb5bac5b17c6f5ba8f03a967c550b70b952bd74cc92a99f3da"
+  },
+  "normalization_schema": "graphcast-pressure-normalization-1",
+  "norm_bins": 185,
+  "services": {
+    "global-weather-r7.service": "MainPID=2278543\nResult=success\nNRestarts=0\nCPUQuotaPerSecUSec=8s\nMemoryMax=103079215104\nActiveState=active\nUnitFileState=enabled",
+    "global-weather-r6.service": "MainPID=0\nResult=exit-code\nNRestarts=0\nCPUQuotaPerSecUSec=8s\nMemoryMax=103079215104\nActiveState=failed\nUnitFileState=disabled",
+    "global-weather-r5.service": "MainPID=2273692\nResult=success\nNRestarts=0\nCPUQuotaPerSecUSec=8s\nMemoryMax=103079215104\nActiveState=active\nUnitFileState=enabled"
+  },
+  "unit_sha256": "1a38d5aa9e1ef37411fa384e3f389adab9af956f725ee951c571edef45a262cb",
+  "linger": "Linger=yes",
+  "accelerators": "0, NVIDIA GeForce RTX 4090, 807 MiB, 24564 MiB, 17 %\n1, NVIDIA GeForce RTX 4090, 7312 MiB, 24564 MiB, 83 %",
+  "progress": {
+    "epoch": 1,
+    "optimizer_steps": 48,
+    "train_issues": 192,
+    "loss": 34799.51171875,
+    "forecast_loss": 14353.9599609375,
+    "reconstruction_loss": 81782.203125,
+    "seconds": 238.67110364418477,
+    "source_commit": "5c217490a0691dcbffbffbd06a3f6f91f4bd876d",
+    "device": "cuda"
+  },
+  "first_window_scale_audit": {
+    "issue": "2021-03-05T06:00:00+00:00",
+    "split": "train",
+    "input_count": 2000,
+    "target_count": 2000,
+    "meaning": "squared normalized observations relative to fixed GraphCast means, not model forecast errors",
+    "variables": [
+      {
+        "variable": "temperature",
+        "count": 409,
+        "background_standardized_mse": 0.535261922401803,
+        "largest_residuals": [
+          {
+            "standardized_square": 4.66791511194162,
+            "pressure_pa": 65300.0,
+            "physical_value": 233.64999999999998,
+            "observation_id": "coord:496dabe381c40aaf1057582f33c47d5d48bb7633416410f8dbcd504fa52638f2",
+            "station_id": "AYM00089625",
+            "provider_qc": {
+              "LVLTYP1": "2",
+              "LVLTYP2": "0",
+              "PFLAG": "B",
+              "TFLAG": "B",
+              "ZFLAG": " ",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "GPH": "source_missing",
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "626d436072cdd8f82b334fd05f70437c5a1116afaf1747c834fcff180b5a9861"
+          },
+          {
+            "standardized_square": 2.9423555021166172,
+            "pressure_pa": 7980.0,
+            "physical_value": 188.64999999999998,
+            "observation_id": "coord:a98c4516c6200053af09041cd45b0a2132c0e011f44bff4e2780e97b8be031c1",
+            "station_id": "ASM00094203",
+            "provider_qc": {
+              "LVLTYP1": "2",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": " ",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "GPH": "source_missing",
+                "RH": "source_missing",
+                "WDIR": "source_missing",
+                "WSPD": "source_missing"
+              }
+            },
+            "archive_sha256": "e2c5cf0c99f2cf393771e3e2eb62084a527e162dff056617f1c236eb18932de7"
+          },
+          {
+            "standardized_square": 2.7842059123090444,
+            "pressure_pa": 15000.0,
+            "physical_value": 228.24999999999997,
+            "observation_id": "coord:7260d23972cbe5e7b3816f23e24b255c305075a6d6ae8d714d1b0f2b2884f4a7",
+            "station_id": "AYM00089664",
+            "provider_qc": {
+              "LVLTYP1": "1",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": "B",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "6033fefd5f35f3ded5cece0dc885d876bfe8eab6c42ee1f6e7f74ef7533ba4cf"
+          },
+          {
+            "standardized_square": 2.693942597087199,
+            "pressure_pa": 99200.0,
+            "physical_value": 252.24999999999997,
+            "observation_id": "coord:994f05322d71a817ec158087e4ccd8391405e5fca3a3d74b1cf0b6b94535439e",
+            "station_id": "AYM00089664",
+            "provider_qc": {
+              "LVLTYP1": "2",
+              "LVLTYP2": "0",
+              "PFLAG": "B",
+              "TFLAG": "B",
+              "ZFLAG": " ",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "GPH": "source_missing",
+                "RH": "source_missing",
+                "WDIR": "source_missing",
+                "WSPD": "source_missing"
+              }
+            },
+            "archive_sha256": "6033fefd5f35f3ded5cece0dc885d876bfe8eab6c42ee1f6e7f74ef7533ba4cf"
+          }
+        ]
+      },
+      {
+        "variable": "specific_humidity",
+        "count": 404,
+        "background_standardized_mse": 291538.5615191041,
+        "largest_residuals": [
+          {
+            "standardized_square": 48101157.07972263,
+            "pressure_pa": 2460.0,
+            "physical_value": 0.0021371544244248274,
+            "observation_id": "coord:dcc229de93235244e9fb9cdc8245cee8174fc5a7018b2c6a5c3133da698d5192",
+            "station_id": "SHM00068906",
+            "provider_qc": {
+              "LVLTYP1": "2",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": " ",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "GPH": "source_missing",
+                "RH": "source_missing",
+                "WDIR": "source_missing",
+                "WSPD": "source_missing"
+              }
+            },
+            "archive_sha256": "33128628f7377c821354f7dc5afbd176ecb83c8ae927b02cc42e8185770e5f7e"
+          },
+          {
+            "standardized_square": 44623650.5599615,
+            "pressure_pa": 2310.0,
+            "physical_value": 0.0020566407634731378,
+            "observation_id": "coord:52d736967a4d9b10c797534607b4f1c03b0475d3af632a9e4ab1eb6208137046",
+            "station_id": "AYM00089592",
+            "provider_qc": {
+              "LVLTYP1": "2",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": " ",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "GPH": "source_missing",
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "7e49d0faf4c062c1b37ca03d08f980c9f3cb8b83ed45e9560f6d63a5095cb0b1"
+          },
+          {
+            "standardized_square": 4571522.79408525,
+            "pressure_pa": 5000.0,
+            "physical_value": 0.0007731693376420366,
+            "observation_id": "coord:fdef0d541fcabd569619e9a5e152e75b42c579a1378fb631ae1eb3c6c9780c2f",
+            "station_id": "AYM00089592",
+            "provider_qc": {
+              "LVLTYP1": "1",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": "B",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "7e49d0faf4c062c1b37ca03d08f980c9f3cb8b83ed45e9560f6d63a5095cb0b1"
+          },
+          {
+            "standardized_square": 4340128.124338646,
+            "pressure_pa": 2270.0,
+            "physical_value": 0.0006432612481749808,
+            "observation_id": "coord:bf32d05062883f5030731245ec58a7ce41086aa510f9ce12e6fa59be4fcfd4c7",
+            "station_id": "SHM00068906",
+            "provider_qc": {
+              "LVLTYP1": "2",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": " ",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "GPH": "source_missing",
+                "RH": "source_missing",
+                "WDIR": "source_missing",
+                "WSPD": "source_missing"
+              }
+            },
+            "archive_sha256": "33128628f7377c821354f7dc5afbd176ecb83c8ae927b02cc42e8185770e5f7e"
+          }
+        ]
+      },
+      {
+        "variable": "u",
+        "count": 425,
+        "background_standardized_mse": 0.6518041412836413,
+        "largest_residuals": [
+          {
+            "standardized_square": 11.513251769017938,
+            "pressure_pa": 97300.0,
+            "physical_value": -23.67077329237642,
+            "observation_id": "coord:4f14d2d8a0568767cd0967c37ec7974e9199f0e40b5a167e0220c9126f1f47ff",
+            "station_id": "AYM00089564",
+            "provider_qc": {
+              "LVLTYP1": "2",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": " ",
+              "ZFLAG": " ",
+              "missing_fields": {
+                "DPDP": "source_missing",
+                "ETIME": "source_missing",
+                "GPH": "source_missing",
+                "RH": "source_missing",
+                "TEMP": "source_missing"
+              }
+            },
+            "archive_sha256": "3c48da28d3b2703b2fe9773b4370dbdc743ec803af51fce3d51f7d86e0ce52dd"
+          },
+          {
+            "standardized_square": 8.200902139802402,
+            "pressure_pa": 36900.0,
+            "physical_value": -33.74634950854331,
+            "observation_id": "coord:b7bd48f32c616cdab95ad6a6c6c4cf5ed6ca854e72b19ebaa09c8290729c67b4",
+            "station_id": "AYM00089002",
+            "provider_qc": {
+              "LVLTYP1": "2",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": " ",
+              "ZFLAG": " ",
+              "missing_fields": {
+                "DPDP": "source_missing",
+                "ETIME": "source_missing",
+                "GPH": "source_missing",
+                "RH": "source_missing",
+                "TEMP": "source_missing"
+              }
+            },
+            "archive_sha256": "79472221728ad952979748ffad762883dda1600b2c60c562c94e9156a53a2f58"
+          },
+          {
+            "standardized_square": 8.07796220603367,
+            "pressure_pa": 20000.0,
+            "physical_value": 64.27497526175614,
+            "observation_id": "coord:446d2f403949f46c52f4714a9cda16584e4065e532daf993f0b3f0ad76cb9e3c",
+            "station_id": "SHM00068906",
+            "provider_qc": {
+              "LVLTYP1": "1",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": "B",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "33128628f7377c821354f7dc5afbd176ecb83c8ae927b02cc42e8185770e5f7e"
+          },
+          {
+            "standardized_square": 7.876594936602272,
+            "pressure_pa": 50000.0,
+            "physical_value": 40.050600296729954,
+            "observation_id": "coord:32a9d0b6096f848a944696fc9275fb0084c058c98fe7ee4883648db6db17150d",
+            "station_id": "FSM00061998",
+            "provider_qc": {
+              "LVLTYP1": "1",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": "B",
+              "missing_fields": {
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "3b995a5920ecd56fa671633bf74bf0fb769d5678989d49fdf54bc6372e0927fc"
+          }
+        ]
+      },
+      {
+        "variable": "v",
+        "count": 418,
+        "background_standardized_mse": 0.5873644735500589,
+        "largest_residuals": [
+          {
+            "standardized_square": 10.561633442279307,
+            "pressure_pa": 15800.0,
+            "physical_value": 32.161249718467204,
+            "observation_id": "coord:5dfd6b4cf9e94f74fda492c447b0b489de72f45995565ea0822215656d866f5a",
+            "station_id": "SHM00068906",
+            "provider_qc": {
+              "LVLTYP1": "2",
+              "LVLTYP2": "2",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": " ",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "GPH": "source_missing",
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "33128628f7377c821354f7dc5afbd176ecb83c8ae927b02cc42e8185770e5f7e"
+          },
+          {
+            "standardized_square": 6.352561101698997,
+            "pressure_pa": 25000.0,
+            "physical_value": 33.53338812035605,
+            "observation_id": "coord:10e4c26fb3b6c58809ef226b0af0a2ef4e5eeeb75d0972d5ddee7719a9e81999",
+            "station_id": "ASM00094998",
+            "provider_qc": {
+              "LVLTYP1": "1",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": "B",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "758d11c1c979a8d4553bae360a93abd2a783e058113d3a9f98ac1816c51bc72f"
+          },
+          {
+            "standardized_square": 5.6789347968763595,
+            "pressure_pa": 25900.0,
+            "physical_value": -31.738631456726537,
+            "observation_id": "coord:7d80eefd734297f1cc9c84cacea4a44ded9923cd0106643458989cc90842fb0c",
+            "station_id": "NZM00093112",
+            "provider_qc": {
+              "LVLTYP1": "2",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": " ",
+              "ZFLAG": " ",
+              "missing_fields": {
+                "DPDP": "source_missing",
+                "ETIME": "source_missing",
+                "GPH": "source_missing",
+                "RH": "source_missing",
+                "TEMP": "source_missing"
+              }
+            },
+            "archive_sha256": "4272da3d787ab3d0f8897af476c9de1203a9d7a931d2604c9fadd7bfcb711882"
+          },
+          {
+            "standardized_square": 5.238392798126402,
+            "pressure_pa": 16600.0,
+            "physical_value": -23.565187875138594,
+            "observation_id": "coord:bcf7625980cebc8b847142826e738092bb37d6e525f66cf3625bfd85005afa6e",
+            "station_id": "NZM00093112",
+            "provider_qc": {
+              "LVLTYP1": "2",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": " ",
+              "ZFLAG": " ",
+              "missing_fields": {
+                "DPDP": "source_missing",
+                "ETIME": "source_missing",
+                "GPH": "source_missing",
+                "RH": "source_missing",
+                "TEMP": "source_missing"
+              }
+            },
+            "archive_sha256": "4272da3d787ab3d0f8897af476c9de1203a9d7a931d2604c9fadd7bfcb711882"
+          }
+        ]
+      },
+      {
+        "variable": "geopotential",
+        "count": 338,
+        "background_standardized_mse": 0.5659201810989783,
+        "largest_residuals": [
+          {
+            "standardized_square": 3.2325894542920057,
+            "pressure_pa": 92500.0,
+            "physical_value": 4805.2585,
+            "observation_id": "coord:311aaee8460dd7953f17fc2d6dd5e8d7313012ddeb2f62db2a4fd8d6a0a888c5",
+            "station_id": "AYM00089571",
+            "provider_qc": {
+              "LVLTYP1": "1",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": "B",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "d6e4b2729d4be9a6288b17f09bd81114a73290949df2814350d08dbd7914c9f2"
+          },
+          {
+            "standardized_square": 2.9518569566305413,
+            "pressure_pa": 85000.0,
+            "physical_value": 11218.8076,
+            "observation_id": "coord:a3bb5c3ec529c6fbda018c92091d095a78f38a84caae869f776f5a10bcd48cf9",
+            "station_id": "AYM00089532",
+            "provider_qc": {
+              "LVLTYP1": "1",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": "B",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "e9805d38a9243d9820c66a6a6c8f07091f9502ea869c16dcd3e7b4c26b7859ca"
+          },
+          {
+            "standardized_square": 2.856363202754305,
+            "pressure_pa": 70000.0,
+            "physical_value": 25301.157,
+            "observation_id": "coord:98bc661441970948ac9ad1e5d0a10e4df31c18069652ff2142b13bba9137a239",
+            "station_id": "AYM00089002",
+            "provider_qc": {
+              "LVLTYP1": "1",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": "B",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "79472221728ad952979748ffad762883dda1600b2c60c562c94e9156a53a2f58"
+          },
+          {
+            "standardized_square": 2.733567544696179,
+            "pressure_pa": 70000.0,
+            "physical_value": 25379.6102,
+            "observation_id": "coord:b17377a99acbd4e3446a071321f795f6748c6d92b34e5702b430c2531b62e8f8",
+            "station_id": "AYM00089062",
+            "provider_qc": {
+              "LVLTYP1": "1",
+              "LVLTYP2": "0",
+              "PFLAG": " ",
+              "TFLAG": "B",
+              "ZFLAG": "B",
+              "missing_fields": {
+                "ETIME": "source_missing",
+                "RH": "source_missing"
+              }
+            },
+            "archive_sha256": "9bb617daa4c18c500dac64db4f54ecdd76bc0c74789da377017693fb2cbb936f"
+          }
+        ]
+      }
+    ]
+  },
+  "scientific_acceptance": false,
+  "new_network_bytes": 0,
+  "limitations": [
+    "upper-air observed humidity outliers dominate fixed-sigma squared loss; QC investigation remains open",
+    "first training steps do not certify completed epoch or weather skill",
+    "norm support is not measured coverage"
+  ]
+}

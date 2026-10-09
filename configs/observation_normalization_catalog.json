@@ -1,6 +1,6 @@
 {
   "schema": "observation-normalization-catalog-1",
-  "runtime_source_commit": null,
+  "runtime_source_commit": "5c217490a0691dcbffbffbd06a3f6f91f4bd876d",
   "experiment": "R7",
   "execution_status": "pending_tested_runtime_revision",
   "policy": "docs/decisions/0010-graphcast-fixed-normalization.md",
@@ -8,12 +8,30 @@
     "role": "frozen_train_inputs_losses_and_physical_inverse",
     "source": "bundled_graphcast_multiyear_global_level_statistics",
     "manifest": "assets/normalization/graphcast/SOURCES.json",
-    "period": ["1979-01-02T00:00:00+00:00", "2015-12-31T23:59:59.999999+00:00"],
+    "period": [
+      "1979-01-02T00:00:00+00:00",
+      "2015-12-31T23:59:59.999999+00:00"
+    ],
     "period_interpretation": "matching NetCDF date_start/date_end; whole final year is a conservative bound",
     "kind": "global_level_zscore",
-    "variables": ["temperature", "specific_humidity", "u", "v", "geopotential"],
-    "units": ["K", "kg kg-1", "m s-1", "m s-1", "m2 s-2"],
-    "dimensions": [37, 5],
+    "variables": [
+      "temperature",
+      "specific_humidity",
+      "u",
+      "v",
+      "geopotential"
+    ],
+    "units": [
+      "K",
+      "kg kg-1",
+      "m s-1",
+      "m s-1",
+      "m2 s-2"
+    ],
+    "dimensions": [
+      37,
+      5
+    ],
     "immutable_per_experiment": true,
     "seasonal_or_local_climatology": false,
     "unknown_channel_fallback": "admitted_real_train_measurements_only",
@@ -23,18 +41,28 @@
     "planned_remote_path": "/home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json",
     "planned_local_copy": "docs/reports/r7-graphcast-norms.json",
     "generated_artifact_sha256": null,
-    "artifact_status": "planned_not_yet_captured"
+    "artifact_status": "imported_and_used_by_active_R7_training",
+    "local_copy": "docs/reports/r7-graphcast-norms.json",
+    "remote_path": "/home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json",
+    "sha256": "4a2a84b832d2df6db9eee9e44b9187035d84cdc22a09bfa703d42d7af6a3b97a",
+    "supported_bins": 185
   },
   "historical_r6_training_normalization": {
     "runtime_source_commit": "0890c84b346f5e1a17a3d4e5e57f10379e887ab8",
     "role": "train_inputs_losses_and_physical_inverse",
     "source": "admitted_real_IGRA_train_observations",
-    "period": ["2021-01-01T00:00:00+00:00", "2022-01-01T00:00:00+00:00"],
+    "period": [
+      "2021-01-01T00:00:00+00:00",
+      "2022-01-01T00:00:00+00:00"
+    ],
     "kind": "global_pressure_bin_statistics",
     "local_copy": "docs/reports/r6-pressure-norms.json",
     "remote_path": "/home/user/global-ml-weather-r6-v2/outputs/remote-r6-stations/pressure-norms.json",
     "sha256": "b0ef65d6d9a6072e4c38a0c06bc90f1618d48f03ea7aebfe4b2708449e1308f9",
-    "dimensions": [37, 5],
+    "dimensions": [
+      37,
+      5
+    ],
     "supported_bins": 174,
     "immutable_per_experiment": true,
     "seasonal_or_local_climatology": false
@@ -56,7 +84,14 @@
   "multiyear_observed_seasonal_climatology": {
     "status": "not_built",
     "role": "proposed_future_observed_background_and_normalization",
-    "requirements": ["predeclared_train_period", "admitted_real_observations_only", "location_pressure_season_support", "no_validation_test_or_ERA5_fit", "source_hashes_units_QC_and_counts", "new_experiment_and_compatible_checkpoint"]
+    "requirements": [
+      "predeclared_train_period",
+      "admitted_real_observations_only",
+      "location_pressure_season_support",
+      "no_validation_test_or_ERA5_fit",
+      "source_hashes_units_QC_and_counts",
+      "new_experiment_and_compatible_checkpoint"
+    ]
   },
   "scope": "Evidence catalog; does not replace runtime configuration or mutate active training."
 }
