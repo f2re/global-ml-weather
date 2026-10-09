@@ -29,6 +29,7 @@ def main() -> None:
     parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--reference',type=Path,required=True)
     args=parser.parse_args(); started=time.monotonic(); root=Path(__file__).resolve().parents[1]
+    args.output.parent.mkdir(parents=True,exist_ok=True)
     torch.set_num_threads(1)
     dataset=args.parent/'dataset'; training=args.parent/'training'
     manifest=json.loads((dataset/'dataset.json').read_text())
@@ -45,7 +46,7 @@ def main() -> None:
     bundle=import_graphcast(directory/'mean_by_level.nc',directory/'stddev_by_level.nc',expected_hashes=PINNED_HASHES)
     attrs={}
     for name in PINNED_HASHES:
-        with xr.open_dataset(directory/name) as data: attrs[name]=dict(data.attrs)
+        with xr.open_dataset(directory/name) as data: attrs[name]={key:str(value) for key,value in data.attrs.items()}
     roundtrips=[]
     for row in manifest['statistics']:
         values=np.array([row['mean']-row['std'],row['mean'],row['mean']+row['std']],dtype=np.float64)
