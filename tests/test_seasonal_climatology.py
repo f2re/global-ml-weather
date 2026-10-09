@@ -64,7 +64,7 @@ def test_reject_nonmean_wrongunits_wrongperiod_counts_and_months(tmp_path,case):
         elif case=='units':dataset.air.attrs['units']='K'
         elif case=='period':dataset.time.attrs['climo_period']='1981/01/01 - 2010/12/31'
         elif case=='counts':dataset.valid_yr_count.values[0,0,0,0]=31
-        else:dataset.time.values[:]=dataset.time.values[::-1]
+        else:dataset.coords['time']=('time',dataset.time.values[::-1].copy(),dict(dataset.time.attrs))
     mutate(source/climate.FILES[0],change)
     with pytest.raises(ValueError):climate.prepare(source,tmp_path/'context',mesh_level=0)
     assert not (tmp_path/'context').exists()

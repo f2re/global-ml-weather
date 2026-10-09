@@ -115,7 +115,8 @@ def test_fresh_training_exact_resume_norm_drift_and_final_diagnostic(tmp_path,mo
     else:
         from global_weather.profile_normalization import fit as other_norms
     other_norms(dataset,other_norm_path)
-    with pytest.raises(ValueError,match='resume'):
+    rejection = 'pinned physical GraphCast normalization' if normalization_mode == 'r8' else 'resume'
+    with pytest.raises(ValueError,match=rejection):
         training.train(dataset,other_norm_path,tmp_path/'whole',config,**context)
     if normalization_mode == 'r8':
         with pytest.raises(ValueError,match='resume'):
