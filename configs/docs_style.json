@@ -54,7 +54,10 @@
     "docs/decisions/0009-pressure-profile-restoration.md",
     "docs/decisions/0010-graphcast-fixed-normalization.md",
     "docs/PROFILE_R7.md",
-    "docs/reviews/r7-contract-update.md"
+    "docs/reviews/r7-contract-update.md",
+    "docs/decisions/0011-seasonal-climate-context.md",
+    "docs/PROFILE_R8.md",
+    "docs/reviews/r8-climate-source-research.md"
   ],
   "scope_note": "Active operational documentation and agent instructions. Historical reports retain their evidence.",
   "target_interpretation": "Approximately 80% is a stylistic request, not measured official standard compliance.",

@@ -14,7 +14,7 @@ def run(dataset, training, cache, output, *, network=False):
     training, cache = Path(training), Path(cache)
     if not (training/'complete.json').is_file(): raise ValueError('Freeze observation-trained weights first.')
     completion=json.loads((training/'complete.json').read_text())
-    if completion.get('status') not in ('measured_upper_air_research_trained','measured_pressure_profile_research_trained','measured_graphcast_profile_research_trained'): raise ValueError('Only an observation-trained model is admitted.')
+    if completion.get('status') not in ('measured_upper_air_research_trained','measured_pressure_profile_research_trained','measured_graphcast_profile_research_trained','measured_seasonal_profile_research_trained'): raise ValueError('Only an observation-trained model is admitted.')
     ref=json.loads((training/'best.json').read_text())
     if completion.get('best_epoch')!=ref['epoch']: raise ValueError('Freeze best epoch before external acquisition.')
     from .profile_verification import load_frozen

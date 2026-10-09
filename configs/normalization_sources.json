@@ -1,6 +1,10 @@
 {
   "preferred_source": "graphcast_era5_37",
-  "current_experiment": "R7",
+  "current_experiment": "R8",
+  "control_experiment": "R7",
+  "seasonal_context_policy": "docs/decisions/0011-seasonal-climate-context.md",
+  "seasonal_context_sources": "configs/seasonal_climatology_sources.json",
+  "seasonal_context_replaces_normalization": false,
   "current_policy": "docs/decisions/0010-graphcast-fixed-normalization.md",
   "required_profile_variables": ["temperature", "specific_humidity", "u", "v", "geopotential"],
   "required_profile_role": "frozen_input_loss_and_physical_inverse_normalization",

@@ -2,6 +2,21 @@
   "schema": "observation-normalization-catalog-1",
   "runtime_source_commit": "5c217490a0691dcbffbffbd06a3f6f91f4bd876d",
   "experiment": "R7",
+  "new_comparison_experiment": "R8",
+  "r7_control_preserved": true,
+  "seasonal_context": {
+    "experiment": "R8",
+    "role": "fixed_masked_spatial_seasonal_features_not_targets_or_norms",
+    "source_manifest": "configs/seasonal_climatology_sources.json",
+    "period": ["1991-01-01T00:00:00+00:00", "2020-12-31T23:59:59.999999+00:00"],
+    "architecture": "pressure-profile-seasonal-v1",
+    "feature_transform": "(NOAA_monthly_mean-GraphCast_mean)/GraphCast_std_and_separate_mask",
+    "minimum_valid_years": 25,
+    "replaces_graphcast_mean_or_std": false,
+    "artifact_status": "pending_verified_remote_acquisition",
+    "artifact_sha256": null,
+    "initialization": "fresh_weights_no_R7_checkpoint_transfer"
+  },
   "execution_status": "pending_tested_runtime_revision",
   "policy": "docs/decisions/0010-graphcast-fixed-normalization.md",
   "training_normalization": {

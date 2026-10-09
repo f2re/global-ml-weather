@@ -71,7 +71,41 @@ def _load_fixed_state(model: PressureProfileModel, state: dict) -> None:
     model.load_state_dict(state,strict=True)
 
 
-def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: dict) -> None:
+def _build_model(norms, config: dict, device, climatology_path=None):
+    grid = build_pyramid(config['mesh_level'])[0]
+    if climatology_path is None:
+        return PressureProfileModel(grid, norms, config['hidden']).to(device)
+    from .seasonal_climatology import SeasonalClimatology
+    from .profile_seasonal_model import SeasonalProfileModel
+    climate = SeasonalClimatology(climatology_path, grid=grid)
+    return SeasonalProfileModel(grid, norms, climate, config['hidden']).to(device)
+
+
+def _model_identity(model, norm_path: Path, norm_hash: str) -> dict:
+    result = {'architecture': model.normalization.architecture,
+              'norm_sha256': norm_hash, 'norm_path': str(norm_path.resolve())}
+    if hasattr(model, 'climatology'):
+        from .profile_seasonal_model import ARCHITECTURE
+        result.update(architecture=ARCHITECTURE,
+                      climatology_path=str(model.climatology.root.resolve()),
+                      climatology_sha256=model.climatology.fingerprint)
+    return result
+
+
+def _verify_climate(model) -> None:
+    if hasattr(model, 'climatology'):
+        model.climatology.verify_sources()
+
+
+def _training_status(model) -> str:
+    if hasattr(model, 'climatology'):
+        from .profile_seasonal_model import STATUS
+        return STATUS
+    return model.normalization.status
+
+
+def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: dict,
+          climatology_path: str|Path|None=None) -> None:
     weight=config.get('reconstruction_weight',.25)
     if type(weight) not in (int,float) or not 0<=weight<=1: raise ValueError('Invalid reconstruction weight.')
     config=configuration({k:v for k,v in config.items() if k!='reconstruction_weight'}); config['reconstruction_weight']=weight
@@ -87,9 +121,9 @@ def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: di
         device=torch.device('cuda' if torch.cuda.is_available() else 'cpu'); torch.set_num_threads(config['threads'])
         torch.use_deterministic_algorithms(True); torch.backends.cuda.matmul.allow_tf32=False
         random.seed(config['seed']); np.random.seed(config['seed']); torch.manual_seed(config['seed'])
-        model=PressureProfileModel(build_pyramid(config['mesh_level'])[0],norms,config['hidden']).to(device)
+        model=_build_model(norms,config,device,climatology_path)
         optimizer=torch.optim.AdamW(model.parameters(),lr=config['learning_rate'],weight_decay=config['weight_decay'])
-        expected={**identity(dataset,config,device),'architecture':norms.architecture,'norm_sha256':norm_hash,'norm_path':str(norm_path.resolve())}
+        expected={**identity(dataset,config,device),**_model_identity(model,norm_path,norm_hash)}
         completed=0; best=float('inf'); best_epoch=None; stale=0
         if (output/'latest.json').exists():
             ref=json.loads((output/'latest.json').read_text()); state=torch.load(checkpoint_path(output,ref),map_location=device,weights_only=True)
@@ -102,6 +136,7 @@ def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: di
         for epoch in range(completed+1,config['epochs']+1):
             dataset.verify()
             if hasattr(norms,'verify_sources'): norms.verify_sources()
+            _verify_climate(model)
             if digest(norm_path)!=norm_hash: raise ValueError('Pressure norms changed.')
             model.train(); started=time.monotonic(); losses=[]; gradients={}; coverage=np.zeros(5,dtype=int)
             issues=dataset.issues('train',config['max_train_issues']); random.shuffle(issues)
@@ -133,6 +168,7 @@ def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: di
             else: stale+=1
             dataset.verify()
             if hasattr(norms,'verify_sources'): norms.verify_sources()
+            _verify_climate(model)
             if digest(norm_path)!=norm_hash: raise ValueError('Pressure norms changed during epoch.')
             temporary=output/f'.epoch-{epoch:04d}'; temporary.mkdir(); rng=np.random.get_state()
             state={'identity':expected,'epoch':epoch,'best':best,'best_epoch':best_epoch,'stale':stale,
@@ -150,15 +186,16 @@ def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: di
             if improved: save(output/'best.json',ref)
             print(json.dumps(metrics),flush=True)
             if stale>=config['patience']: break
-        save(output/'complete.json',{'identity':expected,'best_epoch':best_epoch,'status':norms.status,
+        save(output/'complete.json',{'identity':expected,'best_epoch':best_epoch,'status':_training_status(model),
              'source_roles':{'input':'IGRA','target':'IGRA','normalization':norms.payload['schema'],
+                             'climatology':'fixed NOAA monthly means as masked context' if hasattr(model,'climatology') else None,
                              'external_verification':'ERA5 frozen-model only'},
              'scientific_acceptance':False,'test_independence':'old periods already seen; new independent acceptance required'})
 
 
 def load_frozen(dataset_path: str|Path,training: str|Path,device: str='auto') -> tuple[PressureProfileModel,ProfileDataset]:
     training=Path(training);completion=json.loads((training/'complete.json').read_text())
-    if completion.get('status') not in ('measured_pressure_profile_research_trained','measured_graphcast_profile_research_trained'): raise ValueError('Complete R6 training first.')
+    if completion.get('status') not in ('measured_pressure_profile_research_trained','measured_graphcast_profile_research_trained','measured_seasonal_profile_research_trained'): raise ValueError('Complete R6 training first.')
     ref=json.loads((training/'best.json').read_text());state=torch.load(checkpoint_path(training,ref),map_location='cpu',weights_only=True)
     if state['identity']!=completion['identity'] or ref['epoch']!=completion['best_epoch']: raise ValueError('R6 completion differs.')
     previous=state['identity']; norm_path=Path(previous['norm_path']);dataset=ProfileDataset(dataset_path)
@@ -167,12 +204,13 @@ def load_frozen(dataset_path: str|Path,training: str|Path,device: str='auto') ->
     norms=load_normalization(json.loads(norm_path.read_text()))
     sources={'dataset_manifest_sha256':dataset.manifest_sha256,'database_sha256':dataset.manifest['database_sha256'],
              'source_sha256':dataset.manifest['source_sha256'],'admission_sha256':dataset.manifest['admission_sha256']}
-    if norms.payload['source_identity']!=sources or completion['status']!=norms.status:
+    if norms.payload['source_identity']!=sources:
         raise ValueError('Frozen normalization data or schema differs.')
     config=previous['config'];torch.set_num_threads(config['threads']);torch.use_deterministic_algorithms(True);torch.backends.cuda.matmul.allow_tf32=False
-    expected={**identity(dataset,config,device),'architecture':norms.architecture,'norm_sha256':digest(norm_path),'norm_path':str(norm_path.resolve())}
-    if previous!=expected: raise ValueError('R6 frozen identity differs.')
-    model=PressureProfileModel(build_pyramid(config['mesh_level'])[0],norms,config['hidden']).to(device)
+    model=_build_model(norms,config,device,previous.get('climatology_path'))
+    expected={**identity(dataset,config,device),**_model_identity(model,norm_path,digest(norm_path))}
+    if previous!=expected or completion['status']!=_training_status(model): raise ValueError('Frozen profile identity differs.')
+    _verify_climate(model)
     _load_fixed_state(model,state['model']);model.eval()
     for parameter in model.parameters():parameter.requires_grad_(False)
     return model,dataset
@@ -184,9 +222,19 @@ def lead_bin(observed_at,issue) -> int:
     return math.ceil(hours/3)-1
 
 
+def _frozen_training_hashes(training: Path) -> dict[str, str]:
+    completion_hash = digest(training / 'complete.json')
+    best_hash = digest(training / 'best.json')
+    reference = json.loads((training / 'best.json').read_text())
+    state_path = checkpoint_path(training, reference)
+    return {'complete_json': completion_hash, 'best_json': best_hash, 'state_pt': digest(state_path)}
+
+
 def evaluate(dataset_path: str|Path,training: str|Path,output: str|Path) -> None:
     from types import SimpleNamespace
-    model,dataset=load_frozen(dataset_path,training); completion=json.loads((Path(training)/'complete.json').read_text());config=completion['identity']['config']
+    training=Path(training); frozen_hashes=_frozen_training_hashes(training)
+    model,dataset=load_frozen(dataset_path,training); completion=json.loads((training/'complete.json').read_text());config=completion['identity']['config']
+    if _frozen_training_hashes(training)!=frozen_hashes:raise ValueError('Frozen training changed during diagnostic loading.')
     sums=np.zeros((24,5,5)); rejected=np.zeros(5,dtype=int)
     with torch.no_grad():
         for issue in dataset.issues('test',config['max_test_issues']):
@@ -208,8 +256,13 @@ def evaluate(dataset_path: str|Path,training: str|Path,output: str|Path) -> None
             if count:rows.append({'lead_bin_hours':(lead+1)*3,'variable':VARIABLES[variable],'count':int(count),
                 'mae':mae/count,'rmse':float(np.sqrt(mse/count)),'bias':bias/count,'analysis_persistence_rmse':float(np.sqrt(control/count))})
     if not rows:raise ValueError('No admitted diagnostic test predictions.')
+    dataset.verify();_verify_climate(model)
+    if hasattr(model.normalization,'verify_sources'):model.normalization.verify_sources()
+    if digest(completion['identity']['norm_path'])!=completion['identity']['norm_sha256'] or _frozen_training_hashes(training)!=frozen_hashes:
+        raise ValueError('Frozen training or normalization changed during diagnostic test.')
     save(output,{'split':'test','test_independence':'previously seen periods; diagnostic only','metrics':rows,
-         'unsupported_records':rejected.tolist(),'scientific_acceptance':False})
+         'unsupported_records':rejected.tolist(),'identity':completion['identity'],
+         'training_artifact_sha256':frozen_hashes,'scientific_acceptance':False})
 
 
 
@@ -217,11 +270,8 @@ def forecast(dataset_path: str|Path, training: str|Path, issue: str, output: str
     """Frozen causal forecast; verified immutable retries, no future targets."""
     from .vertical import PROFILE_UNITS,PROFILE_VARIABLES
     training=Path(training)
-    def training_hashes() -> dict[str,str]:
-        complete_hash=digest(training/'complete.json'); best_hash=digest(training/'best.json')
-        reference=json.loads((training/'best.json').read_text())
-        state_path=checkpoint_path(training,reference)
-        return {'complete_json':complete_hash,'best_json':best_hash,'state_pt':digest(state_path)}
+    def training_hashes():
+        return _frozen_training_hashes(training)
     frozen_hashes=training_hashes()
     completion=json.loads((training/'complete.json').read_text())
     frozen_reference=json.loads((training/'best.json').read_text())
@@ -233,6 +283,7 @@ def forecast(dataset_path: str|Path, training: str|Path, issue: str, output: str
                            config['max_records_per_window'])
     dataset.verify()
     if hasattr(model.normalization,'verify_sources'):model.normalization.verify_sources()
+    _verify_climate(model)
     if digest(completion['identity']['norm_path'])!=completion['identity']['norm_sha256']:
         raise ValueError('Forecast normalization changed.')
     expected={'schema':'measured-profile-frozen-forecast-1','issue_time':origin.isoformat(),
@@ -260,6 +311,7 @@ def forecast(dataset_path: str|Path, training: str|Path, issue: str, output: str
     with torch.no_grad(): frames=model(inputs,origin)
     dataset.verify()
     if hasattr(model.normalization,'verify_sources'):model.normalization.verify_sources()
+    _verify_climate(model)
     if digest(completion['identity']['norm_path'])!=completion['identity']['norm_sha256']:
         raise ValueError('Forecast normalization changed during inference.')
     if training_hashes()!=frozen_hashes:raise ValueError('Frozen training artifacts changed during inference.')
@@ -278,7 +330,7 @@ def forecast(dataset_path: str|Path, training: str|Path, issue: str, output: str
 
 def main(argv: list[str]|None=None) -> None:
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--dataset',required=True)
-    parser.add_argument('--norms');parser.add_argument('--output',required=True);parser.add_argument('--config');parser.add_argument('--training');parser.add_argument('--issue')
+    parser.add_argument('--norms');parser.add_argument('--output',required=True);parser.add_argument('--config');parser.add_argument('--training');parser.add_argument('--issue');parser.add_argument('--climatology')
     args=parser.parse_args(argv)
     if args.issue:
         if not args.training:parser.error('Frozen forecast requires --training and --issue.')
@@ -286,7 +338,7 @@ def main(argv: list[str]|None=None) -> None:
     elif args.training:evaluate(args.dataset,args.training,args.output)
     else:
         if not args.norms or not args.config:parser.error('Training requires --norms and --config.')
-        train(args.dataset,args.norms,args.output,json.loads(Path(args.config).read_text()))
+        train(args.dataset,args.norms,args.output,json.loads(Path(args.config).read_text()),args.climatology)
 
 
 if __name__=='__main__': main()

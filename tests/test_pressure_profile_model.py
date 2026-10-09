@@ -61,7 +61,7 @@ def test_all_observation_and_dynamic_branches_have_finite_nonzero_gradients():
         assert torch.isfinite(p.grad).all() and p.grad.abs().sum()>0,name
 
 
-@pytest.mark.parametrize('normalization_mode',['r6','r7'])
+@pytest.mark.parametrize('normalization_mode',['r6','r7','r8'])
 def test_fresh_training_exact_resume_norm_drift_and_final_diagnostic(tmp_path,monkeypatch,normalization_mode):
     import json
     import hashlib
@@ -86,8 +86,14 @@ def test_fresh_training_exact_resume_norm_drift_and_final_diagnostic(tmp_path,mo
     (tmp_path/'manifest.json').write_text(json.dumps({'schema':'igra-observation-archive-1','provider':'NOAA_IGRA2','data_kind':'real',
           'observations_sha256':hashlib.sha256(source.read_bytes()).hexdigest()}))
     dataset=tmp_path/'dataset';prepare(source,dataset);norm_path=tmp_path/'norms.json';fit(dataset,norm_path)
+    context = {}
+    if normalization_mode == 'r8':
+        from test_seasonal_climatology import sources
+        from global_weather.seasonal_climatology import prepare as prepare_climate
+        prepare_climate(sources(tmp_path/'climate-sources'),tmp_path/'climate',mesh_level=0)
+        context = {'climatology_path': tmp_path/'climate'}
     config=dict(mesh_level=0,hidden=8,epochs=2,patience=3,threads=1,max_train_issues=1,max_validation_issues=1,max_test_issues=1,max_records_per_window=50)
-    training.train(dataset,norm_path,tmp_path/'whole',config)
+    training.train(dataset,norm_path,tmp_path/'whole',config,**context)
     original_score=training.score;calls=0
     def interrupted(*args):
         nonlocal calls
@@ -95,8 +101,8 @@ def test_fresh_training_exact_resume_norm_drift_and_final_diagnostic(tmp_path,mo
         if calls==2:raise RuntimeError('synthetic interruption before publishing second epoch')
         return original_score(*args)
     monkeypatch.setattr(training,'score',interrupted)
-    with pytest.raises(RuntimeError,match='interruption'):training.train(dataset,norm_path,tmp_path/'resumed',config)
-    monkeypatch.setattr(training,'score',original_score);training.train(dataset,norm_path,tmp_path/'resumed',config)
+    with pytest.raises(RuntimeError,match='interruption'):training.train(dataset,norm_path,tmp_path/'resumed',config,**context)
+    monkeypatch.setattr(training,'score',original_score);training.train(dataset,norm_path,tmp_path/'resumed',config,**context)
     a=torch.load(tmp_path/'whole/epoch-0002/state.pt',weights_only=True)
     b=torch.load(tmp_path/'resumed/epoch-0002/state.pt',weights_only=True)
     assert all(_exact_tensor_equal(a['model'][name],b['model'][name]) for name in a['model'])
@@ -110,9 +116,18 @@ def test_fresh_training_exact_resume_norm_drift_and_final_diagnostic(tmp_path,mo
         from global_weather.profile_normalization import fit as other_norms
     other_norms(dataset,other_norm_path)
     with pytest.raises(ValueError,match='resume'):
-        training.train(dataset,other_norm_path,tmp_path/'whole',config)
+        training.train(dataset,other_norm_path,tmp_path/'whole',config,**context)
+    if normalization_mode == 'r8':
+        with pytest.raises(ValueError,match='resume'):
+            training.train(dataset,norm_path,tmp_path/'whole',config)
+        climate_source=tmp_path/'climate-sources/air.mon.ltm.1991-2020.nc'
+        original=climate_source.read_bytes()
+        climate_source.write_bytes(original+b'drift')
+        with pytest.raises(ValueError,match='source changed'):
+            training.load_frozen(dataset,tmp_path/'whole')
+        climate_source.write_bytes(original)
     norm_path.write_text(norm_path.read_text()+'\n')
-    with pytest.raises(ValueError,match='resume'):training.train(dataset,norm_path,tmp_path/'resumed',config)
+    with pytest.raises(ValueError,match='resume'):training.train(dataset,norm_path,tmp_path/'resumed',config,**context)
 
 
 @pytest.mark.parametrize('hours,bin_index',[(.001,0),(3,0),(3.0001,1),(24,7),(48,15),(72,23)])

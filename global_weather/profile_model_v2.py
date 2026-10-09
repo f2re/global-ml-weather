@@ -33,6 +33,12 @@ class PressureProfileModel(nn.Module):
         # every head. This is a predicted background, never a missing target.
         nn.init.normal_(self.head.weight,std=.001); nn.init.zeros_(self.head.bias)
 
+    def _initial_state(self, issue, pressure):
+        return self.geometry(self.xyz)[:,None]+pressure[None]
+
+    def _forcing(self, issue, lead, pressure):
+        return pressure[None].expand(self.grid.n_cells,-1,-1)
+
     def _decode(self,state,issue,lead):
         transformed=self.head(state)*self.std+self.mean
         # Mask before the nonlinear inverse: exp(invalid) can overflow and
@@ -52,7 +58,7 @@ class PressureProfileModel(nn.Module):
     def forward(self,inputs,issue):
         issue=utc(issue); n,d=self.grid.n_cells,self.hidden
         pressure=self.pressure_encoder(self.log_pressure)+self.levels
-        state=self.geometry(self.xyz)[:,None]+pressure[None]
+        state=self._initial_state(issue,pressure)
         for hour in range(12):
             rows=[r for r in inputs if issue-timedelta(hours=12-hour)<utc(r['observed_at'])<=issue-timedelta(hours=11-hour)
                   and utc(r['available_at'])<=issue]
@@ -73,7 +79,7 @@ class PressureProfileModel(nn.Module):
             state=torch.where((counts>0)[:,None],updated,state.reshape(-1,d)).reshape(n,37,d)
         frames=[self._decode(state,issue,0)]
         for lead in range(3,73,3):
-            context=torch.cat((state,self.graph.neighbours(state),state.mean(1,keepdim=True).expand_as(state),pressure[None].expand(n,-1,-1)),-1)
+            context=torch.cat((state,self.graph.neighbours(state),state.mean(1,keepdim=True).expand_as(state),self._forcing(issue,lead,pressure)),-1)
             updated=self.step(torch.tanh(self.dynamic(context)).reshape(-1,d),state.reshape(-1,d)).reshape(n,37,d)
             state=state+.1*(updated-state)
             frames.append(self._decode(state,issue,lead))

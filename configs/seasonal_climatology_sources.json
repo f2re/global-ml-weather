@@ -1,0 +1,69 @@
+{
+  "schema": "seasonal-climatology-sources-1",
+  "provider": "NOAA_NCEP1",
+  "role": "fixed_spatial_seasonal_context_only",
+  "policy": "docs/decisions/0011-seasonal-climate-context.md",
+  "period": {"start": "1991-01-01T00:00:00+00:00", "end": "2020-12-31T23:59:59.999999+00:00"},
+  "period_attribute": "time.climo_period",
+  "climo_period": "1991/01/01 - 2020/12/31",
+  "climate_months": 12,
+  "latitude_points": 73,
+  "longitude_points": 144,
+  "horizontal_resolution_degrees": 2.5,
+  "minimum_valid_years": 25,
+  "maximum_download_bytes": 67108864,
+  "expected_total_bytes": 45962671,
+  "retries": 3,
+  "timeout_seconds": 90,
+  "maximum_download_phase_seconds": 1800,
+  "sha256_policy": "pin_actual_bytes_in_remote_acquisition_receipt_before_preparation",
+  "interannual_standard_deviation_role": "not_downloaded_not_used_as_weather_normalization",
+  "attribution": "Data provided by NOAA PSL, Boulder, Colorado, USA, https://psl.noaa.gov/",
+  "files": [
+    {
+      "name": "air.mon.ltm.1991-2020.nc", "variable": "air", "model_variable": "temperature",
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/air.mon.ltm.1991-2020.nc",
+      "expected_bytes": 9709277, "sha256": null, "source_units": "degC", "model_units": "K",
+      "conversion": {"multiply": 1.0, "add": 273.15},
+      "pressure_levels": 17, "pressure_min_hpa": 10, "pressure_max_hpa": 1000,
+      "metadata_url": "https://psl.noaa.gov/thredds/dodsC/Datasets/ncep.reanalysis/Monthlies/pressure/air.mon.ltm.1991-2020.nc.html",
+      "catalog_url": "https://psl.noaa.gov/thredds/catalog/Datasets/ncep.reanalysis/Monthlies/pressure/catalog.html?dataset=Datasets/ncep.reanalysis/Monthlies/pressure/air.mon.ltm.1991-2020.nc"
+    },
+    {
+      "name": "shum.mon.ltm.1991-2020.nc", "variable": "shum", "model_variable": "specific_humidity",
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/shum.mon.ltm.1991-2020.nc",
+      "expected_bytes": 5045372, "sha256": null, "source_units": "grams/kg", "model_units": "kg kg-1",
+      "conversion": {"multiply": 0.001, "add": 0.0},
+      "pressure_levels": 8, "pressure_min_hpa": 300, "pressure_max_hpa": 1000,
+      "metadata_url": "https://psl.noaa.gov/thredds/dodsC/Datasets/ncep.reanalysis/Monthlies/pressure/shum.mon.ltm.1991-2020.nc.html",
+      "catalog_url": "https://psl.noaa.gov/thredds/catalog/Datasets/ncep.reanalysis/Monthlies/pressure/catalog.html?dataset=Datasets/ncep.reanalysis/Monthlies/pressure/shum.mon.ltm.1991-2020.nc"
+    },
+    {
+      "name": "uwnd.mon.ltm.1991-2020.nc", "variable": "uwnd", "model_variable": "u",
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/uwnd.mon.ltm.1991-2020.nc",
+      "expected_bytes": 10927383, "sha256": null, "source_units": "m/s", "model_units": "m s-1",
+      "conversion": {"multiply": 1.0, "add": 0.0},
+      "pressure_levels": 17, "pressure_min_hpa": 10, "pressure_max_hpa": 1000,
+      "metadata_url": "https://psl.noaa.gov/thredds/dodsC/Datasets/ncep.reanalysis/Monthlies/pressure/uwnd.mon.ltm.1991-2020.nc.html",
+      "catalog_url": "https://psl.noaa.gov/thredds/catalog/Datasets/ncep.reanalysis/Monthlies/pressure/catalog.html?dataset=Datasets/ncep.reanalysis/Monthlies/pressure/uwnd.mon.ltm.1991-2020.nc"
+    },
+    {
+      "name": "vwnd.mon.ltm.1991-2020.nc", "variable": "vwnd", "model_variable": "v",
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/vwnd.mon.ltm.1991-2020.nc",
+      "expected_bytes": 11405646, "sha256": null, "source_units": "m/s", "model_units": "m s-1",
+      "conversion": {"multiply": 1.0, "add": 0.0},
+      "pressure_levels": 17, "pressure_min_hpa": 10, "pressure_max_hpa": 1000,
+      "metadata_url": "https://psl.noaa.gov/thredds/dodsC/Datasets/ncep.reanalysis/Monthlies/pressure/vwnd.mon.ltm.1991-2020.nc.html",
+      "catalog_url": "https://psl.noaa.gov/thredds/catalog/Datasets/ncep.reanalysis/Monthlies/pressure/catalog.html?dataset=Datasets/ncep.reanalysis/Monthlies/pressure/vwnd.mon.ltm.1991-2020.nc"
+    },
+    {
+      "name": "hgt.mon.ltm.1991-2020.nc", "variable": "hgt", "model_variable": "geopotential",
+      "url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/hgt.mon.ltm.1991-2020.nc",
+      "expected_bytes": 8874993, "sha256": null, "source_units": "m", "model_units": "m2 s-2",
+      "conversion": {"multiply": 9.80665, "add": 0.0},
+      "pressure_levels": 17, "pressure_min_hpa": 10, "pressure_max_hpa": 1000,
+      "metadata_url": "https://psl.noaa.gov/thredds/dodsC/Datasets/ncep.reanalysis/Monthlies/pressure/hgt.mon.ltm.1991-2020.nc.html",
+      "catalog_url": "https://psl.noaa.gov/thredds/catalog/Datasets/ncep.reanalysis/Monthlies/pressure/catalog.html?dataset=Datasets/ncep.reanalysis/Monthlies/pressure/hgt.mon.ltm.1991-2020.nc"
+    }
+  ]
+}
