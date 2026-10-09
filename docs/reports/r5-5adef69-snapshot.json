@@ -1,0 +1,551 @@
+{
+  "captured_utc": "2026-10-09T06:10:46.314150+00:00",
+  "execution": {
+    "source_commit": "5adef6995ea7450df38a6d9a2b837d41c6a7558f",
+    "cwd": "/home/user/global-ml-weather-r5",
+    "started_utc": "2026-10-09T06:02:26.812901+00:00",
+    "deadline_utc": "2026-10-22T10:15:00+00:00",
+    "plan_sha256": "2be42f23df1a3fac1bcbe4a837ff14aa137010c1dd0ec473b9a707aa24500124",
+    "driver_sha256": "6cf9581eb95d28e9b295f20d30ffc428d6775fa0135d7d0030768ab77c218991",
+    "attempts": [
+      {
+        "number": 1,
+        "started_utc": "2026-10-09T06:02:26.813240+00:00",
+        "steps": [
+          {
+            "name": "pytest",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "pytest",
+              "-q"
+            ],
+            "cwd": "/home/user/global-ml-weather-r5",
+            "started_utc": "2026-10-09T06:02:26.816456+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T06:05:01.856097+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-pytest.stdout.log",
+                "sha256": "50bc4fa71c6b62ec432dae778f9ea87f45a34330792d8e4d71469aa28190cb8e"
+              },
+              "stderr": {
+                "path": "attempt-01-pytest.stderr.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          },
+          {
+            "name": "contracts",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "pytest",
+              "tests/test_ecosystem.py",
+              "tests/test_agent_contracts.py",
+              "tests/test_pipeline.py",
+              "tests/test_reference_assets.py",
+              "-q"
+            ],
+            "cwd": "/home/user/global-ml-weather-r5",
+            "started_utc": "2026-10-09T06:05:01.860017+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T06:05:19.868808+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-contracts.stdout.log",
+                "sha256": "def973890225f64e2ee78ff91703930fc2d55e5a8e50dced2d3be49394c81500"
+              },
+              "stderr": {
+                "path": "attempt-01-contracts.stderr.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          },
+          {
+            "name": "baseline",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "global_weather.cli",
+              "train-smoke",
+              "--optimizer-steps",
+              "2",
+              "--horizon-hours",
+              "72",
+              "--output",
+              "outputs/remote-r5-checks/baseline"
+            ],
+            "cwd": "/home/user/global-ml-weather-r5",
+            "started_utc": "2026-10-09T06:05:19.873558+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T06:05:22.879109+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-baseline.stdout.log",
+                "sha256": "8eea5ed0379558312c4876983a0a234bffc29f2dc0c7508f2ca6586762988915"
+              },
+              "stderr": {
+                "path": "attempt-01-baseline.stderr.log",
+                "sha256": "f290b0f06ea9e491c60905cdc3a266bb290902a8df38a71be0b2143fd6f7c98b"
+              }
+            }
+          },
+          {
+            "name": "adaptive",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "global_weather.adaptive_cli",
+              "--horizon-hours",
+              "72",
+              "--output",
+              "outputs/remote-r5-checks/adaptive"
+            ],
+            "cwd": "/home/user/global-ml-weather-r5",
+            "started_utc": "2026-10-09T06:05:22.882950+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T06:05:25.889812+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-adaptive.stdout.log",
+                "sha256": "6db1eaf093fa832559852c22fd019beab85a7b63d65b40fffb024e30b4d81377"
+              },
+              "stderr": {
+                "path": "attempt-01-adaptive.stderr.log",
+                "sha256": "f290b0f06ea9e491c60905cdc3a266bb290902a8df38a71be0b2143fd6f7c98b"
+              }
+            }
+          },
+          {
+            "name": "multimodal",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "global_weather.multimodal",
+              "selftest",
+              "--output",
+              "outputs/remote-r5-checks/multimodal"
+            ],
+            "cwd": "/home/user/global-ml-weather-r5",
+            "started_utc": "2026-10-09T06:05:25.894099+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T06:05:29.899810+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-multimodal.stdout.log",
+                "sha256": "751044fe1b8af73ce859646e297b93f78b7f2c712d2df6a2c571e8dd17788593"
+              },
+              "stderr": {
+                "path": "attempt-01-multimodal.stderr.log",
+                "sha256": "f290b0f06ea9e491c60905cdc3a266bb290902a8df38a71be0b2143fd6f7c98b"
+              }
+            }
+          },
+          {
+            "name": "pipeline",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "scripts/pipeline-test.py"
+            ],
+            "cwd": "/home/user/global-ml-weather-r5",
+            "started_utc": "2026-10-09T06:05:29.903929+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T06:05:37.911059+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-pipeline.stdout.log",
+                "sha256": "3cb11e2a3f031b3e3e4d8a4769923117ce9121b542071e09870af510a96e28f8"
+              },
+              "stderr": {
+                "path": "attempt-01-pipeline.stderr.log",
+                "sha256": "0d4fb5d008880cb618f1451a94d58122fe5ada6a92a9a40cec7fb23962e197e2"
+              }
+            }
+          },
+          {
+            "name": "docs",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "scripts/check_docs.py",
+              "--strict"
+            ],
+            "cwd": "/home/user/global-ml-weather-r5",
+            "started_utc": "2026-10-09T06:05:37.915443+00:00",
+            "timeout_seconds": 1800,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T06:05:38.920950+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-docs.stdout.log",
+                "sha256": "3012641afe9ccdbe7ca1c0cfcf83e82b8effd9db8bc04c5e64d23e475266f4f4"
+              },
+              "stderr": {
+                "path": "attempt-01-docs.stderr.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          },
+          {
+            "name": "browser",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "scripts/browser-test.py"
+            ],
+            "cwd": "/home/user/global-ml-weather-r5",
+            "started_utc": "2026-10-09T06:05:38.924721+00:00",
+            "timeout_seconds": 1138131.075237,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T06:05:47.931259+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-browser.stdout.log",
+                "sha256": "470fd00d7137a00f8ba6ce2cec252a51f2e34ec2dbd718388bec24f22a22f26d"
+              },
+              "stderr": {
+                "path": "attempt-01-browser.stderr.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          },
+          {
+            "name": "pipeline-browser",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "scripts/pipeline-browser-test.py"
+            ],
+            "cwd": "/home/user/global-ml-weather-r5",
+            "started_utc": "2026-10-09T06:05:47.935896+00:00",
+            "timeout_seconds": 1138122.064065,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T06:06:08.946334+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-pipeline-browser.stdout.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              "stderr": {
+                "path": "attempt-01-pipeline-browser.stderr.log",
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              }
+            }
+          },
+          {
+            "name": "r4-era5-recovery",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "global_weather.profile_reference_acquisition",
+              "--dataset",
+              "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/dataset",
+              "--training",
+              "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/training",
+              "--cache",
+              "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/reference-cache",
+              "--output",
+              "/home/user/global-ml-weather-r5/outputs/remote-r5-stations/r4-era5-recovery"
+            ],
+            "cwd": "/home/user/global-ml-weather-r5",
+            "started_utc": "2026-10-09T06:06:08.951381+00:00",
+            "timeout_seconds": 1138101.048586,
+            "returncode": 0,
+            "status": "passed",
+            "finished_utc": "2026-10-09T06:07:59.980325+00:00",
+            "logs": {
+              "stdout": {
+                "path": "attempt-01-r4-era5-recovery.stdout.log",
+                "sha256": "98ed6effd85e892263854e76662865a3c87e57c7abadeb0eb9644777cbafba8f"
+              },
+              "stderr": {
+                "path": "attempt-01-r4-era5-recovery.stderr.log",
+                "sha256": "b529abfaff42c7051ddbc8885aeda2adbaf6522e610ba42eae970328d1a2e456"
+              }
+            }
+          },
+          {
+            "name": "train",
+            "command": [
+              "/home/user/global-ml-weather/.venv/bin/python",
+              "-m",
+              "global_weather.profile_training",
+              "train",
+              "--dataset",
+              "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/dataset",
+              "--config",
+              "/home/user/global-ml-weather-r5/configs/profile_r5_training.json",
+              "--output",
+              "/home/user/global-ml-weather-r5/outputs/remote-r5-stations/training",
+              "--continue-from",
+              "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/training",
+              "--parent-commit",
+              "8939d0280ef85cdd2daa5f56cb82d795e6bd1837"
+            ],
+            "cwd": "/home/user/global-ml-weather-r5",
+            "started_utc": "2026-10-09T06:07:59.984751+00:00",
+            "timeout_seconds": 1137990.015218
+          }
+        ]
+      }
+    ],
+    "data_kind": "real",
+    "meteorologically_validated": false,
+    "environment": {
+      "python": "3.11.2 (main, Oct 11 2025, 09:33:38) [GCC 12.2.0]",
+      "platform": "Linux-6.1.141-1-generic-x86_64-with-glibc2.36",
+      "packages": {
+        "torch": "2.11.0+cu128",
+        "numpy": "2.4.6",
+        "scipy": "1.17.1",
+        "rasterio": "1.4.4",
+        "netCDF4": "1.7.4",
+        "cdsapi": "0.7.7",
+        "pytest": "9.1.1"
+      },
+      "accelerators": "GPU-2fd0e13b-e523-bf7e-bd04-32fac5d752e9, NVIDIA GeForce RTX 4090, 580.65.06\nGPU-fc554540-8abb-af15-c23b-c38c9b72aa91, NVIDIA GeForce RTX 4090, 580.65.06"
+    },
+    "status": "running",
+    "environment_limits": {
+      "OMP_NUM_THREADS": "8",
+      "CUDA_VISIBLE_DEVICES": "1"
+    },
+    "resource_limits": {
+      "new_network_bytes": 0,
+      "shared_data_read_only": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations",
+      "directory_gib": 128,
+      "minimum_free_disk_gib": 64
+    }
+  },
+  "service": "MainPID=2273692\nMemoryCurrent=1694334976\nCPUQuotaPerSecUSec=8s\nMemoryMax=103079215104\nActiveState=active\nUnitFileState=enabled\n",
+  "linger": "Linger=yes",
+  "source_commit": "5adef6995ea7450df38a6d9a2b837d41c6a7558f",
+  "tracked_changes": "",
+  "progress": {
+    "status": "training",
+    "epoch": 1,
+    "optimizer_steps": 12,
+    "train_issues": 192,
+    "loss": 0.8594686388969421,
+    "elapsed_seconds": 67.46020646300167,
+    "source_commit": "5adef6995ea7450df38a6d9a2b837d41c6a7558f"
+  },
+  "continuation": {
+    "schema": "profile-optimizer-warm-start-1",
+    "parent_directory": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/training",
+    "parent_reference": {
+      "directory": "epoch-0002",
+      "sha256": "f467b23a6a26c36f8467b71817c1903fa2372c05563b761f07bf8eaba16cf062",
+      "epoch": 2
+    },
+    "parent_checkpoint_sha256": "f467b23a6a26c36f8467b71817c1903fa2372c05563b761f07bf8eaba16cf062",
+    "parent_complete_sha256": "b9f486722509d2a25ba2cf0cfd7e7e185da9a3c9cda7cc29f2282be157f3eb93",
+    "parent_reference_sha256": "1235f935a51c42d7083cac26c0d9c1f75e02deb48ddb1fe89a9482cbc9bc349b",
+    "parent_source_commit": "8939d0280ef85cdd2daa5f56cb82d795e6bd1837",
+    "parent_epoch": 2,
+    "parent_identity": {
+      "dataset_sha256": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+      "source_sha256": "2e4af1a87192b0bb5bac5b17c6f5ba8f03a967c550b70b952bd74cc92a99f3da",
+      "commit": "8939d0280ef85cdd2daa5f56cb82d795e6bd1837",
+      "config": {
+        "mesh_level": 1,
+        "hidden": 32,
+        "epochs": 2,
+        "patience": 2,
+        "threads": 8,
+        "seed": 29,
+        "learning_rate": 0.0001,
+        "weight_decay": 0.01,
+        "gradient_clip": 1.0,
+        "max_train_issues": 48,
+        "max_validation_issues": 16,
+        "max_test_issues": 16,
+        "max_records_per_window": 2000
+      },
+      "device": "cuda",
+      "python": "3.11.2",
+      "torch": "2.11.0+cu128",
+      "numpy": "2.4.6",
+      "cuda": "12.8",
+      "hardware": "NVIDIA GeForce RTX 4090",
+      "cuda_visible_devices": "1",
+      "cublas_workspace_config": ":4096:8",
+      "deterministic": true,
+      "tf32": false
+    },
+    "child_identity": {
+      "dataset_sha256": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+      "source_sha256": "2e4af1a87192b0bb5bac5b17c6f5ba8f03a967c550b70b952bd74cc92a99f3da",
+      "commit": "5adef6995ea7450df38a6d9a2b837d41c6a7558f",
+      "config": {
+        "mesh_level": 1,
+        "hidden": 32,
+        "epochs": 100,
+        "patience": 15,
+        "threads": 8,
+        "seed": 29,
+        "learning_rate": 0.0001,
+        "weight_decay": 0.01,
+        "gradient_clip": 1.0,
+        "max_train_issues": 192,
+        "max_validation_issues": 48,
+        "max_test_issues": 48,
+        "max_records_per_window": 2000
+      },
+      "device": "cuda",
+      "python": "3.11.2",
+      "torch": "2.11.0+cu128",
+      "numpy": "2.4.6",
+      "cuda": "12.8",
+      "hardware": "NVIDIA GeForce RTX 4090",
+      "cuda_visible_devices": "1",
+      "cublas_workspace_config": ":4096:8",
+      "deterministic": true,
+      "tf32": false
+    },
+    "model_definition_sha256": "e8265d64cb3d64321aa8de868f01b27939ef9084d31a6c0b0e123e61e950e4b0",
+    "preserved": [
+      "weights",
+      "optimizer",
+      "python_rng",
+      "numpy_rng",
+      "torch_rng",
+      "cuda_rng"
+    ],
+    "reset": [
+      "epoch_number",
+      "validation_best",
+      "validation_stale"
+    ],
+    "reason": "new bounded station-validation schedule; not identical historical replay",
+    "test_independence": "previously evaluated periods; subsequent reuse is diagnostic",
+    "model_selection_source": "measured_validation_only"
+  },
+  "r4_verification_receipt": {
+    "identity": {
+      "schema": "frozen-profile-verification-2",
+      "issue": "2022-08-01T00:00:00+00:00",
+      "paths": {
+        "dataset": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/dataset",
+        "training": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/training"
+      },
+      "external_files": {
+        "pressure": [
+          {
+            "path": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/reference-cache/052d2aefba881fc00762d8bd8fa7ee0c0d860b2f7c303013dae37fc762f14fa2/field-0.nc",
+            "sha256": "0ec7c37e387d6d9d91eaf570909d17d7e018d6c00f77d0b1cc82d9c64421d73f"
+          },
+          {
+            "path": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/reference-cache/c1d5ace25a9e51504bfdeb2d0b01d4f484b6d8d1da98ccfe3f70d75f75c91597/field-0.nc",
+            "sha256": "75d9e3a47baff155a9eb37d39e5ccfc3713c1fa327d9120e6bf7d4604a2a0832"
+          },
+          {
+            "path": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/reference-cache/5288e4a2fe041baf694e9f187b0206286d093bf10c84eb58d4d094dd4d23eb20/field-0.nc",
+            "sha256": "9d67fe7c332485113f863fcc9b4ca4e8753ab1790983b66c54225232fac2197a"
+          },
+          {
+            "path": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/reference-cache/b8c0bbbe573bd369d941f3cc677da156db48e767632591dc3a845f7cad5e6308/field-0.nc",
+            "sha256": "81da5c990594f5ac97c1ee3686d853f150268678c58c6475d5dbbfdf1b00bfd8"
+          }
+        ],
+        "surface": [
+          {
+            "path": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/reference-cache/13a68832b287d0de4b03b28c66678dd452d0fd258a22839db6906290a380d99c/field-0.nc",
+            "sha256": "a8d7e7e1b38bb65e06b0eedad11303f395d73b5c42ee346e0f84d5667d188569"
+          },
+          {
+            "path": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/reference-cache/1b1bbed1f684c4ff1042c1f06f1ac001abc373704ab6090699f7798a21fed01a/field-0.nc",
+            "sha256": "5edaafa17a5365abb79c5b5488b8440d21ff1fece3ba6b34be7df2eb150eb472"
+          },
+          {
+            "path": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/reference-cache/e875c08ddda99c6603ba94b2f9f20957e42df3f12658093b793947fb8155db09/field-0.nc",
+            "sha256": "1062e7ae3c180f6da8196f250ed96a761e0bb74f88462afcb46cd49545e0c3aa"
+          },
+          {
+            "path": "/home/user/global-ml-weather-r4-v6/outputs/remote-r4-stations/reference-cache/567354a38a65502364436597ccb1bb345697c03d0fb791ef649a1d4f4821f63c/field-0.nc",
+            "sha256": "eaf68ac479befa758e378ccb69e6d6eebfb65ba538bfadf8ac82c2ceffaa754c"
+          }
+        ]
+      },
+      "hashes": {
+        "dataset": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+        "completion": "b9f486722509d2a25ba2cf0cfd7e7e185da9a3c9cda7cc29f2282be157f3eb93",
+        "best": "1235f935a51c42d7083cac26c0d9c1f75e02deb48ddb1fe89a9482cbc9bc349b",
+        "checkpoint": "f467b23a6a26c36f8467b71817c1903fa2372c05563b761f07bf8eaba16cf062",
+        "verification_code": "646c0f2ddbe818ba08ac638e460be3985160bbed038785a7daae523ebb3129f8"
+      }
+    },
+    "files": {
+      "verification.json": "ad065c1de44bc7bea5ccb106a67360bbc0789b74eef2f5fb403920793312796f",
+      "era5-diagnostic.npz": "6d78535b7d7335440bb811e04689266fbb343a507c429ab975a4ed2808e51b06"
+    },
+    "preserved_previous": null
+  },
+  "r4_verification_metric_rows": 4550,
+  "r4_verification_sample": [
+    {
+      "lead_hours": 0,
+      "pressure_pa": 70000.0,
+      "variable": "temperature",
+      "units": "K",
+      "mae": 39.69443003905838,
+      "rmse": 40.676643072716445,
+      "bias": -39.69443003905838,
+      "cells": 41
+    },
+    {
+      "lead_hours": 24,
+      "pressure_pa": 70000.0,
+      "variable": "temperature",
+      "units": "K",
+      "mae": 49.794483124815486,
+      "rmse": 50.74074158549868,
+      "bias": -49.794483124815486,
+      "cells": 41
+    },
+    {
+      "lead_hours": 48,
+      "pressure_pa": 70000.0,
+      "variable": "temperature",
+      "units": "K",
+      "mae": 51.09462495388209,
+      "rmse": 51.84238332048011,
+      "bias": -51.09462495388209,
+      "cells": 41
+    },
+    {
+      "lead_hours": 72,
+      "pressure_pa": 70000.0,
+      "variable": "temperature",
+      "units": "K",
+      "mae": 50.70927198132076,
+      "rmse": 51.90436865808005,
+      "bias": -50.70927198132076,
+      "cells": 42
+    }
+  ],
+  "parent_hashes": {
+    "training/complete.json": "b9f486722509d2a25ba2cf0cfd7e7e185da9a3c9cda7cc29f2282be157f3eb93",
+    "training/latest.json": "1235f935a51c42d7083cac26c0d9c1f75e02deb48ddb1fe89a9482cbc9bc349b",
+    "training/best.json": "1235f935a51c42d7083cac26c0d9c1f75e02deb48ddb1fe89a9482cbc9bc349b",
+    "dataset/dataset.json": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e"
+  },
+  "accelerators": "0, NVIDIA GeForce RTX 4090, 0 %, 15 MiB\n1, NVIDIA GeForce RTX 4090, 92 %, 7306 MiB",
+  "disk": "Filesystem                    1B-blocks         Used    Available Use% Mounted on\n/dev/mapper/VG783-lv_home 1797567275008 862010974208 844169338880  51% /home",
+  "scientific_acceptance": false,
+  "test_independence": "previously seen period; diagnostic only",
+  "new_network_bytes": 0
+}
