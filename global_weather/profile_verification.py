@@ -25,7 +25,7 @@ from .vertical import PRESSURE_HPA, PROFILE_VARIABLES, PROFILE_UNITS
 
 def load_frozen(dataset_path,training):
     completion=json.loads((Path(training)/'complete.json').read_text())
-    if completion.get('status')=='measured_pressure_profile_research_trained':
+    if completion.get('status') in ('measured_pressure_profile_research_trained','measured_graphcast_profile_research_trained'):
         from .profile_training_v2 import load_frozen as load_pressure_model
         return load_pressure_model(dataset_path,training)
     return _legacy_load_frozen(dataset_path,training)
@@ -59,7 +59,11 @@ def _input_hash(inputs):
 def _identity(dataset_path, training, pressure, surface, issue):
     ref = json.loads((training/'best.json').read_text())
     completion=json.loads((training/'complete.json').read_text())
-    extra=[('pressure_norms',Path(completion['identity']['norm_path']))] if completion.get('status')=='measured_pressure_profile_research_trained' else []
+    extra=[('pressure_norms',Path(completion['identity']['norm_path']))] if completion.get('status') in ('measured_pressure_profile_research_trained','measured_graphcast_profile_research_trained') else []
+    if completion.get('status') == 'measured_graphcast_profile_research_trained':
+        from .import_climatology import bundled_directory, PINNED_HASHES
+        directory = bundled_directory()
+        extra += [('graphcast_' + name, directory / name) for name in sorted(PINNED_HASHES)]
     def files(value):
         paths=list(value) if isinstance(value,(list,tuple)) else [value]
         if not paths: raise ValueError('External source file list is empty.')
@@ -145,7 +149,7 @@ def _verify(dataset_path, training, pressure_netcdf, surface_netcdf, issue, outp
     if not (training/'complete.json').is_file():
         raise ValueError('Complete training and freeze weights before ERA5 verification.')
     completion = json.loads((training/'complete.json').read_text())
-    if completion.get('status') not in ('measured_upper_air_research_trained','measured_pressure_profile_research_trained'):
+    if completion.get('status') not in ('measured_upper_air_research_trained','measured_pressure_profile_research_trained','measured_graphcast_profile_research_trained'):
         raise ValueError('Only observation-trained profile checkpoints are admitted.')
     ref = json.loads((training/'best.json').read_text())
     checkpoint = checkpoint_path(training, ref)

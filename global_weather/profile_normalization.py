@@ -39,6 +39,10 @@ def _index(variable):
 class PressureNormalization:
     """Physical normalization with explicit unavailable (NaN) statistics."""
 
+    humidity_transform = 'log1p(q/q_scale)'
+    architecture = 'pressure-profile-v2'
+    status = 'measured_pressure_profile_research_trained'
+
     def __init__(self, payload: dict) -> None:
         if (payload.get('schema') != SCHEMA or payload.get('period') != PERIOD
                 or payload.get('split') != 'train'
@@ -230,3 +234,13 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+def load_normalization(payload: dict) -> PressureNormalization:
+    """Dispatch explicit R6/R7 schemas; incompatible statistics never mix."""
+    if payload.get('schema') == SCHEMA:
+        return PressureNormalization(payload)
+    from .profile_graphcast_normalization import GraphCastNormalization, SCHEMA as GRAPHCAST_SCHEMA
+    if payload.get('schema') == GRAPHCAST_SCHEMA:
+        return GraphCastNormalization(payload)
+    raise ValueError('Unknown profile normalization schema.')

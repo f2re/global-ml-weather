@@ -1,8 +1,9 @@
-"""Fresh pressure-normalized S1/S2 research; measured targets only, no ERA5."""
+"""Fresh pressure-normalized S1/S2 research; measured targets; explicit frozen R6/R7 norm schemas."""
 from __future__ import annotations
 import argparse
 from datetime import timedelta
 import fcntl
+import hashlib
 import json
 import math
 import os
@@ -16,7 +17,7 @@ from .grid import build_pyramid
 from .observation_training import checkpoint_path,digest,save,sync_directory
 from .observations import utc
 from .profile_model_v2 import PressureProfileModel
-from .profile_normalization import PressureNormalization
+from .profile_normalization import load_normalization
 from .profile_training import ProfileDataset,VARIABLES,bounded_records,configuration,identity,_restore_rng
 
 
@@ -29,7 +30,7 @@ def objective(model: PressureProfileModel,frames: list,targets: list[dict]) -> t
         if result is None: continue
         prediction=result[0]
         if not torch.isfinite(prediction): raise FloatingPointError('Nonfinite physical prediction.')
-        if variable==1:
+        if variable==1 and model.normalization.humidity_transform!='identity':
             difference=torch.log1p(prediction/model.normalization.q_scale)-np.log1p(record['value']/model.normalization.q_scale)
         else: difference=prediction-record['value']
         terms[variable].append((difference/float(std)).square())
@@ -61,12 +62,21 @@ def score(model: PressureProfileModel,dataset: ProfileDataset,config: dict,split
     return {'forecast':float(np.mean(forecast)),'reconstruction':float(np.mean(analysis))}
 
 
+def _load_fixed_state(model: PressureProfileModel, state: dict) -> None:
+    """Checkpoint weights cannot replace the declared fixed physical buffers."""
+    buffers=dict(model.named_buffers())
+    for name in ('mean','std','norm_support','pressure_pa','xyz','log_pressure'):
+        if name not in state or not torch.equal(state[name].to(buffers[name].device),buffers[name]):
+            raise ValueError('Checkpoint fixed normalization or geometry buffer differs: '+name)
+    model.load_state_dict(state,strict=True)
+
+
 def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: dict) -> None:
     weight=config.get('reconstruction_weight',.25)
     if type(weight) not in (int,float) or not 0<=weight<=1: raise ValueError('Invalid reconstruction weight.')
     config=configuration({k:v for k,v in config.items() if k!='reconstruction_weight'}); config['reconstruction_weight']=weight
     dataset=ProfileDataset(dataset_path); norm_path=Path(norm_path); norm_hash=digest(norm_path)
-    norms=PressureNormalization(json.loads(norm_path.read_text()))
+    norms=load_normalization(json.loads(norm_path.read_text()))
     sources={'dataset_manifest_sha256':dataset.manifest_sha256,'database_sha256':dataset.manifest['database_sha256'],
              'source_sha256':dataset.manifest['source_sha256'],'admission_sha256':dataset.manifest['admission_sha256']}
     if norms.payload['source_identity']!=sources:
@@ -79,18 +89,19 @@ def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: di
         random.seed(config['seed']); np.random.seed(config['seed']); torch.manual_seed(config['seed'])
         model=PressureProfileModel(build_pyramid(config['mesh_level'])[0],norms,config['hidden']).to(device)
         optimizer=torch.optim.AdamW(model.parameters(),lr=config['learning_rate'],weight_decay=config['weight_decay'])
-        expected={**identity(dataset,config,device),'architecture':'pressure-profile-v2','norm_sha256':norm_hash,'norm_path':str(norm_path.resolve())}
+        expected={**identity(dataset,config,device),'architecture':norms.architecture,'norm_sha256':norm_hash,'norm_path':str(norm_path.resolve())}
         completed=0; best=float('inf'); best_epoch=None; stale=0
         if (output/'latest.json').exists():
             ref=json.loads((output/'latest.json').read_text()); state=torch.load(checkpoint_path(output,ref),map_location=device,weights_only=True)
             if state['identity']!=expected: raise ValueError('Incompatible R6 source/data/norm/numerical resume.')
-            model.load_state_dict(state['model'],strict=True); optimizer.load_state_dict(state['optimizer']); _restore_rng(state,device)
+            _load_fixed_state(model,state['model']); optimizer.load_state_dict(state['optimizer']); _restore_rng(state,device)
             completed,best,best_epoch,stale=state['epoch'],state['best'],state['best_epoch'],state['stale']
             best_ref=ref if best_epoch==completed else state['best_ref']; checkpoint_path(output,best_ref); save(output/'best.json',best_ref)
         if any(output.glob('.epoch-*')) or (output/f'epoch-{completed+1:04d}').exists():
             raise ValueError('Ambiguous interrupted R6 epoch; preserve for inspection.')
         for epoch in range(completed+1,config['epochs']+1):
             dataset.verify()
+            if hasattr(norms,'verify_sources'): norms.verify_sources()
             if digest(norm_path)!=norm_hash: raise ValueError('Pressure norms changed.')
             model.train(); started=time.monotonic(); losses=[]; gradients={}; coverage=np.zeros(5,dtype=int)
             issues=dataset.issues('train',config['max_train_issues']); random.shuffle(issues)
@@ -121,6 +132,7 @@ def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: di
             if improved: best,best_epoch,stale=value,epoch,0
             else: stale+=1
             dataset.verify()
+            if hasattr(norms,'verify_sources'): norms.verify_sources()
             if digest(norm_path)!=norm_hash: raise ValueError('Pressure norms changed during epoch.')
             temporary=output/f'.epoch-{epoch:04d}'; temporary.mkdir(); rng=np.random.get_state()
             state={'identity':expected,'epoch':epoch,'best':best,'best_epoch':best_epoch,'stale':stale,
@@ -138,23 +150,30 @@ def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: di
             if improved: save(output/'best.json',ref)
             print(json.dumps(metrics),flush=True)
             if stale>=config['patience']: break
-        save(output/'complete.json',{'identity':expected,'best_epoch':best_epoch,'status':'measured_pressure_profile_research_trained',
+        save(output/'complete.json',{'identity':expected,'best_epoch':best_epoch,'status':norms.status,
+             'source_roles':{'input':'IGRA','target':'IGRA','normalization':norms.payload['schema'],
+                             'external_verification':'ERA5 frozen-model only'},
              'scientific_acceptance':False,'test_independence':'old periods already seen; new independent acceptance required'})
 
 
 def load_frozen(dataset_path: str|Path,training: str|Path,device: str='auto') -> tuple[PressureProfileModel,ProfileDataset]:
     training=Path(training);completion=json.loads((training/'complete.json').read_text())
-    if completion.get('status')!='measured_pressure_profile_research_trained': raise ValueError('Complete R6 training first.')
+    if completion.get('status') not in ('measured_pressure_profile_research_trained','measured_graphcast_profile_research_trained'): raise ValueError('Complete R6 training first.')
     ref=json.loads((training/'best.json').read_text());state=torch.load(checkpoint_path(training,ref),map_location='cpu',weights_only=True)
     if state['identity']!=completion['identity'] or ref['epoch']!=completion['best_epoch']: raise ValueError('R6 completion differs.')
     previous=state['identity']; norm_path=Path(previous['norm_path']);dataset=ProfileDataset(dataset_path)
     if digest(norm_path)!=previous['norm_sha256']: raise ValueError('R6 pressure norms changed.')
     device=torch.device(('cuda' if torch.cuda.is_available() else 'cpu') if device=='auto' else device)
+    norms=load_normalization(json.loads(norm_path.read_text()))
+    sources={'dataset_manifest_sha256':dataset.manifest_sha256,'database_sha256':dataset.manifest['database_sha256'],
+             'source_sha256':dataset.manifest['source_sha256'],'admission_sha256':dataset.manifest['admission_sha256']}
+    if norms.payload['source_identity']!=sources or completion['status']!=norms.status:
+        raise ValueError('Frozen normalization data or schema differs.')
     config=previous['config'];torch.set_num_threads(config['threads']);torch.use_deterministic_algorithms(True);torch.backends.cuda.matmul.allow_tf32=False
-    expected={**identity(dataset,config,device),'architecture':'pressure-profile-v2','norm_sha256':digest(norm_path),'norm_path':str(norm_path.resolve())}
+    expected={**identity(dataset,config,device),'architecture':norms.architecture,'norm_sha256':digest(norm_path),'norm_path':str(norm_path.resolve())}
     if previous!=expected: raise ValueError('R6 frozen identity differs.')
-    model=PressureProfileModel(build_pyramid(config['mesh_level'])[0],PressureNormalization(json.loads(norm_path.read_text())),config['hidden']).to(device)
-    model.load_state_dict(state['model'],strict=True);model.eval()
+    model=PressureProfileModel(build_pyramid(config['mesh_level'])[0],norms,config['hidden']).to(device)
+    _load_fixed_state(model,state['model']);model.eval()
     for parameter in model.parameters():parameter.requires_grad_(False)
     return model,dataset
 
@@ -193,11 +212,78 @@ def evaluate(dataset_path: str|Path,training: str|Path,output: str|Path) -> None
          'unsupported_records':rejected.tolist(),'scientific_acceptance':False})
 
 
+
+def forecast(dataset_path: str|Path, training: str|Path, issue: str, output: str|Path) -> None:
+    """Frozen causal forecast; verified immutable retries, no future targets."""
+    from .vertical import PROFILE_UNITS,PROFILE_VARIABLES
+    training=Path(training)
+    def training_hashes() -> dict[str,str]:
+        complete_hash=digest(training/'complete.json'); best_hash=digest(training/'best.json')
+        reference=json.loads((training/'best.json').read_text())
+        state_path=checkpoint_path(training,reference)
+        return {'complete_json':complete_hash,'best_json':best_hash,'state_pt':digest(state_path)}
+    frozen_hashes=training_hashes()
+    completion=json.loads((training/'complete.json').read_text())
+    frozen_reference=json.loads((training/'best.json').read_text())
+    model,dataset=load_frozen(dataset_path,training)
+    if training_hashes()!=frozen_hashes:raise ValueError('Frozen training artifacts changed during loading.')
+    config=completion['identity']['config']; origin=utc(issue)
+    destination=Path(output)
+    inputs=bounded_records(dataset.records(origin-timedelta(hours=12),origin,issue=origin),
+                           config['max_records_per_window'])
+    dataset.verify()
+    if hasattr(model.normalization,'verify_sources'):model.normalization.verify_sources()
+    if digest(completion['identity']['norm_path'])!=completion['identity']['norm_sha256']:
+        raise ValueError('Forecast normalization changed.')
+    expected={'schema':'measured-profile-frozen-forecast-1','issue_time':origin.isoformat(),
+         'lead_hours':list(range(0,73,3)),
+         'valid_times':[(origin+timedelta(hours=lead)).isoformat() for lead in range(0,73,3)],
+         'profile_variables':list(PROFILE_VARIABLES),'profile_units':list(PROFILE_UNITS),
+         'input_count':len(inputs),'input_window_hours':12,'future_targets_read':False,
+         'input_sha256':hashlib.sha256(json.dumps(inputs,sort_keys=True,allow_nan=False).encode()).hexdigest(),
+         'wind_basis':'local_enu_vector','identity':completion['identity'],
+         'checkpoint':frozen_reference,'training_artifact_sha256':frozen_hashes,'scientific_acceptance':False}
+    if destination.is_symlink() or any(parent.is_symlink() for parent in destination.parents):
+        raise ValueError('Forecast output symlinks are forbidden.')
+    if destination.exists():
+        if not (destination/'forecast.json').is_file() or not (destination/'forecast.npz').is_file():
+            raise ValueError('Incomplete immutable forecast; preserve for inspection.')
+        metadata=json.loads((destination/'forecast.json').read_text())
+        stored_hash=metadata.pop('artifact_sha256',None)
+        if metadata!=expected or digest(destination/'forecast.npz')!=stored_hash:
+            raise ValueError('Immutable forecast identity or artifact changed.')
+        if training_hashes()!=frozen_hashes:raise ValueError('Frozen training artifacts changed during reuse.')
+        return
+    stage=destination.with_name('.'+destination.name+'.incomplete')
+    if stage.exists() or stage.is_symlink():
+        raise ValueError('Ambiguous incomplete forecast; preserve for inspection.')
+    with torch.no_grad(): frames=model(inputs,origin)
+    dataset.verify()
+    if hasattr(model.normalization,'verify_sources'):model.normalization.verify_sources()
+    if digest(completion['identity']['norm_path'])!=completion['identity']['norm_sha256']:
+        raise ValueError('Forecast normalization changed during inference.')
+    if training_hashes()!=frozen_hashes:raise ValueError('Frozen training artifacts changed during inference.')
+    destination.parent.mkdir(parents=True,exist_ok=True);stage.mkdir()
+    with (stage/'forecast.npz').open('xb') as file:
+        np.savez_compressed(file,profiles=np.stack([f.profiles.cpu().numpy() for f in frames]),
+                            profile_variable_mask=np.stack([f.profile_variable_mask.cpu().numpy() for f in frames]),
+                            pressure_pa=model.pressure_pa.cpu().numpy(),xyz=model.xyz.cpu().numpy(),
+                            surface=np.stack([f.surface.cpu().numpy() for f in frames]),
+                            surface_mask=np.stack([f.surface_mask.cpu().numpy() for f in frames]))
+        file.flush();os.fsync(file.fileno())
+    if training_hashes()!=frozen_hashes:raise ValueError('Frozen training artifacts changed during publication.')
+    save(stage/'forecast.json',{**expected,'artifact_sha256':digest(stage/'forecast.npz')})
+    sync_directory(stage);stage.rename(destination);sync_directory(destination.parent)
+
+
 def main(argv: list[str]|None=None) -> None:
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--dataset',required=True)
-    parser.add_argument('--norms');parser.add_argument('--output',required=True);parser.add_argument('--config');parser.add_argument('--training')
+    parser.add_argument('--norms');parser.add_argument('--output',required=True);parser.add_argument('--config');parser.add_argument('--training');parser.add_argument('--issue')
     args=parser.parse_args(argv)
-    if args.training:evaluate(args.dataset,args.training,args.output)
+    if args.issue:
+        if not args.training:parser.error('Frozen forecast requires --training and --issue.')
+        forecast(args.dataset,args.training,args.issue,args.output)
+    elif args.training:evaluate(args.dataset,args.training,args.output)
     else:
         if not args.norms or not args.config:parser.error('Training requires --norms and --config.')
         train(args.dataset,args.norms,args.output,json.loads(Path(args.config).read_text()))

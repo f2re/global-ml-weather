@@ -61,12 +61,16 @@ def test_all_observation_and_dynamic_branches_have_finite_nonzero_gradients():
         assert torch.isfinite(p.grad).all() and p.grad.abs().sum()>0,name
 
 
-def test_fresh_training_exact_resume_norm_drift_and_final_diagnostic(tmp_path,monkeypatch):
+@pytest.mark.parametrize('normalization_mode',['r6','r7'])
+def test_fresh_training_exact_resume_norm_drift_and_final_diagnostic(tmp_path,monkeypatch,normalization_mode):
     import json
     import hashlib
     from global_weather import profile_training_v2 as training
     from global_weather.profile_training import prepare,TRAIN_END,VAL_END
-    from global_weather.profile_normalization import fit
+    if normalization_mode=='r6':
+        from global_weather.profile_normalization import fit
+    else:
+        from global_weather.profile_graphcast_normalization import create as fit
     from global_weather.profile_verification import _exact_tensor_equal
     monkeypatch.setattr(torch.cuda,'is_available',lambda:False)
     data=[]
@@ -99,6 +103,14 @@ def test_fresh_training_exact_resume_norm_drift_and_final_diagnostic(tmp_path,mo
     training.evaluate(dataset,tmp_path/'whole',tmp_path/'test.json')
     report=json.loads((tmp_path/'test.json').read_text());assert report['scientific_acceptance'] is False
     assert all('analysis_persistence_rmse' in r for r in report['metrics'])
+    other_norm_path=tmp_path/'other-norms.json'
+    if normalization_mode=='r6':
+        from global_weather.profile_graphcast_normalization import create as other_norms
+    else:
+        from global_weather.profile_normalization import fit as other_norms
+    other_norms(dataset,other_norm_path)
+    with pytest.raises(ValueError,match='resume'):
+        training.train(dataset,other_norm_path,tmp_path/'whole',config)
     norm_path.write_text(norm_path.read_text()+'\n')
     with pytest.raises(ValueError,match='resume'):training.train(dataset,norm_path,tmp_path/'resumed',config)
 

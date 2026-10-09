@@ -1,8 +1,32 @@
 {
   "schema": "observation-normalization-catalog-1",
-  "runtime_source_commit": "0890c84b346f5e1a17a3d4e5e57f10379e887ab8",
-  "experiment": "R6",
+  "runtime_source_commit": null,
+  "experiment": "R7",
+  "execution_status": "pending_tested_runtime_revision",
+  "policy": "docs/decisions/0010-graphcast-fixed-normalization.md",
   "training_normalization": {
+    "role": "frozen_train_inputs_losses_and_physical_inverse",
+    "source": "bundled_graphcast_multiyear_global_level_statistics",
+    "manifest": "assets/normalization/graphcast/SOURCES.json",
+    "period": ["1979-01-02T00:00:00+00:00", "2015-12-31T23:59:59.999999+00:00"],
+    "period_interpretation": "matching NetCDF date_start/date_end; whole final year is a conservative bound",
+    "kind": "global_level_zscore",
+    "variables": ["temperature", "specific_humidity", "u", "v", "geopotential"],
+    "units": ["K", "kg kg-1", "m s-1", "m s-1", "m2 s-2"],
+    "dimensions": [37, 5],
+    "immutable_per_experiment": true,
+    "seasonal_or_local_climatology": false,
+    "unknown_channel_fallback": "admitted_real_train_measurements_only",
+    "humidity_transform": "physical_affine_zscore_with_nonnegative_output_clamp",
+    "initialization": "fresh_weights_no_R6_log1p_checkpoint",
+    "runtime_schema": "graphcast-pressure-normalization-1",
+    "planned_remote_path": "/home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json",
+    "planned_local_copy": "docs/reports/r7-graphcast-norms.json",
+    "generated_artifact_sha256": null,
+    "artifact_status": "planned_not_yet_captured"
+  },
+  "historical_r6_training_normalization": {
+    "runtime_source_commit": "0890c84b346f5e1a17a3d4e5e57f10379e887ab8",
     "role": "train_inputs_losses_and_physical_inverse",
     "source": "admitted_real_IGRA_train_observations",
     "period": ["2021-01-01T00:00:00+00:00", "2022-01-01T00:00:00+00:00"],
@@ -15,8 +39,8 @@
     "immutable_per_experiment": true,
     "seasonal_or_local_climatology": false
   },
-  "historical_reference_statistics": {
-    "role": "historical_reference_only_not_R6_training",
+  "fixed_multiyear_reference_statistics": {
+    "role": "required_R7_profile_training_normalization_not_measurements",
     "manifest": "assets/normalization/graphcast/SOURCES.json",
     "period_interpretation": "NetCDF date_start=1979-01-02, date_end=2015; conservative whole-year end",
     "kind": "global_level_statistics_from_ERA5",
@@ -25,7 +49,9 @@
       "assets/normalization/graphcast/stddev_by_level.nc": "29f941d8c34906b87a1745f93b2308d1e169ec9bbdc4c5491479c771fe92c3cb"
     },
     "seasonal_or_local_climatology": false,
-    "prohibited_for_observation_only_training": true
+    "prohibited_for_observation_only_training": false,
+    "authorization": "operator_R7_decision_0010",
+    "actual_era5_fields_for_training_prohibited": true
   },
   "multiyear_observed_seasonal_climatology": {
     "status": "not_built",

@@ -1,4 +1,4 @@
-"""Pressure-conditioned observed-profile model; no reanalysis input or norms."""
+"""Pressure-conditioned observed-profile model; no reanalysis observation inputs."""
 from __future__ import annotations
 from datetime import timedelta
 import numpy as np
@@ -29,7 +29,7 @@ class PressureProfileModel(nn.Module):
         self.token=nn.Sequential(nn.Linear(hidden+6,hidden),nn.GELU(),nn.Linear(hidden,hidden))
         self.ingest=nn.GRUCell(hidden,hidden); self.graph=GraphOps(grid)
         self.dynamic=nn.Linear(hidden*4,hidden); self.step=nn.GRUCell(hidden,hidden); self.head=nn.Linear(hidden,5)
-        # Start near empirical train level means, with finite gradient through
+        # Start near fixed level means, with finite gradient through
         # every head. This is a predicted background, never a missing target.
         nn.init.normal_(self.head.weight,std=.001); nn.init.zeros_(self.head.bias)
 
@@ -38,7 +38,8 @@ class PressureProfileModel(nn.Module):
         # Mask before the nonlinear inverse: exp(invalid) can overflow and
         # poison backward even when a later output mask removes that value.
         q_transformed=torch.where(self.norm_support[:,1],transformed[...,1],torch.zeros_like(transformed[...,1]))
-        q=self.normalization.q_scale*torch.expm1(q_transformed).clamp_min(0.)
+        q=(q_transformed.clamp_min(0.) if self.normalization.humidity_transform=='identity'
+           else self.normalization.q_scale*torch.expm1(q_transformed).clamp_min(0.))
         values=torch.stack((transformed[...,0],q,*[transformed[...,i] for i in range(2,5)]),-1)
         profiles=torch.cat((values,values.new_full((*values.shape[:-1],1),float('nan'))),-1)
         mask=torch.cat((self.norm_support,torch.zeros(37,1,dtype=torch.bool,device=state.device)),-1)[None].expand_as(profiles)
