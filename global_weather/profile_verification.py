@@ -5,9 +5,15 @@ The diagnostic source can assimilate observations and is not independent truth.
 """
 from __future__ import annotations
 import argparse
+from contextlib import contextmanager
 from datetime import timedelta
+import fcntl
+import hashlib
 import json
+import os
 from pathlib import Path
+import stat
+import uuid
 import numpy as np
 import torch
 from .observation_training import checkpoint_path, digest, save
@@ -17,7 +23,114 @@ from .pipeline.era5 import prepare_targets
 from .vertical import PRESSURE_HPA, PROFILE_VARIABLES, PROFILE_UNITS
 
 
-def verify(dataset_path, training, pressure_netcdf, surface_netcdf, issue, output):
+def _exact_tensor_equal(left, right):
+    """Compare frozen tensors without densifying sparse CUDA buffers."""
+    if (left.shape != right.shape or left.dtype != right.dtype or
+            left.device != right.device or left.layout != right.layout):
+        return False
+    if left.layout == torch.sparse_coo:
+        left, right = left.coalesce(), right.coalesce()
+        return (left.sparse_dim() == right.sparse_dim() and left.dense_dim() == right.dense_dim()
+                and torch.equal(left.indices(), right.indices())
+                and _exact_tensor_equal(left.values(), right.values()))
+    if left.layout != torch.strided:
+        raise ValueError('Unsupported frozen tensor layout; comparison cannot be skipped.')
+    if left.is_floating_point() or left.is_complex():
+        # Unchanged masked NaNs are allowed; finite entries remain exact.
+        if left.is_complex():
+            return _exact_tensor_equal(torch.view_as_real(left), torch.view_as_real(right))
+        return bool(torch.all((left == right) | (torch.isnan(left) & torch.isnan(right))).item())
+    return torch.equal(left, right)
+
+
+def _input_hash(inputs):
+    return hashlib.sha256(json.dumps(inputs, sort_keys=True, separators=(',', ':'),
+                                    allow_nan=False).encode()).hexdigest()
+
+
+def _identity(dataset_path, training, pressure, surface, issue):
+    ref = json.loads((training/'best.json').read_text())
+    def files(value):
+        paths=list(value) if isinstance(value,(list,tuple)) else [value]
+        if not paths: raise ValueError('External source file list is empty.')
+        return [{'path':str(Path(path).resolve()),'sha256':digest(path)} for path in paths]
+    return {'schema': 'frozen-profile-verification-2', 'issue': utc(issue).isoformat(),
+            'paths': {'dataset':str(Path(dataset_path).resolve()),'training':str(training.resolve())},
+            'external_files':{'pressure':files(pressure),'surface':files(surface)},
+            'hashes': {name: digest(path) for name, path in
+                       (('dataset', Path(dataset_path)/'dataset.json'),
+                        ('completion', training/'complete.json'), ('best', training/'best.json'),
+                        ('checkpoint', checkpoint_path(training, ref)), ('verification_code', __file__))}}
+
+
+@contextmanager
+def _destination_lock(output):
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if any(path.is_symlink() for path in (output, *output.parents)):
+        raise ValueError('Verification destination cannot contain symbolic links.')
+    fd = os.open(output.parent/('.'+output.name+'.lock'), os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, 'a+b') as lock:
+        info = os.fstat(lock.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError('Unsafe verification lock.')
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+
+
+def verify(dataset_path: str | Path, training: str | Path,
+           pressure_netcdf: str | Path | list, surface_netcdf: str | Path | list,
+           issue: str, output: str | Path) -> list:
+    """Publish a verified diagnostic atomically, preserving failed attempts."""
+    training, output = Path(training), Path(output).absolute()
+    if not (training/'complete.json').is_file():
+        raise ValueError('Complete training and freeze weights before ERA5 verification.')
+    with _destination_lock(output):
+        identity = _identity(dataset_path, training, pressure_netcdf, surface_netcdf, issue)
+        if output.exists() and (output/'complete.json').is_file():
+            receipt = json.loads((output/'complete.json').read_text())
+            if receipt.get('identity') != identity:
+                raise ValueError('Completed verification identity differs; use a new destination.')
+            for name in ('verification.json', 'era5-diagnostic.npz'):
+                if (output/name).is_symlink() or digest(output/name) != receipt['files'][name]:
+                    raise ValueError('Completed verification artifact hash differs.')
+            model, dataset = load_frozen(dataset_path, training)
+            if model.training or any(p.requires_grad for p in model.parameters()):
+                raise ValueError('External verification requires a frozen evaluation model.')
+            when = utc(issue)
+            limit = json.loads((training/'complete.json').read_text())['identity']['config']['max_records_per_window']
+            inputs = bounded_records(dataset.records(when-timedelta(hours=12), when, issue=when, split='test'), limit)
+            dataset.verify()
+            report = json.loads((output/'verification.json').read_text())
+            if report['input_sha256'] != _input_hash(inputs) or identity != _identity(dataset_path, training, pressure_netcdf, surface_netcdf, issue):
+                raise ValueError('Completed verification inputs or sources changed.')
+            return report['metrics']
+        previous = None
+        if output.exists():
+            if not output.is_dir():
+                raise ValueError('Existing verification destination is not a directory.')
+            previous = output.parent/('.'+output.name+'.failed-'+uuid.uuid4().hex)
+            output.rename(previous)
+            save(previous/'restart.json', {'reason': 'incomplete_verification_preserved', 'next_identity': identity})
+        stage = output.parent/('.'+output.name+'.attempt-'+uuid.uuid4().hex)
+        try:
+            rows = _verify(dataset_path, training, pressure_netcdf, surface_netcdf, issue, stage)
+            if identity != _identity(dataset_path, training, pressure_netcdf, surface_netcdf, issue):
+                raise ValueError('Verification identity changed during execution.')
+            save(stage/'complete.json', {'identity': identity,
+                 'files': {name: digest(stage/name) for name in ('verification.json', 'era5-diagnostic.npz')},
+                 'preserved_previous': str(previous) if previous else None})
+            stage.rename(output)
+            directory = os.open(output.parent, os.O_RDONLY)
+            try: os.fsync(directory)
+            finally: os.close(directory)
+            return rows
+        except Exception as exc:
+            if stage.exists():
+                save(stage/'failure.json', {'identity': identity, 'exception': type(exc).__name__, 'detail': str(exc)})
+            raise
+
+
+def _verify(dataset_path, training, pressure_netcdf, surface_netcdf, issue, output):
     training, output = Path(training), Path(output)
     if not (training/'complete.json').is_file():
         raise ValueError('Complete training and freeze weights before ERA5 verification.')
@@ -79,7 +192,7 @@ def verify(dataset_path, training, pressure_netcdf, surface_netcdf, issue, outpu
     dataset.verify()
     current_state = model.state_dict()
     if (set(current_state) != set(frozen_state) or
-            any(not torch.equal(current_state[name], tensor) for name, tensor in frozen_state.items())):
+            any(not _exact_tensor_equal(current_state[name], tensor) for name, tensor in frozen_state.items())):
         raise ValueError('Frozen model weights or normalization buffers changed during verification.')
     if (digest(checkpoint) != before or json.loads((training/'best.json').read_text()) != ref
             or digest(training/'complete.json') != completion_hash
@@ -88,6 +201,7 @@ def verify(dataset_path, training, pressure_netcdf, surface_netcdf, issue, outpu
     save(output/'verification.json', {'source_role':'separate_frozen_model_verification_only',
          'checkpoint':ref,'issue':issue.isoformat(),'external_source':'ERA5',
          'target_provenance':provenance,'metrics':rows,'weight_updates':0,
+         'input_sha256': _input_hash(inputs),
          'norm_updates':0,'epoch_selection':False,'scientific_acceptance':False,
          'independent_truth':False,'omega_verification':False,'future_targets_used_for_inference':False})
     return rows

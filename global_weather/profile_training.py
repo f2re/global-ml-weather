@@ -7,6 +7,7 @@ unsupported and explicitly masked; full atmospheric acceptance is blocked.
 from __future__ import annotations
 
 import argparse
+import ast
 from datetime import timedelta
 import fcntl
 import hashlib
@@ -15,6 +16,7 @@ import os
 from pathlib import Path
 import platform
 import random
+import re
 import sqlite3
 import subprocess
 import time
@@ -369,7 +371,109 @@ def score(model, dataset, config, split):
     return float(np.mean(values))
 
 
-def train(dataset_path, output, config):
+def _model_definition_sha256(commit=None):
+    """Verify identical model mathematics across an explicit source transition."""
+    root=Path(__file__).resolve().parents[1]
+    source=Path(__file__).read_text() if commit is None else subprocess.check_output(
+        ['git','show',commit+':global_weather/profile_training.py'],cwd=root,text=True)
+    tree=ast.parse(source)
+    excluded={'train','load_model','load_frozen','main','_model_definition_sha256',
+              '_restore_rng','_read_lineage','_initialize_continuation'}
+    nodes=[node for node in tree.body if getattr(node,'name',None) not in excluded
+           and not (isinstance(node,ast.Import) and all(alias.name in ('ast','re') for alias in node.names))]
+    fingerprint=hashlib.sha256(ast.dump(ast.Module(body=nodes,type_ignores=[]),include_attributes=False).encode())
+    for name in ('grid.py','model.py','vertical.py','observations.py','analysis/observation_operator.py'):
+        relative='global_weather/'+name
+        data=(root/relative).read_bytes() if commit is None else subprocess.check_output(
+            ['git','show',commit+':'+relative],cwd=root)
+        fingerprint.update(relative.encode()); fingerprint.update(data)
+    return fingerprint.hexdigest()
+
+
+def _restore_rng(state, device):
+    random.setstate(state['python_rng'])
+    rng=state['numpy_rng']; np.random.set_state((rng[0],np.asarray(rng[1],dtype=np.uint32),*rng[2:]))
+    torch.set_rng_state(state['torch_rng'].cpu())
+    if device.type=='cuda': torch.cuda.set_rng_state_all([row.cpu() for row in state['cuda_rng']])
+
+
+def _read_lineage(output, expected):
+    """A child resume retains and rechecks the immutable parent provenance."""
+    path=output/'continuation.json'
+    if not path.exists(): return None
+    if path.is_symlink(): raise ValueError('Continuation receipt symlink is forbidden.')
+    lineage=json.loads(path.read_text())
+    if lineage.get('schema')!='profile-optimizer-warm-start-1' or lineage.get('child_identity')!=expected:
+        raise ValueError('Continuation receipt identity differs.')
+    parent=Path(lineage['parent_directory'])
+    if parent.is_symlink() or (parent/'complete.json').is_symlink():
+        raise ValueError('Parent provenance symlinks are forbidden.')
+    checkpoint_path(parent,lineage['parent_reference'])
+    if (digest(parent/'latest.json')!=lineage['parent_reference_sha256'] or
+            digest(parent/'complete.json')!=lineage['parent_complete_sha256']):
+        raise ValueError('Parent completion evidence changed.')
+    return lineage
+
+
+def _initialize_continuation(model, optimizer, output, parent, parent_commit, expected, device):
+    """Warm-start a new schedule; never silently relax ordinary exact resume."""
+    if not isinstance(parent_commit,str) or re.fullmatch('[0-9a-f]{40}',parent_commit) is None:
+        raise ValueError('Explicit continuation requires the full parent source commit.')
+    parent=Path(parent).absolute()
+    if any(path.is_symlink() for path in (parent,*parent.parents)):
+        raise ValueError('Parent provenance symlinks are forbidden.')
+    parent=parent.resolve()
+    if parent==output.resolve() or parent.is_symlink() or (parent/'complete.json').is_symlink():
+        raise ValueError('Continuation needs a separate immutable completed parent.')
+    allowed={'training.lock','continuation.json','progress.json'}
+    if any(path.name not in allowed for path in output.iterdir()):
+        raise ValueError('Explicit continuation requires a new empty experiment output.')
+    complete_path=parent/'complete.json'
+    complete=json.loads(complete_path.read_text())
+    ref_path=parent/'latest.json'
+    if ref_path.is_symlink(): raise ValueError('Parent reference symlink is forbidden.')
+    ref=json.loads(ref_path.read_text()); checkpoint=checkpoint_path(parent,ref)
+    # Record validated hashes before deserializing the parent tensors.
+    provenance={'parent_directory':str(parent),'parent_reference':ref,
+                'parent_checkpoint_sha256':digest(checkpoint),'parent_complete_sha256':digest(complete_path),
+                'parent_reference_sha256':digest(ref_path),'parent_source_commit':parent_commit}
+    state=torch.load(checkpoint,map_location=device,weights_only=True)
+    previous=state['identity']
+    if (previous!=complete.get('identity') or previous.get('commit')!=parent_commit
+            or complete.get('status')!='measured_upper_air_research_trained'
+            or state['epoch']!=ref['epoch']):
+        raise ValueError('Parent source/checkpoint/completion identity differs.')
+    for key in set(expected)|set(previous):
+        if key not in ('commit','config') and expected.get(key)!=previous.get(key):
+            raise ValueError('Incompatible continuation data or numerical environment: '+key)
+    schedule_keys={'epochs','patience','max_train_issues','max_validation_issues','max_test_issues'}
+    if set(previous['config'])!=set(expected['config']): raise ValueError('Continuation config schema differs.')
+    for key,value in expected['config'].items():
+        if key not in schedule_keys and value!=previous['config'][key]:
+            raise ValueError('Incompatible continuation architecture/optimizer config: '+key)
+    model_hash=_model_definition_sha256()
+    if model_hash!=_model_definition_sha256(parent_commit):
+        raise ValueError('Profile model mathematics changed across source transition.')
+    lineage={'schema':'profile-optimizer-warm-start-1',**provenance,
+             'parent_epoch':state['epoch'],'parent_identity':previous,'child_identity':expected,
+             'model_definition_sha256':model_hash,'preserved':['weights','optimizer','python_rng','numpy_rng','torch_rng','cuda_rng'],
+             'reset':['epoch_number','validation_best','validation_stale'],
+             'reason':'new bounded station-validation schedule; not identical historical replay',
+             'test_independence':'previously evaluated periods; subsequent reuse is diagnostic',
+             'model_selection_source':'measured_validation_only'}
+    existing=_read_lineage(output,expected)
+    if existing is not None and existing!=lineage: raise ValueError('Initial continuation lineage differs.')
+    # Durable before installing parent weights. A pre-epoch retry must verify it.
+    save(output/'continuation.json',lineage)
+    model.load_state_dict(state['model'],strict=True); optimizer.load_state_dict(state['optimizer'])
+    _restore_rng(state,device)
+    if digest(checkpoint)!=provenance['parent_checkpoint_sha256'] or digest(complete_path)!=provenance['parent_complete_sha256']:
+        raise ValueError('Parent changed during explicit continuation initialization.')
+    return lineage
+
+
+def train(dataset_path: str | Path, output: str | Path, config: dict, *,
+          continue_from: str | Path | None = None, parent_commit: str | None = None) -> None:
     config=configuration(config); dataset=ProfileDataset(dataset_path); output=Path(output); output.mkdir(parents=True, exist_ok=True)
     with (output/'training.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -379,15 +483,22 @@ def train(dataset_path, output, config):
         model=ProfileObservationModel(build_pyramid(config['mesh_level'])[0],dataset.mean,dataset.std,config['hidden'],dataset.pressure_bounds).to(device)
         optimizer=torch.optim.AdamW(model.parameters(),lr=config['learning_rate'],weight_decay=config['weight_decay'])
         expected=identity(dataset,config,device); completed=0; best=float('inf'); stale=0; best_epoch=None
+        lineage=None
+        if continue_from is None and parent_commit is not None: raise ValueError('Parent commit needs explicit --continue-from.')
+        if continue_from is not None:
+            lineage=_initialize_continuation(model,optimizer,output,continue_from,parent_commit,expected,device)
+        elif (output/'continuation.json').exists():
+            lineage=_read_lineage(output,expected)
+            if not (output/'latest.json').exists():
+                raise ValueError('Interrupted initialization requires explicit --continue-from retry.')
         if (output/'latest.json').exists():
             ref=json.loads((output/'latest.json').read_text()); path=checkpoint_path(output,ref)
             state=torch.load(path,map_location=device,weights_only=True)
             if state['identity']!=expected: raise ValueError('Incompatible profile resume source/data/numerics.')
+            if state.get('lineage')!=lineage: raise ValueError('Profile resume lineage differs.')
             model.load_state_dict(state['model']); optimizer.load_state_dict(state['optimizer'])
             completed,best,stale,best_epoch=state['epoch'],state['best'],state['stale'],state['best_epoch']
-            random.setstate(state['python_rng']); rng=state['numpy_rng']; np.random.set_state((rng[0],np.asarray(rng[1],dtype=np.uint32),*rng[2:]))
-            torch.set_rng_state(state['torch_rng'].cpu())
-            if device.type=='cuda': torch.cuda.set_rng_state_all([row.cpu() for row in state['cuda_rng']])
+            _restore_rng(state,device)
             if state['best_epoch']==completed:
                 save(output/'best.json',ref)
             elif state.get('best_ref') is not None:
@@ -395,6 +506,8 @@ def train(dataset_path, output, config):
             else: raise ValueError('Missing compatible best profile checkpoint reference.')
         if any(output.glob('.epoch-*')) or (output/f'epoch-{completed+1:04d}').exists():
             raise ValueError('Ambiguous interrupted profile epoch; preserve for inspection.')
+        save(output/'progress.json',{'status':'initialized','completed_epochs':completed,
+             'parent_epoch':None if lineage is None else lineage['parent_epoch'],'source_commit':expected['commit']})
         for epoch in range(completed+1,config['epochs']+1):
             dataset.verify(); started=time.monotonic(); model.train(); objectives=[]; gradient={}; coverage=np.zeros(5,dtype=int)
             issues=dataset.issues('train',config['max_train_issues']); random.shuffle(issues)
@@ -410,13 +523,17 @@ def train(dataset_path, output, config):
                     gradient[name]=gradient.get(name,False) or bool(parameter.grad.abs().sum()>0)
                 torch.nn.utils.clip_grad_norm_(model.parameters(),config['gradient_clip'],error_if_nonfinite=True)
                 optimizer.step(); objectives.append(float(objective.detach()))
+                if len(objectives)==1 or len(objectives)%12==0:
+                    save(output/'progress.json',{'status':'training','epoch':epoch,'optimizer_steps':len(objectives),
+                         'train_issues':len(issues),'loss':objectives[-1],'elapsed_seconds':time.monotonic()-started,
+                         'source_commit':expected['commit']})
             if not objectives or not all(gradient.values()) or not np.all(coverage>0):
                 raise ValueError('Incomplete measured profile gradient/variable coverage; acceptance blocked.')
             validation=score(model,dataset,config,'validation'); improved=validation<best
             if improved: best,best_epoch,stale=validation,epoch,0
             else: stale+=1
             dataset.verify(); temporary=output/f'.epoch-{epoch:04d}'; temporary.mkdir()
-            rng=np.random.get_state(); state={'identity':expected,'epoch':epoch,'best':best,'best_epoch':best_epoch,'stale':stale,
+            rng=np.random.get_state(); state={'identity':expected,'lineage':lineage,'epoch':epoch,'best':best,'best_epoch':best_epoch,'stale':stale,
                 'best_ref':None if improved else json.loads((output/'best.json').read_text()),
                 'model':model.state_dict(),'optimizer':optimizer.state_dict(),'python_rng':random.getstate(),
                 'numpy_rng':(rng[0],rng[1].tolist(),*rng[2:]),'torch_rng':torch.get_rng_state(),
@@ -425,25 +542,36 @@ def train(dataset_path, output, config):
             with (temporary/'state.pt').open('rb') as file: os.fsync(file.fileno())
             report={'epoch':epoch,'train_loss':float(np.mean(objectives)),'validation_loss':validation,
                     'seconds':time.monotonic()-started,'nonzero_gradients':gradient,'measured_variable_counts':coverage.tolist(),
-                    'scientific_acceptance':False,'omega_supervision':False}
+                    'scientific_acceptance':False,'omega_supervision':False,
+                    'parent_epoch':None if lineage is None else lineage['parent_epoch'],
+                    'total_optimizer_epochs':epoch+(0 if lineage is None else lineage['parent_epoch'])}
             save(temporary/'metrics.json',report); sync_directory(temporary)
             final=output/f'epoch-{epoch:04d}'; temporary.rename(final); sync_directory(output)
             ref={'directory':final.name,'sha256':digest(final/'state.pt'),'epoch':epoch}; save(output/'latest.json',ref)
             if improved: save(output/'best.json',ref)
             print(json.dumps(report),flush=True)
             if stale>=config['patience']: break
-        save(output/'complete.json',{'identity':expected,'best_epoch':best_epoch,'scientific_acceptance':False,
+        save(output/'complete.json',{'identity':expected,'lineage':lineage,'best_epoch':best_epoch,'scientific_acceptance':False,
              'status':'measured_upper_air_research_trained','limitations':['omega unobserved','terrain absent','surface unsupported','pooled train pressure statistics']})
 
 
-def load_model(dataset_path, training, device='auto'):
+def load_model(dataset_path, training, device='auto', *, _frozen_source_transition=False):
     dataset=ProfileDataset(dataset_path); training=Path(training); ref=json.loads((training/'best.json').read_text())
     path=checkpoint_path(training,ref)
     device=torch.device(('cuda' if torch.cuda.is_available() else 'cpu') if device=='auto' else device)
     state=torch.load(path,map_location=device,weights_only=True)
     config=state['identity']['config']; torch.set_num_threads(config['threads'])
     torch.use_deterministic_algorithms(True); torch.backends.cuda.matmul.allow_tf32=False
-    if state['identity']!=identity(dataset,config,device): raise ValueError('Profile evaluation identity differs.')
+    expected=identity(dataset,config,device)
+    if state['identity']!=expected:
+        previous=state['identity']; parent_commit=previous.get('commit','')
+        completion=json.loads((training/'complete.json').read_text()) if _frozen_source_transition else {}
+        if (not _frozen_source_transition or re.fullmatch('[0-9a-f]{40}',parent_commit) is None
+                or completion.get('identity')!=previous or completion.get('best_epoch')!=ref['epoch']
+                or completion.get('status')!='measured_upper_air_research_trained'
+                or any(previous.get(key)!=value for key,value in expected.items() if key!='commit')
+                or _model_definition_sha256()!=_model_definition_sha256(parent_commit)):
+            raise ValueError('Profile evaluation identity differs.')
     model=ProfileObservationModel(build_pyramid(config['mesh_level'])[0],dataset.mean,dataset.std,config['hidden'],dataset.pressure_bounds).to(device)
     model.load_state_dict(state['model']); model.eval()
     return dataset,model,config,ref
@@ -451,7 +579,7 @@ def load_model(dataset_path, training, device='auto'):
 
 def load_frozen(dataset_path, training, device='auto'):
     """Public frozen-model interface for a separate external verification job."""
-    dataset,model,_,_=load_model(dataset_path,training,device=device)
+    dataset,model,_,_=load_model(dataset_path,training,device=device,_frozen_source_transition=True)
     for parameter in model.parameters(): parameter.requires_grad_(False)
     return model,dataset
 
@@ -496,12 +624,14 @@ def main(argv=None):
     parser=argparse.ArgumentParser(description=__doc__); sub=parser.add_subparsers(dest='command',required=True)
     p=sub.add_parser('prepare'); p.add_argument('--source',required=True); p.add_argument('--output',required=True)
     p=sub.add_parser('train'); p.add_argument('--dataset',required=True); p.add_argument('--output',required=True); p.add_argument('--config')
+    p.add_argument('--continue-from'); p.add_argument('--parent-commit')
     for command in ('test','forecast'):
         p=sub.add_parser(command); p.add_argument('--dataset',required=True); p.add_argument('--training',required=True); p.add_argument('--output',required=True)
         if command=='forecast': p.add_argument('--issue',required=True)
     args=parser.parse_args(argv)
     if args.command=='prepare': prepare(args.source,args.output)
-    elif args.command=='train': train(args.dataset,args.output,{} if not args.config else json.loads(Path(args.config).read_text()))
+    elif args.command=='train': train(args.dataset,args.output,{} if not args.config else json.loads(Path(args.config).read_text()),
+                                      continue_from=args.continue_from,parent_commit=args.parent_commit)
     elif args.command=='test': evaluate(args.dataset,args.training,args.output)
     else: forecast(args.dataset,args.training,args.issue,args.output)
 

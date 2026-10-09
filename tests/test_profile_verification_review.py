@@ -17,6 +17,9 @@ ISSUE = utc("2022-08-01T00:00:00Z")
 
 
 def mocked_frozen_run(tmp_path, monkeypatch, *, mutate=None):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path/'pressure.nc').write_bytes(b'mocked-pressure-source')
+    (tmp_path/'surface.nc').write_bytes(b'mocked-surface-source')
     events = []
     training = tmp_path / "training"
     checkpoint = training / "epoch-0001" / "state.pt"
@@ -38,6 +41,8 @@ def mocked_frozen_run(tmp_path, monkeypatch, *, mutate=None):
             self.register_buffer("pressure_pa", torch.tensor(PRESSURE_HPA) * 100.)
             self.register_buffer("mean", torch.tensor([260., .002, 5., -2., 1000.]))
             self.register_buffer("std", torch.ones(5))
+            self.register_buffer("adjacency", torch.sparse_coo_tensor(
+                torch.tensor([[0, 1], [1, 0]]), torch.tensor([1., 2.]), (2, 2)))
             self.weight = nn.Parameter(torch.ones(1), requires_grad=False)
             self.eval()
 
@@ -148,8 +153,80 @@ def test_external_verification_rejects_checkpoint_path_traversal_before_reading_
     assert not events
 
 
+@pytest.mark.parametrize('device', ['cpu', 'cuda'])
+def test_frozen_sparse_exact_comparison_preserves_metadata_and_values(device):
+    if device == 'cuda' and not torch.cuda.is_available():
+        pytest.skip('CUDA-specific comparison requires the remote accelerator.')
+    indices = torch.tensor([[0, 1], [1, 0]], device=device)
+    values = torch.tensor([float('nan'), 2.], device=device)
+    tensor = torch.sparse_coo_tensor(indices, values, (2, 2))
+    assert verification._exact_tensor_equal(tensor, tensor.clone())
+    changed = torch.sparse_coo_tensor(indices, torch.tensor([float('nan'), 3.], device=device), (2, 2))
+    assert not verification._exact_tensor_equal(tensor, changed)
+    changed_index = torch.sparse_coo_tensor(indices.flip(0), values, (2, 2))
+    assert not verification._exact_tensor_equal(tensor, changed_index)
+    assert not verification._exact_tensor_equal(tensor, tensor.to(dtype=torch.float64))
+    dense = torch.tensor([float('nan'), 2.], device=device)
+    assert verification._exact_tensor_equal(dense, dense.clone())
+    assert not verification._exact_tensor_equal(dense, torch.tensor([0., 2.], device=device))
+
+
+def test_completed_external_verification_reuses_only_unchanged_sources(tmp_path, monkeypatch):
+    training, dataset, _, events = mocked_frozen_run(tmp_path, monkeypatch)
+    output = tmp_path/'external'
+    args = (dataset.root, training, 'pressure.nc', 'surface.nc', ISSUE, output)
+    rows = verification.verify(*args)
+    saved = (output/'verification.json').read_bytes()
+    events.clear()
+    assert verification.verify(*args) == rows
+    assert 'prediction' not in events and 'external' not in events
+    assert (output/'verification.json').read_bytes() == saved
+    (tmp_path/'pressure.nc').write_bytes(b'changed-external-source')
+    with pytest.raises(ValueError, match='identity differs'):
+        verification.verify(*args)
+    assert (output/'verification.json').read_bytes() == saved
+
+
+def test_verification_preserves_incomplete_destination_and_failed_attempt(tmp_path, monkeypatch):
+    training, dataset, _, _ = mocked_frozen_run(tmp_path, monkeypatch, mutate='norm')
+    output = tmp_path/'external'
+    output.mkdir()
+    (output/'old-artifact.npz').write_bytes(b'previous-failed-result')
+    with pytest.raises(ValueError, match='changed|normalization'):
+        verification.verify(dataset.root, training, 'pressure.nc', 'surface.nc', ISSUE, output)
+    assert not output.exists()
+    previous = list(tmp_path.glob('.external.failed-*'))
+    attempts = list(tmp_path.glob('.external.attempt-*'))
+    assert len(previous) == len(attempts) == 1
+    assert (previous[0]/'old-artifact.npz').read_bytes() == b'previous-failed-result'
+    assert (previous[0]/'restart.json').is_file()
+    assert (attempts[0]/'era5-diagnostic.npz').is_file()
+    assert (attempts[0]/'failure.json').is_file()
+    assert not (attempts[0]/'complete.json').exists()
+
+
+def test_completed_verification_rejects_tampered_artifact(tmp_path, monkeypatch):
+    training, dataset, _, _ = mocked_frozen_run(tmp_path, monkeypatch)
+    args = (dataset.root, training, 'pressure.nc', 'surface.nc', ISSUE, tmp_path/'external')
+    verification.verify(*args)
+    (tmp_path/'external'/'era5-diagnostic.npz').write_bytes(b'tampered')
+    with pytest.raises(ValueError, match='artifact hash'):
+        verification.verify(*args)
+
+
 def test_external_verification_rejects_non_test_issue_before_prediction(tmp_path, monkeypatch):
     training, dataset, _, events = mocked_frozen_run(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="held-out"):
         verification.verify(dataset.root, training, "pressure.nc", "surface.nc", "2021-08-01T00:00:00Z", tmp_path / "external")
     assert not events
+
+
+def test_verification_multiple_netcdf_sources_are_pinned_in_order(tmp_path,monkeypatch):
+    training,dataset,_,_=mocked_frozen_run(tmp_path,monkeypatch)
+    extra=tmp_path/'pressure-2.nc'; extra.write_bytes(b'second-day')
+    pressure=[tmp_path/'pressure.nc',extra]; surface=[tmp_path/'surface.nc']
+    first=verification._identity(dataset.root,training,pressure,surface,ISSUE)
+    assert len(first['external_files']['pressure'])==2
+    assert first!=verification._identity(dataset.root,training,list(reversed(pressure)),surface,ISSUE)
+    extra.write_bytes(b'changed-day')
+    assert first!=verification._identity(dataset.root,training,pressure,surface,ISSUE)

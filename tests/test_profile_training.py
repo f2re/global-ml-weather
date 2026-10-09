@@ -148,3 +148,61 @@ def test_training_checkpoint_resume_identity_and_separate_test(tmp_path,monkeypa
     assert sum(cell['count'] for row in report['metrics'] for cell in row if cell)==5
     with pytest.raises(ValueError,match='resume'):
         train(tmp_path/'dataset',tmp_path/'training',dict(config,hidden=12))
+    from global_weather import profile_training as training
+    original_identity=training.identity
+    monkeypatch.setattr(training,'identity',lambda *args:dict(original_identity(*args),commit='f'*40))
+    with pytest.raises(ValueError,match='identity'):
+        training.load_model(tmp_path/'dataset',tmp_path/'training')
+    frozen,_=training.load_frozen(tmp_path/'dataset',tmp_path/'training')
+    assert not frozen.training and not any(p.requires_grad for p in frozen.parameters())
+    original_fingerprint=training._model_definition_sha256
+    monkeypatch.setattr(training,'_model_definition_sha256',lambda commit=None: 'changed' if commit is None else original_fingerprint(commit))
+    with pytest.raises(ValueError,match='identity'):
+        training.load_frozen(tmp_path/'dataset',tmp_path/'training')
+
+
+def test_explicit_optimizer_continuation_preserves_parent_and_rejects_drift(tmp_path,monkeypatch):
+    from global_weather import profile_training as training
+    monkeypatch.setattr(torch.cuda,'is_available',lambda:False)
+    rows=[]
+    for start,split in ((START,'train'),(TRAIN_END,'validation'),(VAL_END,'test')):
+        rows+=records(start+timedelta(days=2),split,0.)+records(start+timedelta(days=3),split,2.)
+    source=tmp_path/'records.jsonl'; source.write_text(''.join(json.dumps(row)+'\n' for row in rows)); admission(source)
+    dataset=tmp_path/'dataset'; prepare(source,dataset)
+    config={'mesh_level':0,'hidden':8,'epochs':1,'threads':1,
+            'max_train_issues':1,'max_validation_issues':1,'max_test_issues':1,'max_records_per_window':50}
+    parent=tmp_path/'parent'; training.train(dataset,parent,config)
+    original={p.name:training.digest(p) for p in parent.iterdir() if p.is_file()}
+    completion=json.loads((parent/'complete.json').read_text()); commit=completion['identity']['commit']
+    child=tmp_path/'child'
+    training.train(dataset,child,dict(config,epochs=2),continue_from=parent,parent_commit=commit)
+    lineage=json.loads((child/'continuation.json').read_text())
+    assert lineage['parent_epoch']==1
+    assert 'optimizer' in lineage['preserved'] and lineage['model_selection_source']=='measured_validation_only'
+    first=torch.load(child/'epoch-0001/state.pt',weights_only=True)
+    old=torch.load(training.checkpoint_path(parent,lineage['parent_reference']),weights_only=True)
+    assert all(first['optimizer']['state'][k]['step']==v['step']+1 for k,v in old['optimizer']['state'].items())
+    training.train(dataset,child,dict(config,epochs=2))
+    assert original=={p.name:training.digest(p) for p in parent.iterdir() if p.is_file()}
+    with pytest.raises(ValueError,match='architecture'):
+        training.train(dataset,tmp_path/'bad',dict(config,hidden=12),continue_from=parent,parent_commit=commit)
+    with pytest.raises(ValueError,match='identity'):
+        training.train(dataset,tmp_path/'bad-source',config,continue_from=parent,parent_commit='0'*40)
+    (parent/'latest.json').write_text((parent/'latest.json').read_text()+'\n')
+    with pytest.raises(ValueError,match='changed'):
+        training.train(dataset,child,dict(config,epochs=2))
+
+
+def test_source_fingerprint_covers_loss_and_dependencies(monkeypatch):
+    from global_weather import profile_training as training
+    actual=training._model_definition_sha256()
+    original=training.subprocess.check_output
+    def changed(arguments,**kwargs):
+        if arguments[:2]==['git','show']:
+            relative=arguments[2].split(':',1)[1]
+            data=(training.Path(training.__file__).resolve().parents[1]/relative).read_bytes()
+            if relative.endswith('/model.py'): data+=b'\n# dependency changed\n'
+            return data.decode() if kwargs.get('text') else data
+        return original(arguments,**kwargs)
+    monkeypatch.setattr(training.subprocess,'check_output',changed)
+    assert training._model_definition_sha256('0'*40)!=actual
