@@ -40,8 +40,25 @@ def main() -> None:
           [[row['minimum_pressure_pa'],row['maximum_pressure_pa']] for row in manifest['statistics']])
     model.load_state_dict(state['model'],strict=True); model.eval()
     for p in model.parameters():p.requires_grad_(False)
-    assert torch.equal(model.mean,torch.tensor(mean,dtype=torch.float32))
-    assert torch.equal(model.std,torch.tensor(std,dtype=torch.float32))
+    if (not torch.equal(model.mean,torch.tensor(mean,dtype=torch.float32))
+            or not torch.equal(model.std,torch.tensor(std,dtype=torch.float32))):
+        raise ValueError('Checkpoint normalization buffers differ from dataset.')
+    sources={'manifest':dataset/'dataset.json','database':dataset/'observations.sqlite',
+             'observations':Path(manifest['source']),'admission':Path(manifest['admission_manifest']),
+             'era5_reference':args.reference,'completion':training/'complete.json','best':training/'best.json'}
+    source_hashes={name:digest(path) for name,path in sources.items()}
+    if (source_hashes['manifest']!=state['identity']['dataset_sha256']
+            or source_hashes['database']!=manifest['database_sha256']
+            or source_hashes['observations']!=manifest['source_sha256']
+            or source_hashes['observations']!=state['identity']['source_sha256']
+            or source_hashes['admission']!=manifest['admission_sha256']):
+        raise ValueError('Dataset, source or checkpoint provenance differs.')
+    receipt=json.loads((args.reference.parent/'complete.json').read_text())
+    if source_hashes['era5_reference']!=receipt['files']['era5-diagnostic.npz']:
+        raise ValueError('ERA5 reference artifact differs from completed verification.')
+    completion=json.loads((training/'complete.json').read_text())
+    if completion['identity']!=state['identity'] or completion['best_epoch']!=ref['epoch']:
+        raise ValueError('Training completion and frozen checkpoint differ.')
     directory=root/'assets/normalization/graphcast'
     bundle=import_graphcast(directory/'mean_by_level.nc',directory/'stddev_by_level.nc',expected_hashes=PINNED_HASHES)
     attrs={}
@@ -88,7 +105,8 @@ def main() -> None:
                  'r4_norm_mean_k':mean[0],'graphcast_level_mean_k':bundle.get('temperature','K').at(pressure*100)[0]})
     q=np.array([0.,1e-6,1e-4,1e-3,.01],dtype=np.float32)
     q_restored=(std[1]*F.softplus(torch.from_numpy(q)/std[1])).numpy()
-    assert digest(checkpoint)==before
+    if digest(checkpoint)!=before or source_hashes!={name:digest(path) for name,path in sources.items()}:
+        raise ValueError('Audit inputs changed during execution.')
     report={'schema':'profile-normalization-audit-1','utc':datetime.now(timezone.utc).isoformat(),
        'audit_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),
        'checkpoint_training_commit':state['identity']['commit'],'checkpoint_sha256':before,
@@ -102,6 +120,7 @@ def main() -> None:
             'zero_maps_to':float(q_restored[0]),'head_zero_maps_to':float(std[1]*F.softplus(torch.tensor(mean[1]/std[1])))},
        'bounded_train_samples':samples,'sample_limit_per_variable':10000,'input_records_before_bound':len(input_rows),
        'input_records_used':len(inputs),'temperature_comparison':comparison,
+       'source_hashes_before_and_after':source_hashes,'source_hashes_unchanged':True,
        'checkpoint_unchanged':True,'scientific_acceptance':False}
     save(args.output,report); print(json.dumps({'seconds':report['seconds'],'comparison':comparison,'humidity':report['humidity_post_affine_transform']},indent=2))
 
