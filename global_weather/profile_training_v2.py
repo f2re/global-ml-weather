@@ -19,6 +19,26 @@ from .observations import utc
 from .profile_model_v2 import PressureProfileModel
 from .profile_normalization import load_normalization
 from .profile_training import ProfileDataset,VARIABLES,bounded_records,configuration,identity,_restore_rng
+from .vertical import PRESSURE_HPA, hydrostatic_residual
+
+MIN_HUMIDITY_PRESSURE_PA = 30000.0
+LEGACY_LOSS_KEYS = frozenset(('min_humidity_pressure_pa', 'use_vertical_weights', 'hydrostatic_weight'))
+
+
+def vertical_pressure_weights(pressure_pa=None) -> np.ndarray:
+    if pressure_pa is None:
+        p = np.asarray(PRESSURE_HPA, dtype=float) * 100.0
+    elif isinstance(pressure_pa, torch.Tensor):
+        p = pressure_pa.detach().cpu().numpy().astype(float)
+    else:
+        p = np.asarray(pressure_pa, dtype=float)
+    n = len(p)
+    half = np.zeros(n + 1)
+    half[0] = p[0] + (p[0] - p[1]) / 2.0
+    half[1:-1] = (p[:-1] + p[1:]) / 2.0
+    half[-1] = 0.0
+    dp = half[:-1] - half[1:]
+    return dp * (float(n) / float(dp.sum()))
 
 
 class _ScreenedProfileDataset(ProfileDataset):
@@ -48,11 +68,25 @@ def _build_dataset(path, config):
 def _configuration(config):
     config = dict(config)
     value = config.pop('physical_policy', None)
+    supplied_legacy = LEGACY_LOSS_KEYS.intersection(config)
+    if value is not None and supplied_legacy:
+        raise ValueError('Do not mix physical_policy with legacy loss options: ' + ', '.join(sorted(supplied_legacy)))
     weight = config.pop('reconstruction_weight', .25)
     if type(weight) not in (int, float) or not math.isfinite(weight) or not 0 <= weight <= 1:
         raise ValueError('Invalid reconstruction weight.')
     if value is None:
+        # Preserve the separately published main R9 configuration and defaults.
+        minimum = config.pop('min_humidity_pressure_pa', MIN_HUMIDITY_PRESSURE_PA)
+        use_weights = config.pop('use_vertical_weights', True)
+        hydro_weight = config.pop('hydrostatic_weight', 0.0)
+        for name, number in (('min_humidity_pressure_pa', minimum), ('hydrostatic_weight', hydro_weight)):
+            if type(number) not in (int, float) or not math.isfinite(number) or number < 0:
+                raise ValueError('Invalid legacy loss option: ' + name)
+        if minimum > 100000 or type(use_weights) is not bool:
+            raise ValueError('Invalid legacy pressure threshold or vertical weighting flag.')
         result = configuration(config)
+        result.update(min_humidity_pressure_pa=float(minimum), use_vertical_weights=use_weights,
+                      hydrostatic_weight=float(hydro_weight))
     else:
         from .profile_physics import parse_policy
         policy = parse_policy(value)
@@ -64,7 +98,6 @@ def _configuration(config):
         result['mesh_level'] = mesh
         if result['hidden'] > 128:
             raise ValueError('R9 hidden exceeds the reviewed research range.')
-        # Screening estimate only, not measured peak VRAM or allocator guarantee.
         estimate = (10*4**mesh+2)*37*result['hidden']*4*25*20
         if estimate > policy.memory_budget_mib*1024**2:
             raise ValueError('R9 estimated activations exceed the declared memory budget.')
@@ -73,16 +106,41 @@ def _configuration(config):
     return result
 
 
-def objective(model: PressureProfileModel,frames: list,targets: list[dict]) -> tuple[torch.Tensor,list[int]]:
+def _objective_options(config):
+    """Dispatch an explicit experiment; never apply two weighting rules at once."""
+    if config.get('physical_policy') is not None:
+        if LEGACY_LOSS_KEYS.intersection(config):
+            raise ValueError('Do not mix physical_policy with legacy loss options.')
+        return {}
+    return {key: config[key] for key in ('min_humidity_pressure_pa', 'use_vertical_weights') if key in config}
+
+
+def objective(model: PressureProfileModel,frames: list,targets: list[dict],
+              min_humidity_pressure_pa: float|None=None,
+              use_vertical_weights: bool|None=None) -> tuple[torch.Tensor,list[int]]:
     policy = getattr(model, 'physical_policy', None)
     if policy is not None:
+        if min_humidity_pressure_pa is not None or use_vertical_weights is not None:
+            raise ValueError('Do not mix physical_policy with legacy objective arguments.')
         from .profile_physics import physical_objective
         loss, counts, report = physical_objective(model, frames, targets, policy)
         model.last_objective_report = report
         return loss, counts
+    if min_humidity_pressure_pa is None:
+        min_humidity_pressure_pa = MIN_HUMIDITY_PRESSURE_PA
+    if use_vertical_weights is None:
+        use_vertical_weights = True
+    if (type(min_humidity_pressure_pa) not in (int, float) or not math.isfinite(min_humidity_pressure_pa)
+            or not 0 <= min_humidity_pressure_pa <= 100000 or type(use_vertical_weights) is not bool):
+        raise ValueError('Invalid legacy objective arguments.')
     terms=[[] for _ in VARIABLES]
+    weights=vertical_pressure_weights(model.pressure_pa) if use_vertical_weights else None
+    log_p_model=np.log(model.pressure_pa.detach().cpu().numpy()) if use_vertical_weights else None
     for record in targets:
-        variable=VARIABLES.index(record['variable']); _,std,supported=model.normalization.at(variable,record['pressure_pa'])
+        variable=VARIABLES.index(record['variable'])
+        if variable==1 and record['pressure_pa']<min_humidity_pressure_pa:
+            continue
+        _,std,supported=model.normalization.at(variable,record['pressure_pa'])
         if not supported: continue
         result=_prediction(frames,model.grid,record,model.pressure_pa,3)
         if result is None: continue
@@ -91,12 +149,18 @@ def objective(model: PressureProfileModel,frames: list,targets: list[dict]) -> t
         if variable==1 and model.normalization.humidity_transform!='identity':
             difference=torch.log1p(prediction/model.normalization.q_scale)-np.log1p(record['value']/model.normalization.q_scale)
         else: difference=prediction-record['value']
-        terms[variable].append((difference/float(std)).square())
+        loss_val=(difference/float(std)).square()
+        if use_vertical_weights:
+            level=int(np.abs(log_p_model-np.log(record['pressure_pa'])).argmin())
+            loss_val=float(weights[level])*loss_val
+        terms[variable].append(loss_val)
     if not any(terms): raise ValueError('No jointly supported observed targets.')
     return torch.stack([torch.stack(rows).mean() for rows in terms if rows]).mean(),[len(rows) for rows in terms]
 
 
-def reconstruction(model: PressureProfileModel,dataset: ProfileDataset,targets: list[dict],limit: int,split: str) -> torch.Tensor:
+def reconstruction(model: PressureProfileModel,dataset: ProfileDataset,targets: list[dict],limit: int,split: str,
+                   min_humidity_pressure_pa: float|None=None,
+                   use_vertical_weights: bool|None=None) -> torch.Tensor:
     # A separate S1 origin at the actual held-out measurement time. It never
     # feeds observations after the S2 origin into that already-started forecast.
     admitted=[r for r in targets if r['variable']=='temperature' and model.normalization.at(r['variable'],r['pressure_pa'])[2]]
@@ -106,17 +170,23 @@ def reconstruction(model: PressureProfileModel,dataset: ProfileDataset,targets: 
     inputs=dataset.records(when-timedelta(hours=12),when,issue=when,split=split)
     inputs=bounded_records([r for r in inputs if r['profile_id']!=group],limit)
     frames = model(inputs,when,horizon_hours=0) if isinstance(model,PressureProfileModel) else model(inputs,when)[:1]
-    return objective(model,frames,held)[0]
+    options = {}
+    if min_humidity_pressure_pa is not None:
+        options['min_humidity_pressure_pa'] = min_humidity_pressure_pa
+    if use_vertical_weights is not None:
+        options['use_vertical_weights'] = use_vertical_weights
+    return objective(model,frames,held,**options)[0]
 
 
 def score(model: PressureProfileModel,dataset: ProfileDataset,config: dict,split: str) -> dict[str,float]:
     model.eval(); forecast=[]; analysis=[]
+    options = _objective_options(config)
     with torch.no_grad():
         for issue in dataset.issues(split,config['max_'+split+'_issues']):
             inputs,targets=dataset.sample(issue,config['max_records_per_window'])
             if not targets: continue
-            forecast.append(float(objective(model,model(inputs,issue),targets)[0]))
-            analysis.append(float(reconstruction(model,dataset,targets,config['max_records_per_window'],split)))
+            forecast.append(float(objective(model,model(inputs,issue),targets,**options)[0]))
+            analysis.append(float(reconstruction(model,dataset,targets,config['max_records_per_window'],split,**options)))
     if not forecast: raise ValueError('No observed validation support.')
     return {'forecast':float(np.mean(forecast)),'reconstruction':float(np.mean(analysis))}
 
@@ -190,6 +260,8 @@ def _training_status(model) -> str:
 def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: dict,
           climatology_path: str|Path|None=None) -> None:
     config=_configuration(config); weight=config['reconstruction_weight']
+    options = _objective_options(config)
+    hydro_weight = config.get('hydrostatic_weight', 0.0)
     dataset=_build_dataset(dataset_path,config); norm_path=Path(norm_path); norm_hash=digest(norm_path)
     norms=load_normalization(json.loads(norm_path.read_text()))
     sources={'dataset_manifest_sha256':dataset.manifest_sha256,'database_sha256':dataset.manifest['database_sha256'],
@@ -225,10 +297,14 @@ def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: di
                 inputs,targets=dataset.sample(issue,config['max_records_per_window'])
                 if not targets: continue
                 optimizer.zero_grad(set_to_none=True)
-                forecast,counts=objective(model,model(inputs,issue),targets)
+                frames=model(inputs,issue)
+                forecast,counts=objective(model,frames,targets,**options)
                 objective_report = getattr(model, 'last_objective_report', None)
-                analysis=reconstruction(model,dataset,targets,config['max_records_per_window'],'train')
+                analysis=reconstruction(model,dataset,targets,config['max_records_per_window'],'train',**options)
                 loss=forecast+weight*analysis
+                if hydro_weight > 0:
+                    hydro_res=hydrostatic_residual(frames[0].profiles[...,:5],model.pressure_pa)
+                    loss=loss+hydro_weight*(hydro_res/1000.0).square().mean()
                 if not torch.isfinite(loss): raise FloatingPointError('Nonfinite S1/S2 loss.')
                 loss.backward(); coverage+=counts
                 for name,parameter in model.named_parameters():
@@ -324,6 +400,8 @@ def evaluate(dataset_path: str|Path,training: str|Path,output: str|Path) -> None
     sums=np.zeros((24,5,5)); rejected=np.zeros(5,dtype=int)
     from .vertical import PRESSURE_HPA
     by_pressure=np.zeros((24,37,5,5))
+    min_humidity = 0.0 if config.get('physical_policy') is not None else config.get('min_humidity_pressure_pa', MIN_HUMIDITY_PRESSURE_PA)
+    humidity_target_masked = 0
     with torch.no_grad():
         for issue in dataset.issues('test',config['max_test_issues']):
             inputs,targets=dataset.sample(issue,config['max_records_per_window']);frames=model(inputs,issue)
@@ -331,7 +409,11 @@ def evaluate(dataset_path: str|Path,training: str|Path,output: str|Path) -> None
                          profile_variable_mask=frames[0].profile_variable_mask,wind_basis=frames[0].wind_basis,
                          valid_time=f.valid_time,lead_hours=f.lead_hours) for f in frames]
             for record in targets:
-                variable=VARIABLES.index(record['variable']); a=_prediction(frames,model.grid,record,model.pressure_pa,3)
+                variable=VARIABLES.index(record['variable'])
+                if variable == 1 and record['pressure_pa'] < min_humidity:
+                    humidity_target_masked += 1
+                    continue
+                a=_prediction(frames,model.grid,record,model.pressure_pa,3)
                 b=_prediction(persistence,model.grid,record,model.pressure_pa,3)
                 if a is None or b is None:rejected[variable]+=1;continue
                 error=float(a[0])-record['value'];control=float(b[0])-record['value']
@@ -358,7 +440,8 @@ def evaluate(dataset_path: str|Path,training: str|Path,output: str|Path) -> None
     if digest(completion['identity']['norm_path'])!=completion['identity']['norm_sha256'] or _frozen_training_hashes(training)!=frozen_hashes:
         raise ValueError('Frozen training or normalization changed during diagnostic test.')
     save(output,{'split':'test','test_independence':'previously seen periods; diagnostic only','metrics':rows,
-         'unsupported_records':rejected.tolist(),'identity':completion['identity'],
+         'unsupported_records':rejected.tolist(),'humidity_target_masked':humidity_target_masked,
+         'identity':completion['identity'],
          'training_artifact_sha256':frozen_hashes,'metrics_by_pressure':pressure_rows,
          'physical_policy':config.get('physical_policy'),'scientific_acceptance':False})
 

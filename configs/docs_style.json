@@ -59,7 +59,10 @@
     "docs/PROFILE_R8.md",
     "docs/reviews/r8-climate-source-research.md",
     "docs/PROFILE_R9.md",
-    "docs/decisions/0012-physical-profile-r9.md"
+    "docs/decisions/0013-physical-profile-r9.md",
+    "docs/decisions/0012-weighted-loss-and-humidity-masking.md",
+    "docs/PROFILE_R9_WEIGHTED.md",
+    "docs/reviews/r9-merge-integration.md"
   ],
   "scope_note": "Active operational documentation and agent instructions. Historical reports retain their evidence.",
   "target_interpretation": "Approximately 80% is a stylistic request, not measured official standard compliance.",
