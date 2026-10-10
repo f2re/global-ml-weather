@@ -1,0 +1,32 @@
+{
+  "mesh_level": 1,
+  "hidden": 32,
+  "epochs": 20,
+  "patience": 5,
+  "threads": 8,
+  "seed": 29,
+  "learning_rate": 0.0001,
+  "weight_decay": 0.01,
+  "gradient_clip": 1.0,
+  "max_train_issues": 192,
+  "max_validation_issues": 48,
+  "max_test_issues": 48,
+  "max_records_per_window": 2000,
+  "reconstruction_weight": 0.25,
+  "physical_policy": {
+    "schema": "profile-physical-policy-1",
+    "architecture": "hydrostatic_flow",
+    "huber_delta": 2.5,
+    "humidity_qc": true,
+    "maximum_water_relative_humidity": 2.0,
+    "humidity_min_pressure_pa": 0.0,
+    "variable_weights": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "memory_budget_mib": 8192
+  }
+}

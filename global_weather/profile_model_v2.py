@@ -65,7 +65,14 @@ class PressureProfileModel(nn.Module):
         frame.profile_variable_mask=mask; frame.wind_basis='local_enu_vector'
         return frame
 
-    def forward(self,inputs,issue):
+    def _advance_state(self,state,pressure,issue,lead):
+        context=torch.cat((state,self.graph.neighbours(state),state.mean(1,keepdim=True).expand_as(state),self._forcing(issue,lead,pressure)),-1)
+        updated=self.step(torch.tanh(self.dynamic(context)).reshape(-1,self.hidden),state.reshape(-1,self.hidden)).reshape_as(state)
+        return state+.1*(updated-state)
+
+    def forward(self,inputs,issue,*,horizon_hours=72):
+        if type(horizon_hours) is not int or not 0 <= horizon_hours <= 72 or horizon_hours % 3:
+            raise ValueError('Profile horizon must be 0..72 hours in 3-hour steps.')
         issue=utc(issue); n,d=self.grid.n_cells,self.hidden
         pressure=self.pressure_encoder(self.log_pressure)+self.levels
         state=self._initial_state(issue,pressure)
@@ -88,9 +95,7 @@ class PressureProfileModel(nn.Module):
             updated=self.ingest(sums/counts.clamp_min(1)[:,None],state.reshape(-1,d))
             state=torch.where((counts>0)[:,None],updated,state.reshape(-1,d)).reshape(n,37,d)
         frames=[self._decode(state,issue,0)]
-        for lead in range(3,73,3):
-            context=torch.cat((state,self.graph.neighbours(state),state.mean(1,keepdim=True).expand_as(state),self._forcing(issue,lead,pressure)),-1)
-            updated=self.step(torch.tanh(self.dynamic(context)).reshape(-1,d),state.reshape(-1,d)).reshape(n,37,d)
-            state=state+.1*(updated-state)
+        for lead in range(3,horizon_hours+1,3):
+            state=self._advance_state(state,pressure,issue,lead)
             frames.append(self._decode(state,issue,lead))
         return frames

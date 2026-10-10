@@ -21,7 +21,65 @@ from .profile_normalization import load_normalization
 from .profile_training import ProfileDataset,VARIABLES,bounded_records,configuration,identity,_restore_rng
 
 
+class _ScreenedProfileDataset(ProfileDataset):
+    """R9 filtering is an immutable view, never a rewritten archive or norm."""
+    def __init__(self, path, policy):
+        super().__init__(path)
+        self.physical_policy = policy
+        self.qc_reports = {}
+
+    def records(self, start, end, *, issue=None, split=None):
+        from .profile_physics import screen_humidity
+        raw = super().records(start, end, issue=issue, split=split)
+        rows, report = screen_humidity(raw, self.physical_policy)
+        key = (utc(start).isoformat(), utc(end).isoformat(),
+               utc(issue).isoformat() if issue is not None else None, split)
+        self.qc_reports[key] = dict(report, start=key[0], end=key[1], issue=key[2], split=split)
+        return rows
+
+
+def _build_dataset(path, config):
+    if config.get('physical_policy') is None:
+        return ProfileDataset(path)
+    from .profile_physics import parse_policy
+    return _ScreenedProfileDataset(path, parse_policy(config['physical_policy']))
+
+
+def _configuration(config):
+    config = dict(config)
+    value = config.pop('physical_policy', None)
+    weight = config.pop('reconstruction_weight', .25)
+    if type(weight) not in (int, float) or not math.isfinite(weight) or not 0 <= weight <= 1:
+        raise ValueError('Invalid reconstruction weight.')
+    if value is None:
+        result = configuration(config)
+    else:
+        from .profile_physics import parse_policy
+        policy = parse_policy(value)
+        mesh = config.get('mesh_level', 1)
+        if type(mesh) is not int or not 0 <= mesh <= 4:
+            raise ValueError('R9 mesh_level must be an integer from 0 to 4.')
+        # Existing pilot limits are not silently raised for historical configs.
+        result = configuration(dict(config, mesh_level=min(mesh, 2)))
+        result['mesh_level'] = mesh
+        if result['hidden'] > 128:
+            raise ValueError('R9 hidden exceeds the reviewed research range.')
+        # Screening estimate only, not measured peak VRAM or allocator guarantee.
+        estimate = (10*4**mesh+2)*37*result['hidden']*4*25*20
+        if estimate > policy.memory_budget_mib*1024**2:
+            raise ValueError('R9 estimated activations exceed the declared memory budget.')
+        result['physical_policy'] = policy.payload()
+    result['reconstruction_weight'] = weight
+    return result
+
+
 def objective(model: PressureProfileModel,frames: list,targets: list[dict]) -> tuple[torch.Tensor,list[int]]:
+    policy = getattr(model, 'physical_policy', None)
+    if policy is not None:
+        from .profile_physics import physical_objective
+        loss, counts, report = physical_objective(model, frames, targets, policy)
+        model.last_objective_report = report
+        return loss, counts
     terms=[[] for _ in VARIABLES]
     for record in targets:
         variable=VARIABLES.index(record['variable']); _,std,supported=model.normalization.at(variable,record['pressure_pa'])
@@ -47,7 +105,8 @@ def reconstruction(model: PressureProfileModel,dataset: ProfileDataset,targets: 
     held=[r for r in targets if r['profile_id']==group and utc(r['observed_at'])==when]
     inputs=dataset.records(when-timedelta(hours=12),when,issue=when,split=split)
     inputs=bounded_records([r for r in inputs if r['profile_id']!=group],limit)
-    return objective(model,model(inputs,when)[:1],held)[0]
+    frames = model(inputs,when,horizon_hours=0) if isinstance(model,PressureProfileModel) else model(inputs,when)[:1]
+    return objective(model,frames,held)[0]
 
 
 def score(model: PressureProfileModel,dataset: ProfileDataset,config: dict,split: str) -> dict[str,float]:
@@ -68,17 +127,33 @@ def _load_fixed_state(model: PressureProfileModel, state: dict) -> None:
     for name in ('mean','std','norm_support','pressure_pa','xyz','log_pressure'):
         if name not in state or not torch.equal(state[name].to(buffers[name].device),buffers[name]):
             raise ValueError('Checkpoint fixed normalization or geometry buffer differs: '+name)
+    for name in ('edge_src','edge_dst','edge_direction','edge_length_m','enu_basis','humidity_bias'):
+        if name in buffers and (name not in state or not torch.equal(state[name].to(buffers[name].device),buffers[name])):
+            raise ValueError('Checkpoint physical buffer differs: '+name)
     model.load_state_dict(state,strict=True)
 
 
 def _build_model(norms, config: dict, device, climatology_path=None):
+    from .profile_physics import parse_policy
     grid = build_pyramid(config['mesh_level'])[0]
-    if climatology_path is None:
-        return PressureProfileModel(grid, norms, config['hidden']).to(device)
-    from .seasonal_climatology import SeasonalClimatology
-    from .profile_seasonal_model import SeasonalProfileModel
-    climate = SeasonalClimatology(climatology_path, grid=grid)
-    return SeasonalProfileModel(grid, norms, climate, config['hidden']).to(device)
+    policy = parse_policy(config['physical_policy']) if config.get('physical_policy') is not None else None
+    climate = None
+    if climatology_path is not None:
+        from .seasonal_climatology import SeasonalClimatology
+        climate = SeasonalClimatology(climatology_path, grid=grid)
+    if policy is not None and policy.architecture == 'hydrostatic_flow':
+        from .profile_hydrostatic_model import HydrostaticFlowProfileModel
+        model = HydrostaticFlowProfileModel(grid, norms, config['hidden'], climate)
+    elif climate is not None:
+        from .profile_seasonal_model import SeasonalProfileModel
+        model = SeasonalProfileModel(grid, norms, climate, config['hidden'])
+    else:
+        model = PressureProfileModel(grid, norms, config['hidden'])
+    if policy is not None:
+        if norms.humidity_transform != 'identity':
+            raise ValueError('R9 requires unchanged physical GraphCast normalization.')
+        model.physical_policy = policy
+    return model.to(device)
 
 
 def _model_identity(model, norm_path: Path, norm_hash: str) -> dict:
@@ -89,6 +164,11 @@ def _model_identity(model, norm_path: Path, norm_hash: str) -> dict:
         result.update(architecture=ARCHITECTURE,
                       climatology_path=str(model.climatology.root.resolve()),
                       climatology_sha256=model.climatology.fingerprint)
+    if getattr(model, 'physical_policy', None) is not None:
+        result['physical_policy'] = model.physical_policy.payload()
+        if model.physical_policy.architecture == 'hydrostatic_flow':
+            from .profile_hydrostatic_model import ARCHITECTURE
+            result['architecture'] = ARCHITECTURE
     return result
 
 
@@ -98,6 +178,9 @@ def _verify_climate(model) -> None:
 
 
 def _training_status(model) -> str:
+    if getattr(model, 'physical_policy', None) is not None and model.physical_policy.architecture == 'hydrostatic_flow':
+        from .profile_hydrostatic_model import STATUS
+        return STATUS
     if hasattr(model, 'climatology'):
         from .profile_seasonal_model import STATUS
         return STATUS
@@ -106,10 +189,8 @@ def _training_status(model) -> str:
 
 def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: dict,
           climatology_path: str|Path|None=None) -> None:
-    weight=config.get('reconstruction_weight',.25)
-    if type(weight) not in (int,float) or not 0<=weight<=1: raise ValueError('Invalid reconstruction weight.')
-    config=configuration({k:v for k,v in config.items() if k!='reconstruction_weight'}); config['reconstruction_weight']=weight
-    dataset=ProfileDataset(dataset_path); norm_path=Path(norm_path); norm_hash=digest(norm_path)
+    config=_configuration(config); weight=config['reconstruction_weight']
+    dataset=_build_dataset(dataset_path,config); norm_path=Path(norm_path); norm_hash=digest(norm_path)
     norms=load_normalization(json.loads(norm_path.read_text()))
     sources={'dataset_manifest_sha256':dataset.manifest_sha256,'database_sha256':dataset.manifest['database_sha256'],
              'source_sha256':dataset.manifest['source_sha256'],'admission_sha256':dataset.manifest['admission_sha256']}
@@ -145,6 +226,7 @@ def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: di
                 if not targets: continue
                 optimizer.zero_grad(set_to_none=True)
                 forecast,counts=objective(model,model(inputs,issue),targets)
+                objective_report = getattr(model, 'last_objective_report', None)
                 analysis=reconstruction(model,dataset,targets,config['max_records_per_window'],'train')
                 loss=forecast+weight*analysis
                 if not torch.isfinite(loss): raise FloatingPointError('Nonfinite S1/S2 loss.')
@@ -161,9 +243,13 @@ def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: di
                 if len(losses)==1 or len(losses)%12==0:
                     save(output/'progress.json',{'epoch':epoch,'optimizer_steps':len(losses),'train_issues':len(issues),
                          'loss':losses[-1],'forecast_loss':float(forecast.detach()),'reconstruction_loss':float(analysis.detach()),
-                         'seconds':time.monotonic()-started,'source_commit':expected['commit'],'device':str(device)})
+                         'seconds':time.monotonic()-started,'source_commit':expected['commit'],'device':str(device),
+                         'forecast_objective':objective_report})
             if not losses or not all(gradients.values()) or not np.all(coverage>0): raise ValueError('Incomplete branch/variable gradients.')
             validation=score(model,dataset,config,'validation'); value=validation['forecast']; improved=value<best
+            if hasattr(dataset, 'qc_reports'):
+                save(output/'qc-queries.json', {'schema':'profile-qc-queries-1','policy':config['physical_policy'],
+                     'count_scope':'per_query_not_unique_observations','queries':list(dataset.qc_reports.values())})
             if improved: best,best_epoch,stale=value,epoch,0
             else: stale+=1
             dataset.verify()
@@ -195,10 +281,10 @@ def train(dataset_path: str|Path,norm_path: str|Path,output: str|Path,config: di
 
 def load_frozen(dataset_path: str|Path,training: str|Path,device: str='auto') -> tuple[PressureProfileModel,ProfileDataset]:
     training=Path(training);completion=json.loads((training/'complete.json').read_text())
-    if completion.get('status') not in ('measured_pressure_profile_research_trained','measured_graphcast_profile_research_trained','measured_seasonal_profile_research_trained'): raise ValueError('Complete R6 training first.')
+    if completion.get('status') not in ('measured_pressure_profile_research_trained','measured_graphcast_profile_research_trained','measured_seasonal_profile_research_trained','measured_hydrostatic_flow_profile_research_trained'): raise ValueError('Complete R6 training first.')
     ref=json.loads((training/'best.json').read_text());state=torch.load(checkpoint_path(training,ref),map_location='cpu',weights_only=True)
     if state['identity']!=completion['identity'] or ref['epoch']!=completion['best_epoch']: raise ValueError('R6 completion differs.')
-    previous=state['identity']; norm_path=Path(previous['norm_path']);dataset=ProfileDataset(dataset_path)
+    previous=state['identity']; norm_path=Path(previous['norm_path']);dataset=_build_dataset(dataset_path,previous['config'])
     if digest(norm_path)!=previous['norm_sha256']: raise ValueError('R6 pressure norms changed.')
     device=torch.device(('cuda' if torch.cuda.is_available() else 'cpu') if device=='auto' else device)
     norms=load_normalization(json.loads(norm_path.read_text()))
@@ -236,6 +322,8 @@ def evaluate(dataset_path: str|Path,training: str|Path,output: str|Path) -> None
     model,dataset=load_frozen(dataset_path,training); completion=json.loads((training/'complete.json').read_text());config=completion['identity']['config']
     if _frozen_training_hashes(training)!=frozen_hashes:raise ValueError('Frozen training changed during diagnostic loading.')
     sums=np.zeros((24,5,5)); rejected=np.zeros(5,dtype=int)
+    from .vertical import PRESSURE_HPA
+    by_pressure=np.zeros((24,37,5,5))
     with torch.no_grad():
         for issue in dataset.issues('test',config['max_test_issues']):
             inputs,targets=dataset.sample(issue,config['max_records_per_window']);frames=model(inputs,issue)
@@ -248,13 +336,22 @@ def evaluate(dataset_path: str|Path,training: str|Path,output: str|Path) -> None
                 if a is None or b is None:rejected[variable]+=1;continue
                 error=float(a[0])-record['value'];control=float(b[0])-record['value']
                 lead=lead_bin(record['observed_at'],issue)
-                sums[lead,variable]+=[abs(error),error**2,error,control**2,1]
+                values=[abs(error),error**2,error,control**2,1]
+                sums[lead,variable]+=values
+                pressure_bin=int(np.abs(np.log(np.array(PRESSURE_HPA)*100)-np.log(record['pressure_pa'])).argmin())
+                by_pressure[lead,pressure_bin,variable]+=values
     rows=[]
     for lead in range(24):
         for variable in range(5):
             mae,mse,bias,control,count=sums[lead,variable]
             if count:rows.append({'lead_bin_hours':(lead+1)*3,'variable':VARIABLES[variable],'count':int(count),
                 'mae':mae/count,'rmse':float(np.sqrt(mse/count)),'bias':bias/count,'analysis_persistence_rmse':float(np.sqrt(control/count))})
+    pressure_rows=[]
+    for lead,pidx,var in zip(*np.nonzero(by_pressure[...,4])):
+        mae,mse,bias,control,count=by_pressure[lead,pidx,var]
+        pressure_rows.append({'lead_bin_hours':int((lead+1)*3),'pressure_bin_hpa':int(PRESSURE_HPA[pidx]),
+            'variable':VARIABLES[var],'count':int(count),'mae':float(mae/count),'rmse':float(np.sqrt(mse/count)),
+            'bias':float(bias/count),'analysis_persistence_rmse':float(np.sqrt(control/count))})
     if not rows:raise ValueError('No admitted diagnostic test predictions.')
     dataset.verify();_verify_climate(model)
     if hasattr(model.normalization,'verify_sources'):model.normalization.verify_sources()
@@ -262,7 +359,8 @@ def evaluate(dataset_path: str|Path,training: str|Path,output: str|Path) -> None
         raise ValueError('Frozen training or normalization changed during diagnostic test.')
     save(output,{'split':'test','test_independence':'previously seen periods; diagnostic only','metrics':rows,
          'unsupported_records':rejected.tolist(),'identity':completion['identity'],
-         'training_artifact_sha256':frozen_hashes,'scientific_acceptance':False})
+         'training_artifact_sha256':frozen_hashes,'metrics_by_pressure':pressure_rows,
+         'physical_policy':config.get('physical_policy'),'scientific_acceptance':False})
 
 
 
