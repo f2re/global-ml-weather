@@ -67,7 +67,7 @@ def stop(child):
     # A leader may exit while descendants still hold its process group.
     try:
         os.killpg(child.pid, signal.SIGTERM)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
         child.wait()
         return
     try:
@@ -77,7 +77,7 @@ def stop(child):
     finally:
         try:
             os.killpg(child.pid, signal.SIGKILL)
-        except ProcessLookupError:
+        except (ProcessLookupError, PermissionError):
             pass
         child.wait()
 
