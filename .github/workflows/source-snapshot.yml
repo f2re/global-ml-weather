@@ -2,7 +2,7 @@ name: source-snapshot
 on:
   workflow_dispatch:
   push:
-    branches: ['feature/autonomous-training-v070']
+    branches: ['feature/autonomous-training-v070', 'codex/r9-physical-dynamics']
 permissions:
   contents: read
 jobs:
