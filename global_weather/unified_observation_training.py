@@ -44,14 +44,15 @@ DEFAULT_CONFIG = {
 }
 
 
-def load_climatology_array(climatology_path: Path) -> tuple[np.ndarray, dict]:
+def load_climatology_array(climatology_path: Path) -> tuple[np.ndarray, np.ndarray, dict]:
     """Load prepared 30-year official NetCDF climatology array [12, n_cells, 37, 5]."""
     npz_path = climatology_path / 'seasonal-climatology.npz' if climatology_path.is_dir() else climatology_path
     manifest_path = climatology_path / 'manifest.json' if climatology_path.is_dir() else climatology_path.with_name('manifest.json')
     with np.load(npz_path, allow_pickle=False) as data:
-        mean_3d = data['mean']
+        mean_3d = np.nan_to_num(data['mean'], nan=0.0).astype(np.float32)
+        support = data['support']
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {'period': '1991-2020'}
-    return mean_3d, manifest
+    return mean_3d, support, manifest
 
 
 def evaluate(
@@ -117,13 +118,14 @@ def train(
     output.mkdir(parents=True, exist_ok=True)
     dataset = ObservationDataset(dataset_path)
 
-    # Load 30-year official climatology array
-    clim_mean, clim_meta = load_climatology_array(Path(climatology_dir))
+    # Load 30-year official climatology array and normalize to standard O(1) features
+    clim_mean, clim_support, clim_meta = load_climatology_array(Path(climatology_dir))
     grid = build_grid(cfg['mesh_level'])
 
     # Station scales from train dataset
     surface_scales = dataset.std
     profile_scales = np.array([15.0, 0.005, 10.0, 10.0, 50000.0], dtype=np.float32)
+    scaled_clim_mean = clim_mean / profile_scales[None, None, None, :]
 
     # Fit station climatology baseline from 30-year official gridded NetCDF LTM
     n_stations = len(dataset.latlon)
@@ -158,7 +160,7 @@ def train(
             surface_scales=surface_scales,
             profile_scales=profile_scales,
             hidden=cfg['hidden'],
-            climatology_grid_mean=clim_mean,
+            climatology_grid_mean=scaled_clim_mean,
         ).to(device)
 
         optimizer = torch.optim.AdamW(

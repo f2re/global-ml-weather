@@ -63,7 +63,7 @@ class UnifiedObservationModel(nn.Module):
 
         # Climatology background buffer: [12, n_cells, 37, 5]
         if climatology_grid_mean is not None:
-            c_mean = np.asarray(climatology_grid_mean, dtype=np.float32)
+            c_mean = np.nan_to_num(np.asarray(climatology_grid_mean, dtype=np.float32), nan=0.0)
             if c_mean.shape != (12, self.n_cells, self.n_levels, 5):
                 raise ValueError("Climatology mean shape must be [12, n_cells, 37, 5].")
             self.register_buffer("climatology_mean", torch.tensor(c_mean))
