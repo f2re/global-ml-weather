@@ -43,8 +43,10 @@ DEFAULT_CONFIG = {
     'gradient_clip': 1.0,
     'surface_weight': 0.5,
     'profile_weight': 0.5,
+    'batch_size': 4,
     'max_train_samples': None,
     'max_val_samples': None,
+    'prediction_target': 'joint surface and vertical profile anomaly departure from official 30-year climatology',
 }
 
 
@@ -66,12 +68,41 @@ def evaluate(
     split: str,
     max_samples: int | None,
     device: torch.device,
+    batch_size: int = 4,
 ) -> float:
     model.eval()
     losses = []
     indices = dataset.subset(split)
     if max_samples is not None:
         indices = indices[:max_samples]
+
+    batch_x_anom: list[np.ndarray] = []
+    batch_x_mask: list[np.ndarray] = []
+    batch_y_anom: list[np.ndarray] = []
+    batch_y_mask: list[np.ndarray] = []
+    batch_months: list[int] = []
+    batch_hours: list[float] = []
+
+    def flush_eval_batch() -> None:
+        if not batch_x_anom:
+            return
+        bx_anom = torch.as_tensor(np.stack(batch_x_anom), device=device)
+        bx_mask = torch.as_tensor(np.stack(batch_x_mask), device=device)
+        by_anom = torch.as_tensor(np.stack(batch_y_anom), device=device)
+        by_mask = torch.as_tensor(np.stack(batch_y_mask), device=device)
+        b_months = torch.as_tensor(batch_months, dtype=torch.long, device=device)
+        b_hours = torch.as_tensor(batch_hours, dtype=torch.float32, device=device)
+
+        batch_x_anom.clear()
+        batch_x_mask.clear()
+        batch_y_anom.clear()
+        batch_y_mask.clear()
+        batch_months.clear()
+        batch_hours.clear()
+
+        forecast = model(bx_anom, bx_mask, month_idx=b_months, issue_hour=b_hours)
+        l = unified_loss(forecast, by_anom, by_mask)
+        losses.append(float(l.detach().cpu()))
 
     with torch.no_grad():
         for idx in indices:
@@ -95,17 +126,18 @@ def evaluate(
             x_anom = np.where(x_mask, (x_raw - c_inputs) / station_climatology.std, 0.0).astype(np.float32)
             y_anom = np.where(y_mask, (y_raw - c_targets) / station_climatology.std, 0.0).astype(np.float32)
 
-            tx_anom = torch.as_tensor(x_anom, device=device)
-            tx_mask = torch.as_tensor(x_mask, device=device)
-            ty_anom = torch.as_tensor(y_anom, device=device)
-            ty_mask = torch.as_tensor(y_mask, device=device)
-
             issue_dt = utc(row['issue'])
-            month_idx = issue_dt.month - 1
+            batch_x_anom.append(x_anom)
+            batch_x_mask.append(x_mask)
+            batch_y_anom.append(y_anom)
+            batch_y_mask.append(y_mask)
+            batch_months.append(issue_dt.month - 1)
+            batch_hours.append(float(issue_dt.hour))
 
-            forecast = model(tx_anom, tx_mask, month_idx=month_idx, issue_hour=issue_dt.hour)
-            l = unified_loss(forecast, ty_anom, ty_mask)
-            losses.append(float(l.detach().cpu()))
+            if len(batch_x_anom) >= batch_size:
+                flush_eval_batch()
+
+        flush_eval_batch()
 
     return float(np.mean(losses)) if losses else float('inf')
 
@@ -191,11 +223,59 @@ def train(
         if cfg.get('max_train_samples') is not None:
             train_indices = train_indices[:cfg['max_train_samples']]
 
+        batch_size = max(1, int(cfg.get('batch_size', 4)))
+
         for epoch in range(1, cfg['epochs'] + 1):
             model.train()
             epoch_losses = []
             gradients = {}
             random.shuffle(train_indices)
+
+            batch_x_anom: list[np.ndarray] = []
+            batch_x_mask: list[np.ndarray] = []
+            batch_y_anom: list[np.ndarray] = []
+            batch_y_mask: list[np.ndarray] = []
+            batch_months: list[int] = []
+            batch_hours: list[float] = []
+
+            def flush_train_batch() -> None:
+                if not batch_x_anom:
+                    return
+                bx_anom = torch.as_tensor(np.stack(batch_x_anom), device=device)
+                bx_mask = torch.as_tensor(np.stack(batch_x_mask), device=device)
+                by_anom = torch.as_tensor(np.stack(batch_y_anom), device=device)
+                by_mask = torch.as_tensor(np.stack(batch_y_mask), device=device)
+                b_months = torch.as_tensor(batch_months, dtype=torch.long, device=device)
+                b_hours = torch.as_tensor(batch_hours, dtype=torch.float32, device=device)
+
+                batch_x_anom.clear()
+                batch_x_mask.clear()
+                batch_y_anom.clear()
+                batch_y_mask.clear()
+                batch_months.clear()
+                batch_hours.clear()
+
+                optimizer.zero_grad(set_to_none=True)
+                forecast = model(bx_anom, bx_mask, month_idx=b_months, issue_hour=b_hours)
+                loss = unified_loss(
+                    forecast,
+                    by_anom,
+                    by_mask,
+                    surface_weight=cfg['surface_weight'],
+                    profile_weight=cfg['profile_weight'],
+                )
+
+                if not torch.isfinite(loss):
+                    raise FloatingPointError("Nonfinite unified anomaly loss.")
+                loss.backward()
+
+                for name, param in model.named_parameters():
+                    if param.grad is not None:
+                        gradients[name] = bool((param.grad.abs().sum() > 0).item())
+
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg['gradient_clip'])
+                optimizer.step()
+                epoch_losses.append(float(loss.detach().cpu()))
 
             for idx in train_indices:
                 row = dataset.samples[idx]
@@ -218,35 +298,18 @@ def train(
                 x_anom = np.where(x_mask, (x_raw - c_inputs) / station_climatology.std, 0.0).astype(np.float32)
                 y_anom = np.where(y_mask, (y_raw - c_targets) / station_climatology.std, 0.0).astype(np.float32)
 
-                tx_anom = torch.as_tensor(x_anom, device=device)
-                tx_mask = torch.as_tensor(x_mask, device=device)
-                ty_anom = torch.as_tensor(y_anom, device=device)
-                ty_mask = torch.as_tensor(y_mask, device=device)
-
                 issue_dt = utc(row['issue'])
-                month_idx = issue_dt.month - 1
+                batch_x_anom.append(x_anom)
+                batch_x_mask.append(x_mask)
+                batch_y_anom.append(y_anom)
+                batch_y_mask.append(y_mask)
+                batch_months.append(issue_dt.month - 1)
+                batch_hours.append(float(issue_dt.hour))
 
-                optimizer.zero_grad(set_to_none=True)
-                forecast = model(tx_anom, tx_mask, month_idx=month_idx, issue_hour=issue_dt.hour)
-                loss = unified_loss(
-                    forecast,
-                    ty_anom,
-                    ty_mask,
-                    surface_weight=cfg['surface_weight'],
-                    profile_weight=cfg['profile_weight'],
-                )
+                if len(batch_x_anom) >= batch_size:
+                    flush_train_batch()
 
-                if not torch.isfinite(loss):
-                    raise FloatingPointError("Nonfinite unified anomaly loss.")
-                loss.backward()
-
-                for name, param in model.named_parameters():
-                    if param.grad is not None:
-                        gradients[name] = bool((param.grad.abs().sum() > 0).item())
-
-                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg['gradient_clip'])
-                optimizer.step()
-                epoch_losses.append(float(loss.detach().cpu()))
+            flush_train_batch()
 
             if scheduler is not None:
                 scheduler.step()
@@ -254,7 +317,7 @@ def train(
             else:
                 current_lr = float(cfg['learning_rate'])
 
-            val_loss = evaluate(model, dataset, station_climatology, 'validation', cfg.get('max_val_samples'), device)
+            val_loss = evaluate(model, dataset, station_climatology, 'validation', cfg.get('max_val_samples'), device, batch_size=batch_size)
             improved = val_loss < best_loss
             if improved:
                 best_loss, best_epoch, stale = val_loss, epoch, 0

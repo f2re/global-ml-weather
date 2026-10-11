@@ -9,6 +9,7 @@ outputs/
 data/
 *.pt
 *.npz
+*.pdf
 .env
 
 credentials.json

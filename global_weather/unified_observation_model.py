@@ -148,56 +148,87 @@ class UnifiedObservationModel(nn.Module):
 
     def forward(
         self,
-        surface_anomalies: Tensor,      # [12, n_stations, 6]
-        surface_mask: Tensor,           # [12, n_stations, 6]
-        month_idx: int = 0,
-        profile_anomalies: Tensor | None = None, # [12, n_cells, 37, 5] optional
-        profile_mask: Tensor | None = None,      # [12, n_cells, 37, 5] optional
-        issue_hour: int = 0,
+        surface_anomalies: Tensor,      # [12, n_stations, 6] or [B, 12, n_stations, 6]
+        surface_mask: Tensor,           # [12, n_stations, 6] or [B, 12, n_stations, 6]
+        month_idx: int | list[int] | Tensor = 0,
+        profile_anomalies: Tensor | None = None, # [12, n_cells, 37, 5] or [B, 12, n_cells, 37, 5]
+        profile_mask: Tensor | None = None,      # [12, n_cells, 37, 5] or [B, 12, n_cells, 37, 5]
+        issue_hour: int | float | list[int | float] | Tensor = 0,
     ) -> UnifiedForecast:
+        is_unbatched = surface_anomalies.dim() == 3
+        if is_unbatched:
+            surface_anomalies = surface_anomalies.unsqueeze(0)
+            surface_mask = surface_mask.unsqueeze(0)
+            if profile_anomalies is not None:
+                profile_anomalies = profile_anomalies.unsqueeze(0)
+            if profile_mask is not None:
+                profile_mask = profile_mask.unsqueeze(0)
+            if isinstance(month_idx, int):
+                month_idx = [month_idx]
+            if isinstance(issue_hour, (int, float)):
+                issue_hour = [issue_hour]
+
+        B = surface_anomalies.shape[0]
         n, levels, d = self.n_cells, self.n_levels, self.hidden
+        device = surface_anomalies.device
+
+        if not isinstance(month_idx, torch.Tensor):
+            month_idx = torch.as_tensor(month_idx, dtype=torch.long, device=device)
+        if not isinstance(issue_hour, torch.Tensor):
+            issue_hour = torch.as_tensor(issue_hour, dtype=torch.float32, device=device)
 
         # Base atmospheric column state: geometry + level embedding + climate context
-        base_geom = self.geometry(self.xyz)[:, None, :] + self.level_embedding[None, :, :]
+        base_geom = (self.geometry(self.xyz)[:, None, :] + self.level_embedding[None, :, :])[None, ...].expand(B, n, levels, d)
         clim_features = self.climate_encoder(self.climatology_mean[month_idx])
         state = base_geom + clim_features
 
         # Station dropout during training for robust spatial generalization
         if self.training and self.dropout > 0:
             drop_prob = min(0.15, self.dropout * 2.0)
-            st_keep = torch.rand(surface_anomalies.shape[1], device=surface_anomalies.device) > drop_prob
-            clean_mask = surface_mask & st_keep[None, :, None]
+            st_keep = torch.rand(B, surface_anomalies.shape[2], device=device) > drop_prob
+            clean_mask = surface_mask & st_keep[:, None, :, None]
         else:
             clean_mask = surface_mask
 
         # 1. Ingest surface station observations
         clean_surf = torch.where(clean_mask, surface_anomalies, torch.zeros_like(surface_anomalies))
-        for vals, mask in zip(clean_surf, clean_mask):
+        for step in range(clean_surf.shape[1]):
+            vals = clean_surf[:, step]   # [B, n_stations, 6]
+            mask = clean_mask[:, step]   # [B, n_stations, 6]
             tokens = self.surface_encoder(torch.cat([vals, mask.to(vals.dtype)], dim=-1))
-            valid = mask.any(-1)
-            pooled = vals.new_zeros(n, d).index_add(0, self.station_operator.cells, tokens * valid[:, None])
-            counts = vals.new_zeros(n).index_add(0, self.station_operator.cells, valid.to(vals.dtype))
-            pooled = pooled / counts.clamp_min(1)[:, None]
+            valid = mask.any(-1)         # [B, n_stations]
+
+            pooled_list = []
+            counts_list = []
+            for b in range(B):
+                p = vals.new_zeros(n, d).index_add(0, self.station_operator.cells, tokens[b] * valid[b, :, None])
+                c = vals.new_zeros(n).index_add(0, self.station_operator.cells, valid[b].to(vals.dtype))
+                pooled_list.append(p / c.clamp_min(1)[:, None])
+                counts_list.append(c)
+            pooled = torch.stack(pooled_list) # [B, n, d]
+            counts = torch.stack(counts_list) # [B, n]
 
             # Ingest onto surface level (index 0)
-            updated_surf = self.surface_ingest(pooled, state[:, 0])
-            new_surf = torch.where((counts > 0)[:, None], updated_surf, state[:, 0])
-            state = torch.cat([new_surf[:, None, :], state[:, 1:]], dim=1)
+            updated_surf = self.surface_ingest(pooled.reshape(B * n, d), state[:, :, 0].reshape(B * n, d)).reshape(B, n, d)
+            new_surf = torch.where((counts > 0)[..., None], updated_surf, state[:, :, 0])
+            state = torch.cat([new_surf[:, :, None, :], state[:, :, 1:]], dim=2)
 
             # Inject boundary layer influence across lower tropospheric levels (1000 - 850 hPa)
-            bl_inject = self.surface_to_column(pooled)[:, None, :] * self.bl_decay[None, :, None]
-            state = state + torch.where((counts > 0)[:, None, None], bl_inject, torch.zeros_like(state))
+            bl_inject = self.surface_to_column(pooled)[:, :, None, :] * self.bl_decay[None, None, :, None]
+            state = state + torch.where((counts > 0)[..., None, None], bl_inject, torch.zeros_like(state))
 
         # 2. Ingest aerological sounding observations (if provided)
         if profile_anomalies is not None and profile_mask is not None:
             clean_prof = torch.where(profile_mask, profile_anomalies, torch.zeros_like(profile_anomalies))
-            for p_vals, p_mask in zip(clean_prof, profile_mask):
+            for step in range(clean_prof.shape[1]):
+                p_vals = clean_prof[:, step]
+                p_mask = profile_mask[:, step]
                 p_tokens = self.profile_encoder(torch.cat([p_vals, p_mask.to(p_vals.dtype)], dim=-1))
-                p_valid = p_mask.any(-1) # [n, 37]
+                p_valid = p_mask.any(-1)
                 updated_prof = self.profile_ingest(
-                    p_tokens.reshape(-1, d),
-                    state.reshape(-1, d),
-                ).reshape(n, levels, d)
+                    p_tokens.reshape(B * n * levels, d),
+                    state.reshape(B * n * levels, d),
+                ).reshape(B, n, levels, d)
                 state = torch.where(p_valid[..., None], updated_prof, state)
 
         # 3. Dynamic evolution over lead times
@@ -205,35 +236,44 @@ class UnifiedObservationModel(nn.Module):
         profile_preds = []
         for lead in LEAD_HOURS:
             # 1D Vertical stratification along 37 levels
-            vert_forcing = self.vertical_coupling(state.permute(0, 2, 1)).permute(0, 2, 1)
+            vert_forcing = self.vertical_coupling(
+                state.reshape(B * n, levels, d).permute(0, 2, 1)
+            ).permute(0, 2, 1).reshape(B, n, levels, d)
 
             # Solar diurnal cycle
-            target_hour = (issue_hour + lead) % 24
-            hour_rad = 2.0 * np.pi * target_hour / 24.0
-            solar_feats = state.new_tensor([np.sin(hour_rad), np.cos(hour_rad)])
-            solar_forcing = self.solar_encoder(solar_feats)[None, None, :].expand(n, levels, d)
+            target_hours = (issue_hour + lead) % 24.0
+            hour_rads = 2.0 * np.pi * target_hours / 24.0
+            solar_feats = torch.stack([torch.sin(hour_rads), torch.cos(hour_rads)], dim=-1) # [B, 2]
+            solar_forcing = self.solar_encoder(solar_feats)[:, None, None, :].expand(B, n, levels, d)
 
             # Horizontal neighbours from spherical graph
             horiz_neighbours = self.graph.neighbours(state)
 
             # Joint forcing and Pre-LN residual transition
             forcing = self.dynamic(torch.cat([state, horiz_neighbours, vert_forcing, solar_forcing], dim=-1))
-            delta = self.transition(forcing.reshape(-1, d), state.reshape(-1, d)).reshape(n, levels, d)
+            delta = self.transition(forcing.reshape(B * n * levels, d), state.reshape(B * n * levels, d)).reshape(B, n, levels, d)
             state = self.layer_norm(state + delta)
 
             # Surface prediction at station locations
-            station_context = torch.cat(
-                [self.station_operator(state.mean(1)), self.station_operator(state[:, 0]), self.station_operator.station_xyz],
-                dim=-1,
-            )
+            st_mean = state.mean(2)[:, self.station_operator.cells]
+            st_surf = state[:, :, 0][:, self.station_operator.cells]
+            st_xyz = self.station_operator.station_xyz[None, ...].expand(B, -1, -1)
+            station_context = torch.cat([st_mean, st_surf, st_xyz], dim=-1)
             surface_preds.append(self.surface_head(station_context))
 
             # Full 3D profile prediction across grid cells and levels
             profile_preds.append(self.profile_head(state))
 
+        pred_surf = torch.stack(surface_preds, dim=1) # [B, 24, n_stations, 6]
+        pred_prof = torch.stack(profile_preds, dim=1) # [B, 24, n, levels, 5]
+
+        if is_unbatched:
+            pred_surf = pred_surf.squeeze(0)
+            pred_prof = pred_prof.squeeze(0)
+
         return UnifiedForecast(
-            surface_anomalies=torch.stack(surface_preds),
-            profile_anomalies=torch.stack(profile_preds),
+            surface_anomalies=pred_surf,
+            profile_anomalies=pred_prof,
             lead_hours=LEAD_HOURS,
         )
 

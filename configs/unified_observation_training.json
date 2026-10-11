@@ -3,6 +3,7 @@
   "policy": "docs/decisions/0015-unified-observations-and-official-climatology.md",
   "mesh_level": 2,
   "hidden": 128,
+  "batch_size": 4,
   "dropout": 0.05,
   "epochs": 500,
   "patience": 150,

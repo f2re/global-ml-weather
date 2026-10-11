@@ -100,3 +100,44 @@ def test_unified_loss_masking():
     loss = unified_loss(forecast, target_surf, mask_surf)
     assert torch.isfinite(loss)
     assert float(loss) > 0.0
+
+
+def test_unified_model_batched_forward_and_backward():
+    torch.manual_seed(42)
+    model, grid, station_latlon = fixture_setup()
+    n_stations = len(station_latlon)
+    n_cells = grid.xyz.shape[0]
+    B = 4
+
+    surf_anom = torch.randn(B, 12, n_stations, 6)
+    surf_mask = torch.ones(B, 12, n_stations, 6, dtype=torch.bool)
+    prof_anom = torch.randn(B, 12, n_cells, 37, 5)
+    prof_mask = torch.ones(B, 12, n_cells, 37, 5, dtype=torch.bool)
+
+    forecast = model(
+        surf_anom,
+        surf_mask,
+        month_idx=[0, 3, 6, 9],
+        profile_anomalies=prof_anom,
+        profile_mask=prof_mask,
+        issue_hour=[0, 6, 12, 18],
+    )
+
+    assert isinstance(forecast, UnifiedForecast)
+    assert forecast.surface_anomalies.shape == (B, 24, n_stations, 6)
+    assert forecast.profile_anomalies.shape == (B, 24, n_cells, 37, 5)
+
+    target_surf = torch.randn(B, 24, n_stations, 6)
+    mask_surf = torch.ones(B, 24, n_stations, 6, dtype=torch.bool)
+    target_prof = torch.randn(B, 24, n_cells, 37, 5)
+    mask_prof = torch.ones(B, 24, n_cells, 37, 5, dtype=torch.bool)
+
+    loss = unified_loss(forecast, target_surf, mask_surf, target_prof, mask_prof)
+    assert torch.isfinite(loss)
+    loss.backward()
+
+    for name, param in model.named_parameters():
+        assert param.grad is not None, f"No gradient for {name}"
+        assert torch.isfinite(param.grad).all(), f"Nonfinite gradient for {name}"
+        assert param.grad.abs().sum() > 0, f"Zero gradient for {name}"
+

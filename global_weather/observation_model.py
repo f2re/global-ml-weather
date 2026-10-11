@@ -63,6 +63,8 @@ class NearestSphericalOperator(nn.Module):
         self.grid_fingerprint = grid.fingerprint
 
     def forward(self, field: Tensor) -> Tensor:
+        if field.dim() >= 2 and field.shape[1] == self.n_cells:
+            return field[:, self.cells]
         if field.shape[0] != self.n_cells:
             raise ValueError("Field does not cover the global grid.")
         return field[self.cells]
