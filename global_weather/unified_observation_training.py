@@ -30,17 +30,19 @@ from .unified_observation_model import UnifiedObservationModel, unified_loss
 DEFAULT_CONFIG = {
     'mesh_level': 1,
     'hidden': 64,
-    'epochs': 50,
-    'patience': 8,
+    'epochs': 300,
+    'patience': 40,
     'threads': 8,
     'seed': 42,
     'learning_rate': 0.0005,
+    'min_lr': 1e-6,
+    'scheduler': 'cosine',
     'weight_decay': 0.01,
     'gradient_clip': 1.0,
     'surface_weight': 0.5,
     'profile_weight': 0.5,
-    'max_train_samples': 192,
-    'max_val_samples': 48,
+    'max_train_samples': None,
+    'max_val_samples': None,
 }
 
 
@@ -60,12 +62,14 @@ def evaluate(
     dataset: ObservationDataset,
     station_climatology: StationClimatology,
     split: str,
-    max_samples: int,
+    max_samples: int | None,
     device: torch.device,
 ) -> float:
     model.eval()
     losses = []
-    indices = dataset.subset(split)[:max_samples]
+    indices = dataset.subset(split)
+    if max_samples is not None:
+        indices = indices[:max_samples]
 
     with torch.no_grad():
         for idx in indices:
@@ -169,10 +173,20 @@ def train(
             weight_decay=cfg['weight_decay'],
         )
 
+        scheduler = None
+        if cfg.get('scheduler') == 'cosine':
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer,
+                T_max=cfg['epochs'],
+                eta_min=cfg.get('min_lr', 1e-6),
+            )
+
         best_loss = float('inf')
         best_epoch = None
         stale = 0
-        train_indices = dataset.subset('train')[:cfg['max_train_samples']]
+        train_indices = dataset.subset('train')
+        if cfg.get('max_train_samples') is not None:
+            train_indices = train_indices[:cfg['max_train_samples']]
 
         for epoch in range(1, cfg['epochs'] + 1):
             model.train()
@@ -231,7 +245,13 @@ def train(
                 optimizer.step()
                 epoch_losses.append(float(loss.detach().cpu()))
 
-            val_loss = evaluate(model, dataset, station_climatology, 'validation', cfg['max_val_samples'], device)
+            if scheduler is not None:
+                scheduler.step()
+                current_lr = float(optimizer.param_groups[0]['lr'])
+            else:
+                current_lr = float(cfg['learning_rate'])
+
+            val_loss = evaluate(model, dataset, station_climatology, 'validation', cfg.get('max_val_samples'), device)
             improved = val_loss < best_loss
             if improved:
                 best_loss, best_epoch, stale = val_loss, epoch, 0
@@ -245,6 +265,8 @@ def train(
                 'epoch': epoch,
                 'model': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict() if scheduler is not None else None,
+                'current_lr': current_lr,
                 'best_loss': best_loss,
                 'best_epoch': best_epoch,
                 'config': cfg,
@@ -256,6 +278,7 @@ def train(
                 'train_loss': float(np.mean(epoch_losses)) if epoch_losses else None,
                 'val_loss': val_loss,
                 'improved': improved,
+                'learning_rate': current_lr,
                 'nonzero_gradients': gradients,
                 'prediction_target': cfg['prediction_target'],
                 'climatology_source': 'official-30year-netcdf-ltm',
