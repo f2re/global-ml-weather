@@ -161,8 +161,8 @@ def prepare(source_dir: str | Path, output_dir: str | Path, mesh_level: int = 1,
     """Prepare fixed monthly spatial context offline; never fit or read target data."""
     if type(minimum_years) is not int or not 25 <= minimum_years <= 30:
         raise ValueError('Minimum valid years must be an integer in [25,30].')
-    if type(mesh_level) is not int or not 0 <= mesh_level <= 4:
-        raise ValueError('Seasonal preparation mesh level must be in [0,4].')
+    if type(mesh_level) is not int or not 0 <= mesh_level <= 8:
+        raise ValueError('Seasonal preparation mesh level must be in [0,8].')
     source_dir = Path(source_dir); output = Path(output_dir)
     _safe(source_dir); _safe(output)
     source_dir = source_dir.resolve()
@@ -255,7 +255,7 @@ class SeasonalClimatology:
                 or payload.get('role') != 'fixed_external_seasonal_context_not_observation'
                 or payload.get('source_urls') != {filename:BASE_URL+filename for filename in FILES}
                 or set(payload.get('source_sha256', {})) != set(FILES)
-                or type(payload.get('mesh_level')) is not int or not 0<=payload['mesh_level']<=4
+                or type(payload.get('mesh_level')) is not int or not 0<=payload['mesh_level']<=8
                 or type(payload.get('minimum_valid_years')) is not int
                 or not 25 <= payload['minimum_valid_years'] <= 30):
             raise ValueError('Seasonal artifact schema or fixed provenance differs.')

@@ -103,7 +103,7 @@ def evaluate(
             issue_dt = utc(row['issue'])
             month_idx = issue_dt.month - 1
 
-            forecast = model(tx_anom, tx_mask, month_idx=month_idx)
+            forecast = model(tx_anom, tx_mask, month_idx=month_idx, issue_hour=issue_dt.hour)
             l = unified_loss(forecast, ty_anom, ty_mask)
             losses.append(float(l.detach().cpu()))
 
@@ -227,7 +227,7 @@ def train(
                 month_idx = issue_dt.month - 1
 
                 optimizer.zero_grad(set_to_none=True)
-                forecast = model(tx_anom, tx_mask, month_idx=month_idx)
+                forecast = model(tx_anom, tx_mask, month_idx=month_idx, issue_hour=issue_dt.hour)
                 loss = unified_loss(
                     forecast,
                     ty_anom,

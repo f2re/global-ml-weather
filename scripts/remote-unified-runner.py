@@ -77,6 +77,29 @@ def main(argv: list[str] | None = None) -> int:
     if args.expected_sha and sha != args.expected_sha:
         raise SystemExit(f"Revision mismatch: expected {args.expected_sha}, got {sha}")
 
+    cfg_path = root / args.config
+    cfg = json.loads(cfg_path.read_text()) if cfg_path.exists() else {}
+    mesh_level = cfg.get("mesh_level", 1)
+
+    climatology_dir = Path(args.climatology)
+    if mesh_level != 1 or not (climatology_dir / "seasonal-climatology.npz").exists():
+        target_clim = root / f"outputs/climatology-level-{mesh_level}"
+        if not (target_clim / "seasonal-climatology.npz").exists():
+            raw_cache = Path("/home/user/global-weather-climate-cache/ncep1-1991-2020")
+            if raw_cache.exists():
+                print(f"Preparing 30-year climatology for mesh level {mesh_level}...", flush=True)
+                subprocess.check_call([
+                    sys.executable,
+                    "-m",
+                    "global_weather.seasonal_climatology",
+                    "--source-dir", str(raw_cache),
+                    "--output", str(target_clim),
+                    "--mesh-level", str(mesh_level),
+                ], cwd=root)
+                climatology_dir = target_clim
+        else:
+            climatology_dir = target_clim
+
     evidence = output / "evidence.json"
     with (output / "runner.lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -87,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
             "status": "running",
             "gpu_device": "0",
             "dataset": args.dataset,
-            "climatology": args.climatology,
+            "climatology": str(climatology_dir),
             "config": args.config,
         }
         save(evidence, report)
@@ -105,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
             "-m",
             "global_weather.unified_observation_training",
             "--dataset", args.dataset,
-            "--climatology", args.climatology,
+            "--climatology", str(climatology_dir),
             "--output", str(output),
             "--config", str(root / args.config),
         ]

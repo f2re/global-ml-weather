@@ -1,7 +1,7 @@
 {
   "schema": "unified-observation-training-config-1",
   "policy": "docs/decisions/0015-unified-observations-and-official-climatology.md",
-  "mesh_level": 1,
+  "mesh_level": 2,
   "hidden": 128,
   "dropout": 0.05,
   "epochs": 500,

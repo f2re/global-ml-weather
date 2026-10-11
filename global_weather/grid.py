@@ -74,7 +74,7 @@ class SphereGrid:
                             fingerprint=self.fingerprint)
 
 
-def build_grid(level=1, *, max_cells=200_000):
+def build_grid(level=1, *, max_cells=3_000_000):
     if not isinstance(level, int) or not 0 <= level <= 9:
         raise ValueError('level must be an integer in [0,9].')
     n = 10 * 4**level + 2

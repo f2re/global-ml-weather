@@ -92,6 +92,11 @@ class UnifiedObservationModel(nn.Module):
         )
         self.surface_ingest = nn.GRUCell(hidden, hidden)
 
+        # Boundary layer vertical projection from surface observations
+        self.surface_to_column = nn.Linear(hidden, hidden)
+        decay = torch.exp(-torch.arange(self.n_levels).float() / 4.0)
+        self.register_buffer("bl_decay", decay / decay.sum())
+
         # 2. Upper-air sounding encoder: takes [5 profile values + 5 mask] = 10
         self.profile_encoder = nn.Sequential(
             nn.Linear(10, hidden),
@@ -101,14 +106,29 @@ class UnifiedObservationModel(nn.Module):
         )
         self.profile_ingest = nn.GRUCell(hidden, hidden)
 
-        # Dynamics: spherical horizontal neighbours + vertical mean + local state
+        # 1D Vertical stratification coupling along 37 pressure levels
+        self.vertical_coupling = nn.Sequential(
+            nn.Conv1d(hidden, hidden, kernel_size=3, padding=1),
+            nn.GELU(),
+            nn.Conv1d(hidden, hidden, kernel_size=3, padding=1),
+        )
+
+        # Solar diurnal cycle encoder
+        self.solar_encoder = nn.Sequential(
+            nn.Linear(2, hidden),
+            nn.GELU(),
+            nn.Linear(hidden, hidden),
+        )
+
+        # Dynamics: spherical horizontal neighbours + vertical coupling + local state + solar forcing
         self.dynamic = nn.Sequential(
-            nn.Linear(3 * hidden, hidden),
+            nn.Linear(4 * hidden, hidden),
             nn.GELU(),
             nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
             nn.Linear(hidden, hidden),
         )
         self.transition = nn.GRUCell(hidden, hidden)
+        self.layer_norm = nn.LayerNorm(hidden)
 
         # Prediction heads
         # Surface head maps station context to 6 surface anomalies
@@ -133,6 +153,7 @@ class UnifiedObservationModel(nn.Module):
         month_idx: int = 0,
         profile_anomalies: Tensor | None = None, # [12, n_cells, 37, 5] optional
         profile_mask: Tensor | None = None,      # [12, n_cells, 37, 5] optional
+        issue_hour: int = 0,
     ) -> UnifiedForecast:
         n, levels, d = self.n_cells, self.n_levels, self.hidden
 
@@ -141,9 +162,17 @@ class UnifiedObservationModel(nn.Module):
         clim_features = self.climate_encoder(self.climatology_mean[month_idx])
         state = base_geom + clim_features
 
+        # Station dropout during training for robust spatial generalization
+        if self.training and self.dropout > 0:
+            drop_prob = min(0.15, self.dropout * 2.0)
+            st_keep = torch.rand(surface_anomalies.shape[1], device=surface_anomalies.device) > drop_prob
+            clean_mask = surface_mask & st_keep[None, :, None]
+        else:
+            clean_mask = surface_mask
+
         # 1. Ingest surface station observations
-        clean_surf = torch.where(surface_mask, surface_anomalies, torch.zeros_like(surface_anomalies))
-        for vals, mask in zip(clean_surf, surface_mask):
+        clean_surf = torch.where(clean_mask, surface_anomalies, torch.zeros_like(surface_anomalies))
+        for vals, mask in zip(clean_surf, clean_mask):
             tokens = self.surface_encoder(torch.cat([vals, mask.to(vals.dtype)], dim=-1))
             valid = mask.any(-1)
             pooled = vals.new_zeros(n, d).index_add(0, self.station_operator.cells, tokens * valid[:, None])
@@ -154,6 +183,10 @@ class UnifiedObservationModel(nn.Module):
             updated_surf = self.surface_ingest(pooled, state[:, 0])
             new_surf = torch.where((counts > 0)[:, None], updated_surf, state[:, 0])
             state = torch.cat([new_surf[:, None, :], state[:, 1:]], dim=1)
+
+            # Inject boundary layer influence across lower tropospheric levels (1000 - 850 hPa)
+            bl_inject = self.surface_to_column(pooled)[:, None, :] * self.bl_decay[None, :, None]
+            state = state + torch.where((counts > 0)[:, None, None], bl_inject, torch.zeros_like(state))
 
         # 2. Ingest aerological sounding observations (if provided)
         if profile_anomalies is not None and profile_mask is not None:
@@ -170,10 +203,23 @@ class UnifiedObservationModel(nn.Module):
         # 3. Dynamic evolution over lead times
         surface_preds = []
         profile_preds = []
-        for _ in LEAD_HOURS:
-            vertical_mean = state.mean(1, keepdim=True).expand_as(state)
-            forcing = self.dynamic(torch.cat([state, self.graph.neighbours(state), vertical_mean], dim=-1))
-            state = self.transition(forcing.reshape(-1, d), state.reshape(-1, d)).reshape(n, levels, d)
+        for lead in LEAD_HOURS:
+            # 1D Vertical stratification along 37 levels
+            vert_forcing = self.vertical_coupling(state.permute(0, 2, 1)).permute(0, 2, 1)
+
+            # Solar diurnal cycle
+            target_hour = (issue_hour + lead) % 24
+            hour_rad = 2.0 * np.pi * target_hour / 24.0
+            solar_feats = state.new_tensor([np.sin(hour_rad), np.cos(hour_rad)])
+            solar_forcing = self.solar_encoder(solar_feats)[None, None, :].expand(n, levels, d)
+
+            # Horizontal neighbours from spherical graph
+            horiz_neighbours = self.graph.neighbours(state)
+
+            # Joint forcing and Pre-LN residual transition
+            forcing = self.dynamic(torch.cat([state, horiz_neighbours, vert_forcing, solar_forcing], dim=-1))
+            delta = self.transition(forcing.reshape(-1, d), state.reshape(-1, d)).reshape(n, levels, d)
+            state = self.layer_norm(state + delta)
 
             # Surface prediction at station locations
             station_context = torch.cat(
