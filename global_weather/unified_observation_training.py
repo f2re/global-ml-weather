@@ -39,6 +39,7 @@ DEFAULT_CONFIG = {
     'min_lr': 1e-6,
     'scheduler': 'cosine',
     'weight_decay': 0.01,
+    'dropout': 0.0,
     'gradient_clip': 1.0,
     'surface_weight': 0.5,
     'profile_weight': 0.5,
@@ -166,6 +167,7 @@ def train(
             profile_scales=profile_scales,
             hidden=cfg['hidden'],
             climatology_grid_mean=scaled_clim_mean,
+            dropout=cfg.get('dropout', 0.0),
         ).to(device)
 
         optimizer = torch.optim.AdamW(

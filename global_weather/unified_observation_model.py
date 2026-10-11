@@ -41,6 +41,7 @@ class UnifiedObservationModel(nn.Module):
         profile_scales: Tensor | np.ndarray,
         hidden: int = 64,
         climatology_grid_mean: np.ndarray | None = None,
+        dropout: float = 0.0,
     ):
         super().__init__()
         if hidden < 16:
@@ -48,6 +49,7 @@ class UnifiedObservationModel(nn.Module):
 
         self.grid = grid
         self.hidden = hidden
+        self.dropout = dropout
         self.n_cells = grid.xyz.shape[0]
         self.n_levels = len(PRESSURE_HPA)
 
@@ -85,6 +87,7 @@ class UnifiedObservationModel(nn.Module):
         self.surface_encoder = nn.Sequential(
             nn.Linear(12, hidden),
             nn.GELU(),
+            nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
             nn.Linear(hidden, hidden),
         )
         self.surface_ingest = nn.GRUCell(hidden, hidden)
@@ -93,6 +96,7 @@ class UnifiedObservationModel(nn.Module):
         self.profile_encoder = nn.Sequential(
             nn.Linear(10, hidden),
             nn.GELU(),
+            nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
             nn.Linear(hidden, hidden),
         )
         self.profile_ingest = nn.GRUCell(hidden, hidden)
@@ -101,6 +105,7 @@ class UnifiedObservationModel(nn.Module):
         self.dynamic = nn.Sequential(
             nn.Linear(3 * hidden, hidden),
             nn.GELU(),
+            nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
             nn.Linear(hidden, hidden),
         )
         self.transition = nn.GRUCell(hidden, hidden)
@@ -110,12 +115,14 @@ class UnifiedObservationModel(nn.Module):
         self.surface_head = nn.Sequential(
             nn.Linear(2 * hidden + 3, hidden),
             nn.GELU(),
+            nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
             nn.Linear(hidden, 6),
         )
         # Profile head maps cell state directly to 5 profile anomalies across 37 levels
         self.profile_head = nn.Sequential(
             nn.Linear(hidden, hidden),
             nn.GELU(),
+            nn.Dropout(dropout) if dropout > 0 else nn.Identity(),
             nn.Linear(hidden, 5),
         )
 
