@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import random
+import shutil
 import sys
 import time
 
@@ -287,6 +288,8 @@ def train(
             save(temp_dir / 'metrics.json', metrics)
             sync_directory(temp_dir)
             final_dir = output / f'epoch-{epoch:04d}'
+            if final_dir.exists():
+                shutil.rmtree(final_dir)
             temp_dir.rename(final_dir)
             sync_directory(output)
 
