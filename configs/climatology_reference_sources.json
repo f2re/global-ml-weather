@@ -1,0 +1,33 @@
+{
+  "schema": "climatology-reference-sources-1",
+  "policy": "docs/decisions/0015-unified-observations-and-official-climatology.md",
+  "description": "Fixed 30-year multi-decadal monthly NetCDF long-term means from NOAA PSL used as official reference climatology.",
+  "periods": [
+    {
+      "provider": "NOAA_20CRv2",
+      "period": "1981-2010",
+      "levels": 24,
+      "pressure_range_hpa": [1000, 10],
+      "grid_resolution_deg": 2.0,
+      "base_url": "https://psl.noaa.gov/thredds/fileServer/Projects/20thC_ReanV2/Derived/Monthlies/pressure/",
+      "files": [
+        {"name": "air.mon.1981-2010.ltm.nc", "variable": "air", "units": "K", "sha256": "f59d4a891db802b2966883b49433e7b393e2bbe660f8628496ca3d8a263ae36e"},
+        {"name": "hgt.mon.1981-2010.ltm.nc", "variable": "hgt", "units": "m", "sha256": "051bab4156451dcb..."},
+        {"name": "uwnd.mon.1981-2010.ltm.nc", "variable": "uwnd", "units": "m/s", "sha256": "629485fc755ff29c..."},
+        {"name": "vwnd.mon.1981-2010.ltm.nc", "variable": "vwnd", "units": "m/s", "sha256": "6080003646a908d4..."},
+        {"name": "shum.mon.1981-2010.ltm.nc", "variable": "shum", "units": "kg/kg", "sha256": "ce1b64807bb2d599..."}
+      ]
+    },
+    {
+      "provider": "NOAA_NCEP1",
+      "period": "1991-2020",
+      "levels": 17,
+      "pressure_range_hpa": [1000, 10],
+      "grid_resolution_deg": 2.5,
+      "base_url": "https://psl.noaa.gov/thredds/fileServer/Datasets/ncep.reanalysis/Monthlies/pressure/",
+      "manifest_ref": "docs/reports/r8/climatology-manifest.json",
+      "prepared_artifact": "outputs/climatology/seasonal-climatology.npz"
+    }
+  ],
+  "synoptic_scale_policy": "Station and profile departures are scaled by synoptic variability (GraphCast/train-measured standard deviation), keeping interannual standard deviation as an independent diagnostic."
+}

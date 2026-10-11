@@ -1,0 +1,20 @@
+{
+  "schema": "unified-observation-training-config-1",
+  "policy": "docs/decisions/0015-unified-observations-and-official-climatology.md",
+  "mesh_level": 1,
+  "hidden": 64,
+  "epochs": 50,
+  "patience": 8,
+  "threads": 8,
+  "seed": 42,
+  "learning_rate": 0.0005,
+  "weight_decay": 0.01,
+  "gradient_clip": 1.0,
+  "surface_weight": 0.5,
+  "profile_weight": 0.5,
+  "max_train_samples": 192,
+  "max_val_samples": 48,
+  "climatology_schema": "ncep1-seasonal-context-1",
+  "climatology_period": "1991-2020",
+  "prediction_target": "joint surface and vertical profile anomaly departure from official 30-year climatology"
+}

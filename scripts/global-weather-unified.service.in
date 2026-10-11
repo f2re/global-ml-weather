@@ -1,0 +1,23 @@
+[Unit]
+Description=Autonomous unified surface and aerological observation training with official NetCDF climatology
+StartLimitIntervalSec=1209600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=/home/user/global-ml-weather
+ExecStart=/home/user/global-ml-weather/.venv/bin/python /home/user/global-ml-weather/scripts/remote-unified-runner.py --expected-sha @SHA@
+Environment=OMP_NUM_THREADS=8
+Environment=CUDA_VISIBLE_DEVICES=0
+KillMode=control-group
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=60
+RuntimeMaxSec=1209600
+TasksMax=512
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
