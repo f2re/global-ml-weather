@@ -1,0 +1,15 @@
+{
+  "schema": "station-anomaly-training-config-1",
+  "mesh_level": 1,
+  "hidden": 32,
+  "epochs": 20,
+  "patience": 5,
+  "threads": 8,
+  "seed": 42,
+  "learning_rate": 0.001,
+  "weight_decay": 0.01,
+  "gradient_clip": 1.0,
+  "max_train_samples": 192,
+  "max_val_samples": 48,
+  "prediction_target": "dimensionless anomaly departure from climatology"
+}
