@@ -25,9 +25,12 @@ def fixture(tmp_path, monkeypatch):
     inventory = tmp_path/'daily.jsonl'
     rows = list(inventory_rows(profile)) + list(inventory_rows(native, profile=False))
     inventory.write_text(''.join(json.dumps(item)+'\n' for item in rows))
+    aggregate = tmp_path/'aggregate.jsonl'
+    aggregate.write_bytes(inventory.read_bytes())
     np.savez_compressed(tmp_path/'accumulators.npz', profile=profile, native=native)
     report = {'schema': module.SCHEMA, 'stage': 'verify', 'status': 'complete', 'month': '2022-09',
               'accumulators_sha256': sha256(tmp_path/'accumulators.npz'),
+              'aggregate_sha256': sha256(aggregate),
               'days': [{'issue_time': issue.isoformat(), 'pairs': pairs.name,
                         'pairs_sha256': sha256(pairs), 'inventory': inventory.name,
                         'inventory_sha256': sha256(inventory)}]}
@@ -49,4 +52,17 @@ def test_changed_metrics_fail_even_with_recomputed_file_hash(tmp_path, monkeypat
     report['days'][0]['inventory_sha256'] = sha256(inventory)
     (tmp_path/'verification.json').write_text(json.dumps(report))
     with pytest.raises(ValueError, match='reproduced'):
+        module.recount(tmp_path)
+
+
+def test_changed_aggregate_skill_fails_even_with_updated_hash(tmp_path, monkeypatch):
+    _, rows, report = fixture(tmp_path, monkeypatch)
+    target = next(row for row in rows if row['kind'] == 'station_native'
+                  and row['variable'] == 'station_temperature' and row['lead_bin_upper_hours'] == 3)
+    target['skill_rmse']['persistence'] = .99
+    aggregate = tmp_path/'aggregate.jsonl'
+    aggregate.write_text(''.join(json.dumps(item)+'\n' for item in rows))
+    report['aggregate_sha256'] = sha256(aggregate)
+    (tmp_path/'verification.json').write_text(json.dumps(report))
+    with pytest.raises(ValueError, match='skill_rmse'):
         module.recount(tmp_path)

@@ -17,6 +17,20 @@ from .observations import utc
 from .vertical import PROFILE_VARIABLES
 
 
+def _compare_inventory(path, expected_sha256, profiles, native):
+    if path.is_symlink() or sha256(path) != expected_sha256:
+        raise ValueError('Metric inventory hash differs.')
+    expected = list(inventory_rows(profiles)) + list(inventory_rows(native, profile=False))
+    actual = [json.loads(line) for line in path.read_text().splitlines()]
+    if len(actual) != len(expected):
+        raise ValueError('Metric inventory is incomplete.')
+    for observed, calculated in zip(actual, expected):
+        for key in ('kind', 'variable', 'units', 'lead_bin_upper_hours',
+                    'pressure_reporting_bin_hpa', 'metrics', 'skill_rmse', 'status'):
+            if observed.get(key) != calculated.get(key):
+                raise ValueError('Metrics cannot be reproduced from persisted pairs: '+key)
+
+
 def recount(verification):
     root = Path(verification)
     manifest = root / 'verification.json'
@@ -54,19 +68,7 @@ def recount(verification):
                 accumulate(cell, row['predicted'], row['observed'],
                            persistence=row['persistence'], climatology=row['climatology'])
                 total += 1
-        inventory = root / day['inventory']
-        if inventory.is_symlink() or sha256(inventory) != day['inventory_sha256']:
-            raise ValueError('Daily metric inventory hash differs.')
-        expected = list(inventory_rows(pday)) + list(inventory_rows(nday, profile=False))
-        actual = [json.loads(line) for line in inventory.read_text().splitlines()]
-        if len(actual) != len(expected):
-            raise ValueError('Daily metric inventory is incomplete.')
-        for observed, calculated in zip(actual, expected):
-            for key in ('kind', 'variable', 'lead_bin_upper_hours', 'pressure_reporting_bin_hpa'):
-                if observed.get(key) != calculated.get(key):
-                    raise ValueError('Daily metric grouping differs.')
-            if observed['metrics'] != calculated['metrics']:
-                raise ValueError('Daily metrics cannot be reproduced from persisted pairs.')
+        _compare_inventory(root / day['inventory'], day['inventory_sha256'], pday, nday)
         profiles += pday
         native += nday
     artifact = root / 'accumulators.npz'
@@ -76,6 +78,7 @@ def recount(verification):
         for name, calculated in (('profile', profiles), ('native', native)):
             if not np.array_equal(arrays[name], calculated):
                 raise ValueError('Monthly accumulators cannot be reproduced from persisted pairs.')
+    _compare_inventory(root / 'aggregate.jsonl', report['aggregate_sha256'], profiles, native)
     return {'schema': 'joint-verification-recount-1', 'status': 'passed',
             'verification_manifest_sha256': sha256(manifest), 'verified_issues': len(days),
             'recounted_scalar_pairs': total, 'scientific_acceptance': False}
