@@ -113,6 +113,12 @@ def validate_forecast(arrays, metadata):
 
 def canonical_profiles(data, metadata):
     """Adapt explicitly named physical forecasts; diagnostics remain masked."""
+    if metadata.get('schema') == 'joint-observation-research-forecast-1':
+        canonical = {**metadata, 'schema': 'measured-profile-frozen-forecast-1',
+                     'source_forecast_schema': metadata['schema']}
+        if not np.array_equal(data['lead_hours'], np.asarray(metadata['lead_hours'])):
+            raise ValueError('Joint archive leads differ from metadata.')
+        return {name: data[name] for name in ('profiles', 'profile_variable_mask', 'pressure_pa', 'xyz')}, canonical
     if metadata.get('schema') == 'measured-profile-frozen-forecast-1':
         return {name: data[name] for name in ('profiles', 'profile_variable_mask', 'pressure_pa', 'xyz')}, metadata
     if metadata.get('schema') != 'unified-research-forecast-1':
@@ -166,7 +172,7 @@ def export_forecast(source: str | Path, output: str | Path, *, spacing: float = 
     with np.load(archive, allow_pickle=False) as data:
         arrays, canonical = canonical_profiles(data, metadata)
         station_arrays = None
-        if metadata.get('schema') == 'unified-research-forecast-1':
+        if metadata.get('schema') in ('unified-research-forecast-1', 'joint-observation-research-forecast-1'):
             from .observation_data import NATIVE_VARIABLES, UNITS
             if metadata.get('surface_variables') != list(NATIVE_VARIABLES) or metadata.get('surface_units') != list(UNITS):
                 raise ValueError('Native station variable order or units differ.')
@@ -241,6 +247,7 @@ def export_forecast(source: str | Path, output: str | Path, *, spacing: float = 
                                               'units': PROFILE_UNITS[variable], 'discipline': 0,
                                               'parameter_category': category, 'parameter_number': parameter,
                                               'pressure_pa': int(pressure), 'lead_hours': int(lead),
+                                              'field_origin': metadata.get('field_origins', {}).get(PROFILE_VARIABLES[variable], 'model_or_source'),
                                               'valid_time': (origin+timedelta(hours=int(lead))).isoformat(),
                                               'valid_points': int(masks[:, variable].sum())})
                         finally:
@@ -286,6 +293,13 @@ def export_forecast(source: str | Path, output: str | Path, *, spacing: float = 
                   'checkpoint_epoch': metadata.get('checkpoint_epoch'),
                   'station_climatology_sha256': metadata.get('station_climatology_sha256'),
                   'source_revision': metadata.get('source_revision'),
+                  'normalization_sha256': metadata.get('normalization_sha256'),
+                  'input_provenance': metadata.get('input_provenance'),
+                  'static_provenance': metadata.get('static_provenance'),
+                  'profile_training_support': metadata.get('profile_training_support'),
+                  'below_ground_mask_status': metadata.get('below_ground_mask_status'),
+                  'diagnostic_physics': metadata.get('diagnostic_physics'),
+                  'field_origins': metadata.get('field_origins'),
                   'source_schema': metadata['schema'], 'source_limitations': metadata.get('limitations', []),
                   'grid': {'template': 0, 'spacing_degrees': spacing, 'Ni': len(lon), 'Nj': len(lat),
                            'sampling': 'nearest spherical cell; scalar point samples; short-arc parallel transport of ENU wind',

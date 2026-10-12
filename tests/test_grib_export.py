@@ -152,3 +152,33 @@ def test_unified_sparse_pressure_export(tmp_path):
             finally:
                 ec.codes_release(message)
     assert decoded == [(1, 101325, 7), (1, 101325, 7)]
+
+
+def test_joint_dense_levels_inventory_and_wmo_fields(tmp_path):
+    ec = pytest.importorskip('eccodes', reason='Required in GRIB acceptance environment')
+    from global_weather.observation_data import NATIVE_VARIABLES, UNITS
+    source, arrays, metadata = forecast_fixture(tmp_path)
+    arrays.update(lead_hours=np.asarray([0, 72]),
+                  surface=np.broadcast_to([280, 275, 2, 3, 95000, 101325], (2, 1, 6)),
+                  surface_issue_mask=np.ones((2, 1, 6), dtype=bool),
+                  station_latlon=np.array([[45., 0.]]))
+    np.savez_compressed(source / 'forecast.npz', **arrays)
+    metadata.update(schema='joint-observation-research-forecast-1',
+                    surface_variables=list(NATIVE_VARIABLES), surface_units=list(UNITS),
+                    input_provenance={'profile_scalar_count': 17},
+                    below_ground_mask_status='research_limitation',
+                    field_origins={'omega': 'diagnostic_pressure_continuity'},
+                    artifact_sha256=hashlib.sha256((source / 'forecast.npz').read_bytes()).hexdigest())
+    (source / 'forecast.json').write_text(json.dumps(metadata))
+    report = export_forecast(source, tmp_path / 'joint.grib2', spacing=90)
+    assert len(report['messages']) == 2*37*6+2
+    assert report['source_schema'] == 'joint-observation-research-forecast-1'
+    assert report['input_provenance']['profile_scalar_count'] == 17
+    assert {item['pressure_pa'] for item in report['messages'][:-2]} == set(np.array(PRESSURE_HPA)*100)
+    assert report['messages'][5]['field_origin'] == 'diagnostic_pressure_continuity'
+    assert all(item['valid_points'] == 8 for item in report['messages'][6:12] if item['variable'] != 'omega')
+    assert report['messages'][5]['valid_points'] == 0
+    metadata['lead_hours'] = [0, 48]
+    (source / 'forecast.json').write_text(json.dumps(metadata))
+    with pytest.raises(ValueError, match='archive leads'):
+        export_forecast(source, tmp_path / 'mismatched.grib2', spacing=90)
