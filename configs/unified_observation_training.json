@@ -1,6 +1,6 @@
 {
   "schema": "unified-observation-training-config-1",
-  "policy": "docs/decisions/0015-unified-observations-and-official-climatology.md",
+  "policy": "docs/decisions/0016-high-res-terrain-satellite-10day.md",
   "mesh_level": 2,
   "hidden": 128,
   "batch_size": 4,
@@ -18,7 +18,11 @@
   "profile_weight": 0.5,
   "max_train_samples": null,
   "max_val_samples": null,
+  "horizon_hours": 240,
+  "lead_step_hours": 3,
+  "dem_path": "data/dem/earth_relief_30s_p.nc",
+  "dem_manifest": "assets/dem/earth_relief_30s_p.json",
   "climatology_schema": "ncep1-seasonal-context-1",
   "climatology_period": "1991-2020",
-  "prediction_target": "joint surface and vertical profile anomaly departure from official 30-year climatology"
+  "prediction_target": "joint surface, terrain DEM, and vertical profile anomaly departure from official 30-year climatology"
 }
