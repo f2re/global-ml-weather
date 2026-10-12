@@ -192,9 +192,9 @@ class UnifiedObservationModel(nn.Module):
         horiz_neighbours = self.graph.neighbours(state)
 
         # Joint forcing and Pre-LN residual transition
-        forcing = self.dynamic(torch.cat([state, horiz_neighbours, vert_forcing, solar_forcing], dim=-1))
+        forcing = self.dynamic(torch.cat([state, horiz_neighbours.to(state.dtype), vert_forcing.to(state.dtype), solar_forcing.to(state.dtype)], dim=-1))
         delta = self.transition(forcing.reshape(B * n * levels, d), state.reshape(B * n * levels, d)).reshape(B, n, levels, d)
-        return self.layer_norm(state + delta)
+        return self.layer_norm(state + delta.to(state.dtype))
 
     def forward(
         self,
@@ -263,8 +263,8 @@ class UnifiedObservationModel(nn.Module):
             pooled_list = []
             counts_list = []
             for b in range(B):
-                p = vals.new_zeros(n, d).index_add(0, self.station_operator.cells, tokens[b] * valid[b, :, None])
-                c = vals.new_zeros(n).index_add(0, self.station_operator.cells, valid[b].to(vals.dtype))
+                p = tokens.new_zeros(n, d).index_add(0, self.station_operator.cells, tokens[b] * valid[b, :, None])
+                c = tokens.new_zeros(n).index_add(0, self.station_operator.cells, valid[b].to(tokens.dtype))
                 pooled_list.append(p / c.clamp_min(1)[:, None])
                 counts_list.append(c)
             pooled = torch.stack(pooled_list) # [B, n, d]
@@ -272,12 +272,12 @@ class UnifiedObservationModel(nn.Module):
 
             # Ingest onto surface level (index 0)
             updated_surf = self.surface_ingest(pooled.reshape(B * n, d), state[:, :, 0].reshape(B * n, d)).reshape(B, n, d)
-            new_surf = torch.where((counts > 0)[..., None], updated_surf, state[:, :, 0])
-            state = torch.cat([new_surf[:, :, None, :], state[:, :, 1:]], dim=2)
+            new_surf = torch.where((counts > 0)[..., None], updated_surf, state[:, :, 0].to(updated_surf.dtype))
+            state = torch.cat([new_surf[:, :, None, :], state[:, :, 1:].to(new_surf.dtype)], dim=2)
 
             # Inject boundary layer influence across lower tropospheric levels (1000 - 850 hPa)
             bl_inject = self.surface_to_column(pooled)[:, :, None, :] * self.bl_decay[None, None, :, None]
-            state = state + torch.where((counts > 0)[..., None, None], bl_inject, torch.zeros_like(state))
+            state = state + torch.where((counts > 0)[..., None, None], bl_inject.to(state.dtype), torch.zeros_like(state))
 
         # 2. Ingest aerological sounding observations (if provided)
         if profile_anomalies is not None and profile_mask is not None:
@@ -291,7 +291,7 @@ class UnifiedObservationModel(nn.Module):
                     p_tokens.reshape(B * n * levels, d),
                     state.reshape(B * n * levels, d),
                 ).reshape(B, n, levels, d)
-                state = torch.where(p_valid[..., None], updated_prof, state)
+                state = torch.where(p_valid[..., None], updated_prof.to(state.dtype), state)
 
         # 3. Ingest real satellite radiances by sensor visibility mask (e.g. Arktika-M high-elliptic disc)
         if satellite_anomalies is not None and satellite_mask is not None:
@@ -302,7 +302,7 @@ class UnifiedObservationModel(nn.Module):
                 sat_tok = self.satellite_encoder(torch.cat([sat_vals, sat_m.to(sat_vals.dtype)], dim=-1))
                 sat_valid = sat_m.any(-1)
                 sat_inject = sat_tok[:, :, None, :] * self.sat_decay[None, None, :, None]
-                state = state + torch.where(sat_valid[..., None, None], sat_inject, torch.zeros_like(state))
+                state = state + torch.where(sat_valid[..., None, None], sat_inject.to(state.dtype), torch.zeros_like(state))
 
         # 4. Dynamic evolution over lead times (up to 10 days / 240 hours) with activation checkpointing
         surface_preds = []
@@ -321,8 +321,8 @@ class UnifiedObservationModel(nn.Module):
             # Surface prediction at station locations conditioned on station elevation
             st_mean = state.mean(2)[:, self.station_operator.cells]
             st_surf = state[:, :, 0][:, self.station_operator.cells]
-            st_xyz = self.station_operator.station_xyz[None, ...].expand(B, -1, -1)
-            st_elev = (self.station_elevation[None, :, None] / H_SCALE).expand(B, -1, -1)
+            st_xyz = self.station_operator.station_xyz[None, ...].expand(B, -1, -1).to(state.dtype)
+            st_elev = (self.station_elevation[None, :, None] / H_SCALE).expand(B, -1, -1).to(state.dtype)
             station_context = torch.cat([st_mean, st_surf, st_xyz, st_elev], dim=-1)
             surface_preds.append(self.surface_head(station_context))
 
