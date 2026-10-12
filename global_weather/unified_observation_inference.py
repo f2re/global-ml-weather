@@ -91,8 +91,14 @@ def load_model(checkpoint: Path, expected_sha256: str, station_latlon: np.ndarra
     for key in ('surface_scales', 'profile_scales'):
         if not torch.isfinite(weights[key]).all() or bool((weights[key] <= 0).any()):
             raise ValueError('Invalid checkpoint scales.')
-    if any(value.is_floating_point() and not torch.isfinite(value).all() for value in weights.values()):
-        raise ValueError('Nonfinite checkpoint weights or buffers.')
+    for value in weights.values():
+        if not value.is_floating_point():
+            continue
+        # Graph adjacency is sparse COO. Validate stored entries without densifying
+        # a global adjacency matrix or dispatching unsupported sparse reductions.
+        entries = value.coalesce().values() if value.is_sparse else value
+        if not torch.isfinite(entries).all():
+            raise ValueError('Nonfinite checkpoint weights or buffers.')
     model.load_state_dict(weights, strict=True)
     return model.to(device).eval(), state
 

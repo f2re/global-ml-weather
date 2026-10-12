@@ -86,17 +86,17 @@ def test_grib2_roundtrip_and_no_overwrite(tmp_path):
         while (message := ec.codes_grib_new_from_file(stream)) is not None:
             try:
                 expected = report['messages'][count]
-                assert ec.codes_get(message, 'edition') == 2
-                assert ec.codes_get(message, 'centre') == MISSING_CENTRE
-                assert ec.codes_get(message, 'productionStatusOfProcessedData') == 2
-                assert ec.codes_get(message, 'scaledValueOfFirstFixedSurface') == expected['pressure_pa']
-                assert ec.codes_get(message, 'parameterCategory') == expected['parameter_category']
-                assert ec.codes_get(message, 'parameterNumber') == expected['parameter_number']
-                assert ec.codes_get(message, 'forecastTime') == expected['lead_hours']
-                assert ec.codes_get(message, 'second') == 30
-                assert ec.codes_get(message, 'numberOfMissing') == 8 - expected['valid_points']
+                assert ec.codes_get_long(message, 'edition') == 2
+                assert ec.codes_get_long(message, 'centre') == MISSING_CENTRE
+                assert ec.codes_get_long(message, 'productionStatusOfProcessedData') == 2
+                assert ec.codes_get_long(message, 'scaledValueOfFirstFixedSurface') == expected['pressure_pa']
+                assert ec.codes_get_long(message, 'parameterCategory') == expected['parameter_category']
+                assert ec.codes_get_long(message, 'parameterNumber') == expected['parameter_number']
+                assert ec.codes_get_long(message, 'forecastTime') == expected['lead_hours']
+                assert ec.codes_get_long(message, 'second') == 30
+                assert ec.codes_get_long(message, 'numberOfMissing') == 8 - expected['valid_points']
                 assert ec.codes_get(message, 'gridType') == 'regular_ll'
-                assert ec.codes_get(message, 'uvRelativeToGrid') == 0
+                assert ec.codes_get_long(message, 'uvRelativeToGrid') == 0
                 if count == 0:
                     values = ec.codes_get_values(message)
                     np.testing.assert_allclose(values[1:], 280)
@@ -146,9 +146,9 @@ def test_unified_sparse_pressure_export(tmp_path):
     with (tmp_path/'unified.grib2').open('rb') as stream:
         while (message := ec.codes_grib_new_from_file(stream)) is not None:
             try:
-                if ec.codes_get(message, 'typeOfFirstFixedSurface') in (1, 101):
-                    decoded.append((ec.codes_get(message, 'parameterNumber'), ec.codes_get_values(message)[0],
-                                    ec.codes_get(message, 'numberOfMissing')))
+                if ec.codes_get_long(message, 'typeOfFirstFixedSurface') in (1, 101):
+                    decoded.append((ec.codes_get_long(message, 'parameterNumber'), ec.codes_get_values(message)[0],
+                                    ec.codes_get_long(message, 'numberOfMissing')))
             finally:
                 ec.codes_release(message)
     assert decoded == [(1, 101325, 7), (1, 101325, 7)]

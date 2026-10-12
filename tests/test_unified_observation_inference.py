@@ -78,3 +78,17 @@ def test_checkpoint_prefix_rollout_and_benchmark_are_finite(tmp_path):
     assert measured['parameters_total'] == sum(p.numel() for p in model.parameters())
     assert measured['cuda_peak_allocated_bytes'] is None
     assert state['epoch'] == 1
+
+
+def test_checkpoint_rejects_nonfinite_sparse_graph_without_densifying(tmp_path):
+    path, coords = checkpoint_fixture(tmp_path)
+    state = torch.load(path, weights_only=True)
+    adjacency = state['model']['graph.adjacency'].coalesce()
+    values = adjacency.values().clone()
+    values[0] = float('nan')
+    state['model']['graph.adjacency'] = torch.sparse_coo_tensor(
+        adjacency.indices(), values, adjacency.shape,
+    )
+    torch.save(state, path)
+    with pytest.raises(ValueError, match='Nonfinite checkpoint'):
+        load_model(path, sha256(path), coords, np.ones(6), 3, torch.device('cpu'))
