@@ -38,14 +38,17 @@ class GraphOps(nn.Module):
 
     def neighbours(self, x):
         orig_dtype = x.dtype
-        adj_dtype = self.adjacency.dtype
-        if x.dim() >= 3 and x.shape[1] == self.adjacency.shape[0]:
-            b, n = x.shape[0], x.shape[1]
-            rest = x.shape[2:]
-            x_flat = x.permute(1, 0, *range(2, x.dim())).reshape(n, -1).to(adj_dtype)
-            out = torch.sparse.mm(self.adjacency, x_flat).to(orig_dtype)
-            return out.reshape(n, b, *rest).permute(1, 0, *range(2, x.dim()))
-        return torch.sparse.mm(self.adjacency, x.flatten(1).to(adj_dtype)).to(orig_dtype).reshape_as(x)
+        device_type = x.device.type
+        with torch.autocast(device_type=device_type, enabled=False):
+            adj = self.adjacency.float()
+            if x.dim() >= 3 and x.shape[1] == adj.shape[0]:
+                b, n = x.shape[0], x.shape[1]
+                rest = x.shape[2:]
+                x_flat = x.permute(1, 0, *range(2, x.dim())).reshape(n, -1).float()
+                out = torch.sparse.mm(adj, x_flat).to(orig_dtype)
+                return out.reshape(n, b, *rest).permute(1, 0, *range(2, x.dim()))
+            out = torch.sparse.mm(adj, x.flatten(1).float()).to(orig_dtype)
+            return out.reshape_as(x)
 
 
 class GraphBlock(nn.Module):
