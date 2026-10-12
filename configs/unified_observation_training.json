@@ -1,7 +1,12 @@
 {
   "schema": "unified-observation-training-config-1",
   "policy": "docs/decisions/0016-high-res-terrain-satellite-10day.md",
+  "experiment_role": "legacy_surface_control",
+  "scientific_acceptance": false,
   "mesh_level": 2,
+  "mesh_cells": 162,
+  "nominal_area_scale_km": 1774.4167551114356,
+  "claimed_resolution_km": null,
   "hidden": 128,
   "batch_size": 4,
   "dropout": 0.05,
@@ -14,15 +19,25 @@
   "scheduler": "cosine",
   "weight_decay": 0.01,
   "gradient_clip": 1.0,
-  "surface_weight": 0.5,
-  "profile_weight": 0.5,
+  "surface_weight": 1.0,
+  "profile_weight": 0.0,
+  "supervised_branches": [
+    "surface"
+  ],
+  "unsupervised_branches": [
+    "profile",
+    "satellite"
+  ],
   "max_train_samples": null,
   "max_val_samples": null,
-  "horizon_hours": 240,
+  "horizon_hours": 72,
   "lead_step_hours": 3,
   "dem_path": "data/dem/earth_relief_30s_p.nc",
   "dem_manifest": "assets/dem/earth_relief_30s_p.json",
   "climatology_schema": "ncep1-seasonal-context-1",
   "climatology_period": "1991-2020",
-  "prediction_target": "joint surface, terrain DEM, and vertical profile anomaly departure from official 30-year climatology"
+  "prediction_target": "surface-station dimensionless anomalies relative to train-only station climatology; NCEP1 1991-2020 monthly fields are external context only",
+  "canonical_joint_training": "global_weather.joint_observation_training",
+  "canonical_joint_config": "configs/joint_observation_training.json",
+  "notes": "Legacy Unified training does not supervise upper-air or satellite branches. A 240-hour run requires a newly prepared horizon-compatible dataset and a separate scientific decision."
 }
