@@ -24,7 +24,7 @@ os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
 import torch
 
 from .grid import build_grid
-from .observation_data import ObservationDataset, START
+from .observation_data import ObservationDataset, START, TRAIN_END, VAL_END, END
 from .observations import utc
 from .observation_training import checkpoint_path, digest, save, sync_directory
 from .station_climatology import StationClimatology
@@ -66,6 +66,24 @@ def load_climatology_array(climatology_path: Path) -> tuple[np.ndarray, np.ndarr
         support = data['support']
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {'period': '1991-2020'}
     return mean_3d, support, manifest
+
+
+def validate_forecast_windows(samples: list[dict], lead_hours: list[int]) -> None:
+    """Reject targets crossing frozen splits before fitting any statistics."""
+    if not lead_hours or any(type(h) is not int or h <= 0 for h in lead_hours):
+        raise ValueError('Forecast leads must be positive integer hours.')
+    boundaries = {'train': (START, TRAIN_END), 'validation': (TRAIN_END, VAL_END),
+                  'test': (VAL_END, END)}
+    for row in samples:
+        if row['split'] not in boundaries:
+            raise ValueError('Unknown chronological split.')
+        begin, end = boundaries[row['split']]
+        issue = utc(row['issue'])
+        if issue - timedelta(hours=12) < begin or issue + timedelta(hours=max(lead_hours)) >= end:
+            raise ValueError(
+                f"Forecast window crosses {row['split']} split at {row['issue']}; "
+                'prepare a new horizon-compatible dataset, do not reuse contaminated statistics.'
+            )
 
 
 def evaluate(
@@ -180,6 +198,13 @@ def train(
     output.mkdir(parents=True, exist_ok=True)
     dataset = ObservationDataset(dataset_path)
 
+    horizon_hours = int(cfg.get('horizon_hours', 240))
+    lead_step = int(cfg.get('lead_step_hours', 3))
+    if horizon_hours <= 0 or lead_step <= 0 or horizon_hours % lead_step:
+        raise ValueError('Horizon must be positive and divisible by the lead step.')
+    lead_hours = list(range(lead_step, horizon_hours + 1, lead_step))
+    validate_forecast_windows(dataset.samples, lead_hours)
+
     # 1. Load 30-year official climatology array and normalize to standard features
     clim_mean, clim_support, clim_meta = load_climatology_array(Path(climatology_dir))
     grid = build_grid(cfg['mesh_level'])
@@ -201,9 +226,6 @@ def train(
     )
 
     # Forecast horizon & lead hours (up to 10 days / 240 hours)
-    horizon_hours = int(cfg.get('horizon_hours', 240))
-    lead_step = int(cfg.get('lead_step_hours', 3))
-    lead_hours = list(range(lead_step, horizon_hours + lead_step, lead_step))
 
     # Scales
     surface_scales = dataset.std
@@ -321,8 +343,11 @@ def train(
                 loss.backward()
 
                 for name, param in model.named_parameters():
-                    if param.grad is not None:
-                        gradients[name] = bool((param.grad.abs().sum() > 0).item())
+                    gradients[name] = bool(
+                        param.grad is not None
+                        and torch.isfinite(param.grad).all().item()
+                        and (param.grad.abs().sum() > 0).item()
+                    )
 
                 torch.nn.utils.clip_grad_norm_(model.parameters(), cfg['gradient_clip'])
                 optimizer.step()
@@ -413,7 +438,9 @@ def train(
                 'learning_rate': current_lr,
                 'nonzero_gradients': gradients,
                 'prediction_target': cfg['prediction_target'],
-                'climatology_source': 'official-30year-netcdf-ltm',
+                'climatology_source': 'official-30year-netcdf-ltm-context; train-station-target-baseline',
+                'supervised_branches': ['surface'],
+                'unsupervised_branches': ['profile', 'satellite'],
                 'dem_source': 'GMT Earth Relief 30s NetCDF (896 MB)',
                 'horizon_hours': horizon_hours,
                 'scientific_acceptance': False,
