@@ -13,6 +13,24 @@ from scipy.spatial import ConvexHull, SphericalVoronoi, cKDTree
 EARTH_RADIUS_M = 6_371_008.8
 
 
+def grid_cell_count(level: int) -> int:
+    """Return the exact number of cells in this icosahedral hierarchy."""
+    if not isinstance(level, int) or not 0 <= level <= 9:
+        raise ValueError('level must be an integer in [0,9].')
+    return 10 * 4**level + 2
+
+
+def nominal_area_scale_km(level: int) -> float:
+    """Return sqrt(global mean cell area) in km, not resolved wavelength.
+
+    This diagnostic exists to prevent a mesh level from being mislabeled as a
+    meteorological resolution. Actual resolvable scales are generally larger
+    and must be measured experimentally.
+    """
+    mean_area_m2 = 4 * np.pi * EARTH_RADIUS_M**2 / grid_cell_count(level)
+    return float(np.sqrt(mean_area_m2) / 1000.0)
+
+
 def unit_xyz(lat_deg, lon_deg):
     lat, lon = np.deg2rad(lat_deg), np.deg2rad(lon_deg)
     return np.stack((np.cos(lat)*np.cos(lon), np.cos(lat)*np.sin(lon), np.sin(lat)), axis=-1)
@@ -36,6 +54,11 @@ class SphereGrid:
     @property
     def n_cells(self):
         return len(self.xyz)
+
+    @property
+    def nominal_area_scale_km(self):
+        """sqrt(mean cell area) in km; a transparent geometry diagnostic only."""
+        return float(np.sqrt(np.mean(self.areas_m2)) / 1000.0)
 
     @cached_property
     def tree(self):
@@ -71,13 +94,12 @@ class SphereGrid:
                             edge_index=self.edges, area_m2=self.areas_m2,
                             polygon_vertices=self.vertices,
                             polygon_offsets=offsets, polygon_indices=np.concatenate(self.regions),
-                            fingerprint=self.fingerprint)
+                            fingerprint=self.fingerprint,
+                            nominal_area_scale_km=self.nominal_area_scale_km)
 
 
 def build_grid(level=1, *, max_cells=200_000):
-    if not isinstance(level, int) or not 0 <= level <= 9:
-        raise ValueError('level must be an integer in [0,9].')
-    n = 10 * 4**level + 2
+    n = grid_cell_count(level)
     if n > max_cells:
         raise ValueError(f'{n} cells exceeds explicit build limit {max_cells}.')
     phi = (1 + np.sqrt(5.)) / 2
