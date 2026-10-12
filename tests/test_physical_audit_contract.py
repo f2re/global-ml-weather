@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from global_weather.grid import grid_cell_count, nominal_area_scale_km
+from global_weather.unified_observation_training import DEFAULT_CONFIG
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,14 @@ def test_20_to_30km_requires_level8_scale_in_this_hierarchy():
     assert grid_cell_count(8) == 655_362
     assert nominal_area_scale_km(8) == pytest.approx(27.90, rel=1e-3)
     assert 20.0 < nominal_area_scale_km(8) < 30.0
+
+
+def test_legacy_unified_module_defaults_are_surface_only_72h():
+    assert DEFAULT_CONFIG['horizon_hours'] == 72
+    assert DEFAULT_CONFIG['lead_step_hours'] == 3
+    assert DEFAULT_CONFIG['surface_weight'] == 1.0
+    assert DEFAULT_CONFIG['profile_weight'] == 0.0
+    assert DEFAULT_CONFIG['allow_missing_dem'] is False
 
 
 def test_legacy_unified_config_is_surface_only_72h_control():
