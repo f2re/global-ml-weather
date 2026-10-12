@@ -37,13 +37,15 @@ class GraphOps(nn.Module):
         self.register_buffer('area',torch.tensor(grid.areas_m2/grid.areas_m2.mean(),dtype=torch.float32))
 
     def neighbours(self, x):
+        orig_dtype = x.dtype
+        adj_dtype = self.adjacency.dtype
         if x.dim() >= 3 and x.shape[1] == self.adjacency.shape[0]:
             b, n = x.shape[0], x.shape[1]
             rest = x.shape[2:]
-            x_flat = x.permute(1, 0, *range(2, x.dim())).reshape(n, -1)
-            out = torch.sparse.mm(self.adjacency, x_flat)
+            x_flat = x.permute(1, 0, *range(2, x.dim())).reshape(n, -1).to(adj_dtype)
+            out = torch.sparse.mm(self.adjacency, x_flat).to(orig_dtype)
             return out.reshape(n, b, *rest).permute(1, 0, *range(2, x.dim()))
-        return torch.sparse.mm(self.adjacency, x.flatten(1)).reshape_as(x)
+        return torch.sparse.mm(self.adjacency, x.flatten(1).to(adj_dtype)).to(orig_dtype).reshape_as(x)
 
 
 class GraphBlock(nn.Module):

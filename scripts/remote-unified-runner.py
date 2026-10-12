@@ -121,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
             CUDA_VISIBLE_DEVICES="0",
             CUBLAS_WORKSPACE_CONFIG=":4096:8",
             OMP_NUM_THREADS="8",
+            PYTHONUNBUFFERED="1",
         )
 
         cmd = [
