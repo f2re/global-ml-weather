@@ -1,7 +1,9 @@
-"""Unified training pipeline assimilating surface and upper-air observations.
+"""Unified training pipeline assimilating surface, upper-air, and satellite observations.
 
-Conditioned on official 30-year NOAA 1991-2020 NetCDF climatological normals.
-Learns global spherical atmospheric dynamics by supervising departures from climatology.
+Conditioned on official 30-year NOAA 1991-2020 NetCDF climatological normals and
+verified GMT Earth Relief 30s DEM (896 MB) topography.
+Learns global spherical atmospheric dynamics by supervising departures from climatology
+up to 10-day forecast horizons (240 h) with activation checkpointing and mixed precision.
 """
 from __future__ import annotations
 
@@ -26,7 +28,8 @@ from .observation_data import ObservationDataset, START
 from .observations import utc
 from .observation_training import checkpoint_path, digest, save, sync_directory
 from .station_climatology import StationClimatology
-from .unified_observation_model import UnifiedObservationModel, unified_loss
+from .terrain_features import extract_grid_terrain
+from .unified_observation_model import UnifiedObservationModel, unified_loss, LEAD_HOURS
 
 DEFAULT_CONFIG = {
     'mesh_level': 1,
@@ -46,7 +49,11 @@ DEFAULT_CONFIG = {
     'batch_size': 4,
     'max_train_samples': None,
     'max_val_samples': None,
-    'prediction_target': 'joint surface and vertical profile anomaly departure from official 30-year climatology',
+    'dem_path': 'data/dem/earth_relief_30s_p.nc',
+    'dem_manifest': 'assets/dem/earth_relief_30s_p.json',
+    'horizon_hours': 240,
+    'lead_step_hours': 3,
+    'prediction_target': 'joint surface, terrain DEM, and vertical profile anomaly departure from official 30-year climatology',
 }
 
 
@@ -68,6 +75,7 @@ def evaluate(
     split: str,
     max_samples: int | None,
     device: torch.device,
+    lead_hours: list[int],
     batch_size: int = 4,
 ) -> float:
     model.eval()
@@ -75,6 +83,9 @@ def evaluate(
     indices = dataset.subset(split)
     if max_samples is not None:
         indices = indices[:max_samples]
+
+    n_stations = len(dataset.latlon)
+    n_leads = len(lead_hours)
 
     batch_x_anom: list[np.ndarray] = []
     batch_x_mask: list[np.ndarray] = []
@@ -100,8 +111,10 @@ def evaluate(
         batch_months.clear()
         batch_hours.clear()
 
-        forecast = model(bx_anom, bx_mask, month_idx=b_months, issue_hour=b_hours)
-        l = unified_loss(forecast, by_anom, by_mask)
+        amp_dtype = torch.bfloat16 if (device.type == 'cuda' and torch.cuda.is_bf16_supported()) else torch.float16
+        with torch.cuda.amp.autocast(enabled=(device.type == 'cuda'), dtype=amp_dtype):
+            forecast = model(bx_anom, bx_mask, month_idx=b_months, issue_hour=b_hours)
+            l = unified_loss(forecast, by_anom, by_mask)
         losses.append(float(l.detach().cpu()))
 
     with torch.no_grad():
@@ -109,19 +122,30 @@ def evaluate(
             row = dataset.samples[idx]
             hour = row['hour']
             input_hours = np.arange(hour - 11, hour + 1)
-            target_hours = hour + np.arange(3, 73, 3)
+            target_hours = hour + np.array(lead_hours)
 
             x_raw = dataset.values[input_hours]
-            y_raw = dataset.values[target_hours]
             x_mask = dataset.mask[input_hours] & (dataset.available[input_hours] <= hour * 3600)
-            y_mask = dataset.mask[target_hours]
-            if not y_mask.any() or not x_mask.any():
+            if not x_mask.any():
+                continue
+
+            y_raw = np.zeros((n_leads, n_stations, 6), dtype=np.float32)
+            y_mask = np.zeros((n_leads, n_stations, 6), dtype=bool)
+            c_targets = np.zeros((n_leads, n_stations, 6), dtype=np.float32)
+
+            in_bounds = target_hours < len(dataset.values)
+            if in_bounds.any():
+                actual_hours = target_hours[in_bounds]
+                y_raw[in_bounds] = dataset.values[actual_hours]
+                y_mask[in_bounds] = dataset.mask[actual_hours]
+                t_targets = [START + timedelta(hours=int(h)) for h in actual_hours]
+                c_targets[in_bounds] = station_climatology.for_window(t_targets)
+
+            if not y_mask.any():
                 continue
 
             t_inputs = [START + timedelta(hours=int(h)) for h in input_hours]
-            t_targets = [START + timedelta(hours=int(h)) for h in target_hours]
             c_inputs = station_climatology.for_window(t_inputs)
-            c_targets = station_climatology.for_window(t_targets)
 
             x_anom = np.where(x_mask, (x_raw - c_inputs) / station_climatology.std, 0.0).astype(np.float32)
             y_anom = np.where(y_mask, (y_raw - c_targets) / station_climatology.std, 0.0).astype(np.float32)
@@ -156,29 +180,49 @@ def train(
     output.mkdir(parents=True, exist_ok=True)
     dataset = ObservationDataset(dataset_path)
 
-    # Load 30-year official climatology array and normalize to standard O(1) features
+    # 1. Load 30-year official climatology array and normalize to standard features
     clim_mean, clim_support, clim_meta = load_climatology_array(Path(climatology_dir))
     grid = build_grid(cfg['mesh_level'])
 
-    # Station scales from train dataset
+    # 2. Extract GMT Earth Relief 30s DEM (896 MB) topography
+    dem_p = Path(cfg.get('dem_path', 'data/dem/earth_relief_30s_p.nc'))
+    dem_m = Path(cfg.get('dem_manifest', 'assets/dem/earth_relief_30s_p.json'))
+    if dem_p.exists() and dem_m.exists():
+        terrain_elev, terrain_land, terrain_slope = extract_grid_terrain(dem_p, dem_m, grid)
+    else:
+        terrain_elev = np.zeros(grid.n_cells, dtype=np.float32)
+        terrain_land = np.zeros(grid.n_cells, dtype=np.float32)
+        terrain_slope = np.zeros(grid.n_cells, dtype=np.float32)
+
+    # Station elevation extraction from manifest
+    station_elev = np.array(
+        [float(s.get('elevation_m') or 0.0) for s in dataset.manifest['stations']],
+        dtype=np.float32,
+    )
+
+    # Forecast horizon & lead hours (up to 10 days / 240 hours)
+    horizon_hours = int(cfg.get('horizon_hours', 240))
+    lead_step = int(cfg.get('lead_step_hours', 3))
+    lead_hours = list(range(lead_step, horizon_hours + lead_step, lead_step))
+
+    # Scales
     surface_scales = dataset.std
     profile_scales = np.array([15.0, 0.005, 10.0, 10.0, 50000.0], dtype=np.float32)
     scaled_clim_mean = clim_mean / profile_scales[None, None, None, :]
 
     # Fit station climatology baseline from 30-year official gridded NetCDF LTM
     n_stations = len(dataset.latlon)
-    cells = model_cells = dataset.latlon # We'll build station climatology mapping
+    n_leads = len(lead_hours)
     station_clim_path = output / 'station_climatology.npz'
     if station_clim_path.exists():
         station_climatology = StationClimatology.load(station_clim_path)
     else:
-        # Fit from dataset train split using official baseline
         all_timestamps = [START + timedelta(hours=h) for h in range(len(dataset.values))]
         train_indices = set(dataset.subset('train'))
         train_hours_mask = np.zeros(len(dataset.values), dtype=bool)
         for idx in train_indices:
             h = dataset.samples[idx]['hour']
-            train_hours_mask[max(0, h - 11):min(len(dataset.values), h + 73)] = True
+            train_hours_mask[max(0, h - 11):min(len(dataset.values), h + horizon_hours + 1)] = True
 
         station_climatology = StationClimatology.fit(dataset.values, dataset.mask, all_timestamps, train_hours_mask)
         station_climatology.save(station_clim_path)
@@ -200,6 +244,11 @@ def train(
             hidden=cfg['hidden'],
             climatology_grid_mean=scaled_clim_mean,
             dropout=cfg.get('dropout', 0.0),
+            terrain_elevation_m=terrain_elev,
+            terrain_land_fraction=terrain_land,
+            terrain_slope=terrain_slope,
+            station_elevation_m=station_elev,
+            lead_hours=lead_hours,
         ).to(device)
 
         optimizer = torch.optim.AdamW(
@@ -224,6 +273,7 @@ def train(
             train_indices = train_indices[:cfg['max_train_samples']]
 
         batch_size = max(1, int(cfg.get('batch_size', 4)))
+        amp_dtype = torch.bfloat16 if (device.type == 'cuda' and torch.cuda.is_bf16_supported()) else torch.float16
 
         for epoch in range(1, cfg['epochs'] + 1):
             model.train()
@@ -256,14 +306,15 @@ def train(
                 batch_hours.clear()
 
                 optimizer.zero_grad(set_to_none=True)
-                forecast = model(bx_anom, bx_mask, month_idx=b_months, issue_hour=b_hours)
-                loss = unified_loss(
-                    forecast,
-                    by_anom,
-                    by_mask,
-                    surface_weight=cfg['surface_weight'],
-                    profile_weight=cfg['profile_weight'],
-                )
+                with torch.cuda.amp.autocast(enabled=(device.type == 'cuda'), dtype=amp_dtype):
+                    forecast = model(bx_anom, bx_mask, month_idx=b_months, issue_hour=b_hours)
+                    loss = unified_loss(
+                        forecast,
+                        by_anom,
+                        by_mask,
+                        surface_weight=cfg['surface_weight'],
+                        profile_weight=cfg['profile_weight'],
+                    )
 
                 if not torch.isfinite(loss):
                     raise FloatingPointError("Nonfinite unified anomaly loss.")
@@ -281,19 +332,30 @@ def train(
                 row = dataset.samples[idx]
                 hour = row['hour']
                 input_hours = np.arange(hour - 11, hour + 1)
-                target_hours = hour + np.arange(3, 73, 3)
+                target_hours = hour + np.array(lead_hours)
 
                 x_raw = dataset.values[input_hours]
-                y_raw = dataset.values[target_hours]
                 x_mask = dataset.mask[input_hours] & (dataset.available[input_hours] <= hour * 3600)
-                y_mask = dataset.mask[target_hours]
-                if not y_mask.any() or not x_mask.any():
+                if not x_mask.any():
+                    continue
+
+                y_raw = np.zeros((n_leads, n_stations, 6), dtype=np.float32)
+                y_mask = np.zeros((n_leads, n_stations, 6), dtype=bool)
+                c_targets = np.zeros((n_leads, n_stations, 6), dtype=np.float32)
+
+                in_bounds = target_hours < len(dataset.values)
+                if in_bounds.any():
+                    actual_hours = target_hours[in_bounds]
+                    y_raw[in_bounds] = dataset.values[actual_hours]
+                    y_mask[in_bounds] = dataset.mask[actual_hours]
+                    t_targets = [START + timedelta(hours=int(h)) for h in actual_hours]
+                    c_targets[in_bounds] = station_climatology.for_window(t_targets)
+
+                if not y_mask.any():
                     continue
 
                 t_inputs = [START + timedelta(hours=int(h)) for h in input_hours]
-                t_targets = [START + timedelta(hours=int(h)) for h in target_hours]
                 c_inputs = station_climatology.for_window(t_inputs)
-                c_targets = station_climatology.for_window(t_targets)
 
                 x_anom = np.where(x_mask, (x_raw - c_inputs) / station_climatology.std, 0.0).astype(np.float32)
                 y_anom = np.where(y_mask, (y_raw - c_targets) / station_climatology.std, 0.0).astype(np.float32)
@@ -317,7 +379,10 @@ def train(
             else:
                 current_lr = float(cfg['learning_rate'])
 
-            val_loss = evaluate(model, dataset, station_climatology, 'validation', cfg.get('max_val_samples'), device, batch_size=batch_size)
+            val_loss = evaluate(
+                model, dataset, station_climatology, 'validation',
+                cfg.get('max_val_samples'), device, lead_hours=lead_hours, batch_size=batch_size
+            )
             improved = val_loss < best_loss
             if improved:
                 best_loss, best_epoch, stale = val_loss, epoch, 0
@@ -337,6 +402,7 @@ def train(
                 'best_epoch': best_epoch,
                 'config': cfg,
                 'climatology_period': clim_meta.get('period'),
+                'lead_hours': lead_hours,
             }
             torch.save(state, temp_dir / 'state.pt')
             metrics = {
@@ -348,6 +414,8 @@ def train(
                 'nonzero_gradients': gradients,
                 'prediction_target': cfg['prediction_target'],
                 'climatology_source': 'official-30year-netcdf-ltm',
+                'dem_source': 'GMT Earth Relief 30s NetCDF (896 MB)',
+                'horizon_hours': horizon_hours,
                 'scientific_acceptance': False,
             }
             save(temp_dir / 'metrics.json', metrics)
@@ -373,6 +441,8 @@ def train(
             'best_loss': best_loss,
             'status': 'unified_observation_training_completed',
             'climatology_source': 'official-30year-netcdf-ltm-1991-2020',
+            'dem_source': 'GMT Earth Relief 30s NetCDF (896 MB)',
+            'horizon_hours': horizon_hours,
             'prediction_target': cfg['prediction_target'],
             'scientific_acceptance': False,
         }
