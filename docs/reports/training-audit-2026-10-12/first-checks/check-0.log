@@ -1,0 +1,201 @@
+..FF...F.....                                                            [100%]
+=================================== FAILURES ===================================
+____________________ test_grib2_roundtrip_and_no_overwrite _____________________
+
+tmp_path = PosixPath('/tmp/pytest-of-user/pytest-65/test_grib2_roundtrip_and_no_ov0')
+
+    def test_grib2_roundtrip_and_no_overwrite(tmp_path):
+        ec = pytest.importorskip('eccodes', reason='Optional GRIB integration requires grib extra; required in GRIB acceptance')
+        source, _, _ = forecast_fixture(tmp_path)
+        output = tmp_path / 'forecast.grib2'
+        report = export_forecast(source, output, spacing=90)
+        assert len(report['messages']) == 2*37*6
+        assert report['scientific_acceptance'] is False
+        assert report['grib_sha256'] == hashlib.sha256(output.read_bytes()).hexdigest()
+        assert report['messages'][5]['valid_points'] == 0
+        count = 0
+        with output.open('rb') as stream:
+            while (message := ec.codes_grib_new_from_file(stream)) is not None:
+                try:
+                    expected = report['messages'][count]
+                    assert ec.codes_get(message, 'edition') == 2
+>                   assert ec.codes_get(message, 'centre') == MISSING_CENTRE
+E                   AssertionError: assert '65535' == 65535
+E                    +  where '65535' = <function grib_get at 0x79a0600c5da0>(852724304, 'centre')
+E                    +    where <function grib_get at 0x79a0600c5da0> = <module 'eccodes' from '/home/user/global-weather-audit-20261012-venv/lib/python3.11/site-packages/eccodes/__init__.py'>.codes_get
+
+tests/test_grib_export.py:90: AssertionError
+_____________________ test_unified_sparse_pressure_export ______________________
+
+tmp_path = PosixPath('/tmp/pytest-of-user/pytest-65/test_unified_sparse_pressure_e0')
+
+    def test_unified_sparse_pressure_export(tmp_path):
+        ec = pytest.importorskip('eccodes', reason='Required in GRIB acceptance environment')
+        from global_weather.observation_data import NATIVE_VARIABLES, UNITS
+        source, arrays, old = forecast_fixture(tmp_path)
+        # First regular target point is at 45 N, 0 E; only it has 50 km support.
+        profiles = arrays['profiles'][..., :5]
+        lat = np.rad2deg(np.arcsin(arrays['xyz'][:, 2]))
+        lon = np.rad2deg(np.arctan2(arrays['xyz'][:, 1], arrays['xyz'][:, 0]))
+        np.savez_compressed(source / 'forecast.npz', profile=profiles,
+                            profile_issue_mask=np.zeros(profiles.shape, dtype=bool),
+                            grid_latlon=np.column_stack((lat, lon)),
+                            pressure_hpa=np.array(PRESSURE_HPA), lead_hours=np.array([0, 72]),
+                            surface=np.broadcast_to([280, 275, 2, 3, 95000, 101325], (2, 1, 6)),
+                            surface_issue_mask=np.ones((2, 1, 6), dtype=bool), station_latlon=np.array([[45., 0.]]))
+        metadata = {**old, 'schema': 'unified-research-forecast-1',
+                    'profile_variables': list(PROFILE_VARIABLES[:5]), 'profile_units': list(PROFILE_UNITS[:5]),
+                    'surface_variables': list(NATIVE_VARIABLES), 'surface_units': list(UNITS),
+                    'wind_basis': 'east_north_local',
+                    'forecast_npz_sha256': hashlib.sha256((source/'forecast.npz').read_bytes()).hexdigest()}
+        metadata.pop('artifact_sha256')
+        (source/'forecast.json').write_text(json.dumps(metadata))
+        report = export_forecast(source, tmp_path/'unified.grib2', spacing=90)
+        assert len(report['messages']) == 2*37*6+2
+        assert all(item['valid_points'] == 0 for item in report['messages'][:-2])
+        assert all(item['valid_points'] == 1 for item in report['messages'][-2:])
+        assert report['messages'][-2]['variable'] == 'station_mean_sea_level_pressure'
+        assert report['messages'][-1]['fixed_surface_type'] == 101
+        decoded = []
+        with (tmp_path/'unified.grib2').open('rb') as stream:
+            while (message := ec.codes_grib_new_from_file(stream)) is not None:
+                try:
+                    if ec.codes_get(message, 'typeOfFirstFixedSurface') in (1, 101):
+                        decoded.append((ec.codes_get(message, 'parameterNumber'), ec.codes_get_values(message)[0],
+                                        ec.codes_get(message, 'numberOfMissing')))
+                finally:
+                    ec.codes_release(message)
+>       assert decoded == [(1, 101325, 7), (1, 101325, 7)]
+E       assert [] == [(1, 101325, ...1, 101325, 7)]
+E         
+E         Right contains 2 more items, first extra item: (1, 101325, 7)
+E         Use -v to get more diff
+
+tests/test_grib_export.py:154: AssertionError
+___________ test_checkpoint_prefix_rollout_and_benchmark_are_finite ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-user/pytest-65/test_checkpoint_prefix_rollout0')
+
+    def test_checkpoint_prefix_rollout_and_benchmark_are_finite(tmp_path):
+        path, coords = checkpoint_fixture(tmp_path)
+>       model, state = load_model(path, sha256(path), coords, np.ones(6), 3, torch.device('cpu'))
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_unified_observation_inference.py:71: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+global_weather/unified_observation_inference.py:94: in load_model
+    if any(value.is_floating_point() and not torch.isfinite(value).all() for value in weights.values()):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = <odict_iterator object at 0x79a0600ac590>
+
+>   if any(value.is_floating_point() and not torch.isfinite(value).all() for value in weights.values()):
+                                             ^^^^^^^^^^^^^^^^^^^^^
+E   NotImplementedError: Could not run 'aten::ne.Scalar' with arguments from the 'SparseCPU' backend. This could be because the operator doesn't exist for this backend, or was omitted during the selective/custom build process (if using custom build). If you are a Facebook employee using PyTorch on mobile, please visit https://fburl.com/ptmfixes for possible resolutions. 'aten::ne.Scalar' is only available for these backends: [CPU, CUDA, HIP, MPS, IPU, XPU, HPU, VE, MTIA, MAIA, PrivateUse1, PrivateUse2, PrivateUse3, Meta, FPGA, Vulkan, Metal, QuantizedCPU, QuantizedCUDA, QuantizedHIP, QuantizedMPS, QuantizedIPU, QuantizedXPU, QuantizedHPU, QuantizedVE, QuantizedMTIA, QuantizedMAIA, QuantizedPrivateUse1, QuantizedPrivateUse2, QuantizedPrivateUse3, QuantizedMeta, CustomRNGKeyId, MkldnnCPU, SparseCsrCPU, SparseCsrCUDA, SparseCsrHIP, SparseCsrMPS, SparseCsrIPU, SparseCsrXPU, SparseCsrHPU, SparseCsrVE, SparseCsrMTIA, SparseCsrMAIA, SparseCsrPrivateUse1, SparseCsrPrivateUse2, SparseCsrPrivateUse3, SparseCsrMeta, BackendSelect, Python, FuncTorchDynamicLayerBackMode, Functionalize, Named, Conjugate, Negative, ZeroTensor, ADInplaceOrView, AutogradOther, AutogradCPU, AutogradCUDA, AutogradHIP, AutogradXLA, AutogradMPS, AutogradIPU, AutogradXPU, AutogradHPU, AutogradVE, AutogradLazy, AutogradMTIA, AutogradMAIA, AutogradPrivateUse1, AutogradPrivateUse2, AutogradPrivateUse3, AutogradMeta, AutogradNestedTensor, Tracer, AutocastCPU, AutocastMTIA, AutocastMAIA, AutocastXPU, AutocastMPS, AutocastCUDA, FuncTorchBatched, BatchedNestedTensor, FuncTorchVmapMode, Batched, VmapMode, FuncTorchGradWrapper, PythonTLSSnapshot, FuncTorchDynamicLayerFrontMode, PreDispatch, PythonDispatcher].
+E   
+E   Undefined: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   CPU: registered at /pytorch/build/aten/src/ATen/RegisterCPU_2.cpp:5932 [kernel]
+E   CUDA: registered at /pytorch/build/aten/src/ATen/RegisterCUDA_0.cpp:30291 [kernel]
+E   HIP: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   MPS: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   IPU: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   XPU: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   HPU: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   VE: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   MTIA: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   MAIA: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   PrivateUse1: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   PrivateUse2: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   PrivateUse3: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   Meta: registered at /home/user/global-ml-weather/.venv/lib/python3.11/site-packages/torch/_meta_registrations.py:53 [kernel]
+E   FPGA: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   Vulkan: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   Metal: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedCPU: registered at /pytorch/build/aten/src/ATen/RegisterQuantizedCPU_0.cpp:1553 [kernel]
+E   QuantizedCUDA: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedHIP: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedMPS: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedIPU: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedXPU: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedHPU: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedVE: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedMTIA: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedMAIA: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedPrivateUse1: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedPrivateUse2: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedPrivateUse3: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   QuantizedMeta: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   CustomRNGKeyId: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   MkldnnCPU: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrCPU: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrCUDA: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrHIP: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrMPS: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrIPU: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrXPU: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrHPU: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrVE: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrMTIA: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrMAIA: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrPrivateUse1: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrPrivateUse2: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrPrivateUse3: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   SparseCsrMeta: registered at /pytorch/build/aten/src/ATen/RegisterCompositeExplicitAutogradNonFunctional_0.cpp:14388 [default backend kernel]
+E   BackendSelect: fallthrough registered at /pytorch/aten/src/ATen/core/BackendSelectFallbackKernel.cpp:3 [backend fallback]
+E   Python: registered at /pytorch/aten/src/ATen/core/PythonFallbackKernel.cpp:198 [backend fallback]
+E   FuncTorchDynamicLayerBackMode: registered at /pytorch/aten/src/ATen/functorch/DynamicLayer.cpp:477 [backend fallback]
+E   Functionalize: registered at /pytorch/aten/src/ATen/FunctionalizeFallbackKernel.cpp:384 [backend fallback]
+E   Named: fallthrough registered at /pytorch/aten/src/ATen/core/NamedRegistrations.cpp:9 [kernel]
+E   Conjugate: registered at /pytorch/aten/src/ATen/ConjugateFallback.cpp:17 [backend fallback]
+E   Negative: registered at /pytorch/aten/src/ATen/native/NegateFallback.cpp:18 [backend fallback]
+E   ZeroTensor: registered at /pytorch/aten/src/ATen/ZeroTensorFallback.cpp:115 [backend fallback]
+E   ADInplaceOrView: fallthrough registered at /pytorch/aten/src/ATen/core/VariableFallbackKernel.cpp:103 [backend fallback]
+E   AutogradOther: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradCPU: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradCUDA: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradHIP: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradXLA: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradMPS: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradIPU: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradXPU: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradHPU: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradVE: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradLazy: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradMTIA: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradMAIA: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradPrivateUse1: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradPrivateUse2: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradPrivateUse3: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradMeta: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   AutogradNestedTensor: registered at /pytorch/torch/csrc/autograd/generated/VariableType_1.cpp:17404 [autograd kernel]
+E   Tracer: registered at /pytorch/torch/csrc/autograd/generated/TraceType_1.cpp:16736 [kernel]
+E   AutocastCPU: fallthrough registered at /pytorch/aten/src/ATen/autocast_mode.cpp:336 [backend fallback]
+E   AutocastMTIA: fallthrough registered at /pytorch/aten/src/ATen/autocast_mode.cpp:480 [backend fallback]
+E   AutocastMAIA: fallthrough registered at /pytorch/aten/src/ATen/autocast_mode.cpp:518 [backend fallback]
+E   AutocastXPU: fallthrough registered at /pytorch/aten/src/ATen/autocast_mode.cpp:556 [backend fallback]
+E   AutocastMPS: fallthrough registered at /pytorch/aten/src/ATen/autocast_mode.cpp:221 [backend fallback]
+E   AutocastCUDA: fallthrough registered at /pytorch/aten/src/ATen/autocast_mode.cpp:177 [backend fallback]
+E   FuncTorchBatched: registered at /pytorch/aten/src/ATen/functorch/BatchRulesBinaryOps.cpp:353 [kernel]
+E   BatchedNestedTensor: registered at /pytorch/aten/src/ATen/functorch/LegacyBatchingRegistrations.cpp:754 [backend fallback]
+E   FuncTorchVmapMode: fallthrough registered at /pytorch/aten/src/ATen/functorch/VmapModeRegistrations.cpp:22 [backend fallback]
+E   Batched: registered at /pytorch/aten/src/ATen/LegacyBatchingRegistrations.cpp:1076 [kernel]
+E   VmapMode: fallthrough registered at /pytorch/aten/src/ATen/VmapModeRegistrations.cpp:32 [backend fallback]
+E   FuncTorchGradWrapper: registered at /pytorch/aten/src/ATen/functorch/TensorWrapper.cpp:210 [backend fallback]
+E   PythonTLSSnapshot: registered at /pytorch/aten/src/ATen/core/PythonFallbackKernel.cpp:206 [backend fallback]
+E   FuncTorchDynamicLayerFrontMode: registered at /pytorch/aten/src/ATen/functorch/DynamicLayer.cpp:473 [backend fallback]
+E   PreDispatch: registered at /pytorch/aten/src/ATen/core/PythonFallbackKernel.cpp:210 [backend fallback]
+E   PythonDispatcher: registered at /pytorch/aten/src/ATen/core/PythonFallbackKernel.cpp:202 [backend fallback]
+
+global_weather/unified_observation_inference.py:94: NotImplementedError
+=============================== warnings summary ===============================
+tests/test_unified_observation_inference.py::test_checkpoint_loader_rejects_wrong_hash_geometry_norms_and_horizon
+  /home/user/global-ml-weather-audit-20261012/global_weather/model.py:34: UserWarning: Sparse invariant checks are implicitly disabled. Memory errors (e.g. SEGFAULT) will occur when operating on a sparse tensor which violates the invariants, but checks incur performance overhead. To silence this warning, explicitly opt in or out. See `torch.sparse.check_sparse_tensor_invariants.__doc__` for guidance.  (Triggered internally at /pytorch/aten/src/ATen/Context.cpp:760.)
+    adjacency = torch.sparse_coo_tensor(torch.tensor(np.stack([dst,src])),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_grib_export.py::test_grib2_roundtrip_and_no_overwrite - Ass...
+FAILED tests/test_grib_export.py::test_unified_sparse_pressure_export - asser...
+FAILED tests/test_unified_observation_inference.py::test_checkpoint_prefix_rollout_and_benchmark_are_finite
+3 failed, 10 passed, 1 warning in 2.80s

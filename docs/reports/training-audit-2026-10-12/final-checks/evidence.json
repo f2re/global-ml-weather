@@ -1,0 +1,110 @@
+{
+  "source_commit": "9333c2e49a088f3989d6b24137801c10bca0a9e6",
+  "cwd": "/home/user/global-ml-weather-audit-20261012",
+  "limits": {
+    "threads": 2,
+    "device": "cpu",
+    "timeout_seconds_per_command": 600
+  },
+  "commands": [
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-rs"
+      ],
+      "started_utc": "2026-10-12T08:54:14.731239+00:00",
+      "finished_utc": "2026-10-12T08:56:39.033790+00:00",
+      "elapsed_seconds": 144.30253597162664,
+      "returncode": 0,
+      "status": "passed",
+      "log": "outputs/audit-checks-final/check-0.log",
+      "log_sha256": "8029d4e2e02cb37e1094d77731aba1ac0bb0334b832e7f6149b47f103c57eeab"
+    },
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "-m",
+        "global_weather.cli",
+        "train-smoke",
+        "--optimizer-steps",
+        "2",
+        "--horizon-hours",
+        "72",
+        "--output",
+        "outputs/audit-baseline-final"
+      ],
+      "started_utc": "2026-10-12T08:56:39.034993+00:00",
+      "finished_utc": "2026-10-12T08:56:41.456190+00:00",
+      "elapsed_seconds": 2.4212174667045474,
+      "returncode": 0,
+      "status": "passed",
+      "log": "outputs/audit-checks-final/check-1.log",
+      "log_sha256": "d29f149635ee3c1034aedf7df7b8f69102f82581346b85800e48e257a66104c6"
+    },
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "-m",
+        "global_weather.adaptive_cli",
+        "--horizon-hours",
+        "72",
+        "--output",
+        "outputs/audit-adaptive-final"
+      ],
+      "started_utc": "2026-10-12T08:56:41.457240+00:00",
+      "finished_utc": "2026-10-12T08:56:43.928614+00:00",
+      "elapsed_seconds": 2.4713933002203703,
+      "returncode": 0,
+      "status": "passed",
+      "log": "outputs/audit-checks-final/check-2.log",
+      "log_sha256": "bc0fdb5e88b14ffecc48383eb14c1c7322cb5c0b9fadc327cddedbeb3fc19a63"
+    },
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "-m",
+        "global_weather.multimodal",
+        "selftest",
+        "--output",
+        "outputs/audit-multimodal-final"
+      ],
+      "started_utc": "2026-10-12T08:56:43.929630+00:00",
+      "finished_utc": "2026-10-12T08:56:46.701770+00:00",
+      "elapsed_seconds": 2.772158805280924,
+      "returncode": 0,
+      "status": "passed",
+      "log": "outputs/audit-checks-final/check-3.log",
+      "log_sha256": "619c0e5f8f6e28b3af81ea87439fa675adcf9dff38dfbe9dff21aa8dc71ba702"
+    },
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "scripts/pipeline-test.py"
+      ],
+      "started_utc": "2026-10-12T08:56:46.702834+00:00",
+      "finished_utc": "2026-10-12T08:56:50.427689+00:00",
+      "elapsed_seconds": 3.724872950464487,
+      "returncode": 0,
+      "status": "passed",
+      "log": "outputs/audit-checks-final/check-4.log",
+      "log_sha256": "4edcf7fb6c1ab56fb9442d4ba5271f778389fa7a558607c91e262aea0df0cbce"
+    },
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "scripts/check_docs.py",
+        "--strict"
+      ],
+      "started_utc": "2026-10-12T08:56:50.428758+00:00",
+      "finished_utc": "2026-10-12T08:56:50.593635+00:00",
+      "elapsed_seconds": 0.16488840710371733,
+      "returncode": 0,
+      "status": "passed",
+      "log": "outputs/audit-checks-final/check-5.log",
+      "log_sha256": "b774ac6ab63ac87c835ea3fd72eaff6871ccdd66d8eff5839ecc4eeb5cd0dc71"
+    }
+  ]
+}

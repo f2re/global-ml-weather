@@ -1,0 +1,127 @@
+{
+  "source_commit": "45460fcebb346f448803c7bdeae6dd9c53f854e3",
+  "cwd": "/home/user/global-ml-weather-audit-20261012",
+  "limits": {
+    "threads": 2,
+    "device": "cpu",
+    "timeout_seconds_per_command": 600
+  },
+  "commands": [
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_grib_export.py",
+        "tests/test_unified_observation_inference.py",
+        "tests/test_unified_training_windows.py",
+        "-q"
+      ],
+      "started_utc": "2026-10-12T08:47:36.018305+00:00",
+      "finished_utc": "2026-10-12T08:47:39.442399+00:00",
+      "elapsed_seconds": 3.4240712309256196,
+      "returncode": 1,
+      "status": "failed",
+      "log": "outputs/audit-checks/check-0.log",
+      "log_sha256": "d1e466a7effc742515a60c3a608aa6a1210c94bddc45f59a73496e886a6ed63a"
+    },
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "started_utc": "2026-10-12T08:47:39.443364+00:00",
+      "finished_utc": "2026-10-12T08:50:13.109896+00:00",
+      "elapsed_seconds": 153.6665511643514,
+      "returncode": 1,
+      "status": "failed",
+      "log": "outputs/audit-checks/check-1.log",
+      "log_sha256": "45435dd4980f8533c92ee004d23b662470b8e29669af4782916cf394d5e67edf"
+    },
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "-m",
+        "global_weather.cli",
+        "train-smoke",
+        "--optimizer-steps",
+        "2",
+        "--horizon-hours",
+        "72",
+        "--output",
+        "outputs/audit-baseline"
+      ],
+      "started_utc": "2026-10-12T08:50:13.110889+00:00",
+      "finished_utc": "2026-10-12T08:50:15.532015+00:00",
+      "elapsed_seconds": 2.4211471546441317,
+      "returncode": 0,
+      "status": "passed",
+      "log": "outputs/audit-checks/check-2.log",
+      "log_sha256": "d29f149635ee3c1034aedf7df7b8f69102f82581346b85800e48e257a66104c6"
+    },
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "-m",
+        "global_weather.adaptive_cli",
+        "--horizon-hours",
+        "72",
+        "--output",
+        "outputs/audit-adaptive"
+      ],
+      "started_utc": "2026-10-12T08:50:15.533042+00:00",
+      "finished_utc": "2026-10-12T08:50:17.853799+00:00",
+      "elapsed_seconds": 2.3207567585632205,
+      "returncode": 0,
+      "status": "passed",
+      "log": "outputs/audit-checks/check-3.log",
+      "log_sha256": "bc0fdb5e88b14ffecc48383eb14c1c7322cb5c0b9fadc327cddedbeb3fc19a63"
+    },
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "-m",
+        "global_weather.multimodal",
+        "selftest",
+        "--output",
+        "outputs/audit-multimodal"
+      ],
+      "started_utc": "2026-10-12T08:50:17.854784+00:00",
+      "finished_utc": "2026-10-12T08:50:20.777074+00:00",
+      "elapsed_seconds": 2.9222890259698033,
+      "returncode": 0,
+      "status": "passed",
+      "log": "outputs/audit-checks/check-4.log",
+      "log_sha256": "619c0e5f8f6e28b3af81ea87439fa675adcf9dff38dfbe9dff21aa8dc71ba702"
+    },
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "scripts/pipeline-test.py"
+      ],
+      "started_utc": "2026-10-12T08:50:20.778054+00:00",
+      "finished_utc": "2026-10-12T08:50:24.552705+00:00",
+      "elapsed_seconds": 3.77466734778136,
+      "returncode": 0,
+      "status": "passed",
+      "log": "outputs/audit-checks/check-5.log",
+      "log_sha256": "1eab394f8513afee0229156eaabc4c1a92c4a9f3b111bd0f48d94938e0ed741d"
+    },
+    {
+      "command": [
+        "/home/user/global-ml-weather/.venv/bin/python",
+        "scripts/check_docs.py",
+        "--strict"
+      ],
+      "started_utc": "2026-10-12T08:50:24.553738+00:00",
+      "finished_utc": "2026-10-12T08:50:24.719021+00:00",
+      "elapsed_seconds": 0.16529547423124313,
+      "returncode": 0,
+      "status": "passed",
+      "log": "outputs/audit-checks/check-6.log",
+      "log_sha256": "b774ac6ab63ac87c835ea3fd72eaff6871ccdd66d8eff5839ecc4eeb5cd0dc71"
+    }
+  ]
+}

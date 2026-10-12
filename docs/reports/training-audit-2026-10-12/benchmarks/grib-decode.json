@@ -1,0 +1,42 @@
+{
+  "messages_decoded": 5352,
+  "mslp_valid_points_per_lead": [
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37,
+    37
+  ],
+  "grid": {
+    "template": 0,
+    "spacing_degrees": 5.0,
+    "Ni": 72,
+    "Nj": 36,
+    "sampling": "nearest spherical cell; scalar point samples; short-arc parallel transport of ENU wind",
+    "conservative": false,
+    "earth_radius_m": 6371008.8
+  },
+  "grib_sha256": "fc2d888f816e77ddab47e565e2b50728aeb425d98ba72adb2c5ef415abaefc01",
+  "grib_bytes": 2694720,
+  "decoder": "ecCodes 2.49.0",
+  "scientific_acceptance": false
+}

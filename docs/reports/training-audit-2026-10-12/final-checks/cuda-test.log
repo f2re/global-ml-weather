@@ -1,0 +1,8 @@
+..                                                                       [100%]
+=============================== warnings summary ===============================
+tests/test_profile_verification_review.py::test_frozen_sparse_exact_comparison_preserves_metadata_and_values[cpu]
+  /home/user/global-ml-weather-audit-20261012/tests/test_profile_verification_review.py:162: UserWarning: Sparse invariant checks are implicitly disabled. Memory errors (e.g. SEGFAULT) will occur when operating on a sparse tensor which violates the invariants, but checks incur performance overhead. To silence this warning, explicitly opt in or out. See `torch.sparse.check_sparse_tensor_invariants.__doc__` for guidance.  (Triggered internally at /pytorch/aten/src/ATen/Context.cpp:760.)
+    tensor = torch.sparse_coo_tensor(indices, values, (2, 2))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2 passed, 1 warning in 2.66s

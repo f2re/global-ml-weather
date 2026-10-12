@@ -1,0 +1,15 @@
+{
+  "source_commit": "9333c2e49a088f3989d6b24137801c10bca0a9e6",
+  "command": [
+    "/home/user/global-ml-weather/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/test_profile_verification_review.py::test_frozen_sparse_exact_comparison_preserves_metadata_and_values",
+    "-q"
+  ],
+  "cwd": "/home/user/global-ml-weather-audit-20261012",
+  "started_utc": "2026-10-12T08:58:28.362040+00:00",
+  "finished_utc": "2026-10-12T08:58:32.192408+00:00",
+  "returncode": 0,
+  "log_sha256": "4d4cea7241e16458a96e4fdd3f1cd0fedfad85abde07f2041d6798d65c7ac356"
+}
