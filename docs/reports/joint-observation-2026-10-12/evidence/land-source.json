@@ -1,0 +1,9 @@
+{
+  "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/693f11422f4e08d2da4566b854dda53eb7c39fb3/geojson/ne_110m_land.geojson",
+  "repository_revision": "693f11422f4e08d2da4566b854dda53eb7c39fb3",
+  "sha256": "9e0729ee253ca7d7a5c4ae9395fb1902264c5377c52e224d13dd85010e2835d9",
+  "bytes": 138160,
+  "acquired_utc": "2026-10-12T12:22:23.637154+00:00",
+  "purpose": "independent point land mask, not DEM sign",
+  "path": "/home/user/global-weather-static-cache/natural-earth/ne_110m_land.geojson"
+}

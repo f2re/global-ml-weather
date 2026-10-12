@@ -1,0 +1,27 @@
+{
+  "stage": "training",
+  "started_utc": "2026-10-12T12:34:31.906240+00:00",
+  "source_sha": "4fc48a3151ccaf0e02c2d20fd1a0ac71825c501f",
+  "command": [
+    "/home/user/global-ml-weather/.venv/bin/python",
+    "-m",
+    "global_weather.joint_observation_training",
+    "--dataset",
+    "outputs/joint-20261012/dataset",
+    "--norm",
+    "/home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json",
+    "--config",
+    "configs/joint_observation_training.json",
+    "--climatology",
+    "/home/user/global-ml-weather/outputs/climatology-level-2",
+    "--static",
+    "outputs/joint-20261012/static",
+    "--output",
+    "outputs/joint-20261012/training"
+  ],
+  "timeout_seconds": 7200,
+  "status": "complete",
+  "pid": 2350594,
+  "exit_code": 0,
+  "finished_utc": "2026-10-12T14:11:23.404680+00:00"
+}

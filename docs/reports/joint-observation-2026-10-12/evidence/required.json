@@ -1,0 +1,60 @@
+[
+  {
+    "command": [
+      "-m",
+      "global_weather.cli",
+      "train-smoke",
+      "--optimizer-steps",
+      "2",
+      "--horizon-hours",
+      "72",
+      "--output",
+      "outputs/joint-20261012/checks/baseline"
+    ],
+    "started_utc": "2026-10-12T12:27:33.277093+00:00",
+    "seconds": 2.6208948297426105,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "-m",
+      "global_weather.adaptive_cli",
+      "--horizon-hours",
+      "72",
+      "--output",
+      "outputs/joint-20261012/checks/adaptive"
+    ],
+    "started_utc": "2026-10-12T12:27:35.898198+00:00",
+    "seconds": 2.420964169315994,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "-m",
+      "global_weather.multimodal",
+      "selftest",
+      "--output",
+      "outputs/joint-20261012/checks/multimodal"
+    ],
+    "started_utc": "2026-10-12T12:27:38.319323+00:00",
+    "seconds": 2.6715605119243264,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "scripts/pipeline-test.py"
+    ],
+    "started_utc": "2026-10-12T12:27:40.991044+00:00",
+    "seconds": 3.5237471871078014,
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "scripts/check_docs.py",
+      "--strict"
+    ],
+    "started_utc": "2026-10-12T12:27:44.514946+00:00",
+    "seconds": 0.16508195456117392,
+    "exit_code": 0
+  }
+]

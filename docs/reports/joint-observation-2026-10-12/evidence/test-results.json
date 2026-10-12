@@ -1,0 +1,38 @@
+{
+  "source_sha": "4fc48a3151ccaf0e02c2d20fd1a0ac71825c501f",
+  "cwd": "/home/user/global-ml-weather-joint-20261012",
+  "records": [
+    {
+      "log": "focused.log",
+      "exit_code": 0,
+      "environment": "CUDA_VISIBLE_DEVICES=empty",
+      "finished_utc": "2026-10-12T12:26:30.506071+00:00",
+      "sha256": "8efde721d7478c0b36ec560c96d28c6623ffde1d2d03deb832123f64b85dc4a3",
+      "summary": "38 passed, 1 warning in 4.59s"
+    },
+    {
+      "log": "pytest.log",
+      "exit_code": 0,
+      "environment": "CUDA_VISIBLE_DEVICES=empty",
+      "finished_utc": "2026-10-12T12:29:07.654080+00:00",
+      "sha256": "89a8f891731bbb27e5d4576fbb2e0a167a9d0b15f507cfdc476a23b42d8b907e",
+      "summary": "855 passed, 1 skipped, 34 warnings in 132.38s (0:02:12)"
+    },
+    {
+      "log": "cuda.log",
+      "exit_code": 4,
+      "environment": "CUDA_VISIBLE_DEVICES=0",
+      "finished_utc": "2026-10-12T12:29:37.214082+00:00",
+      "sha256": "68372a30d465da07765b5d4ada08f0535d14803c2c9096988948e909c3548193",
+      "summary": "ERROR: file or directory not found: tests/test_profile_hydrostatic_model.py\n\n\nno tests ran in 0.00s\n"
+    },
+    {
+      "log": "cuda-corrected.log",
+      "exit_code": 0,
+      "environment": "CUDA_VISIBLE_DEVICES=0",
+      "finished_utc": "2026-10-12T12:30:12.790084+00:00",
+      "sha256": "fa676ced1cffbda894f1386d1e305bad9c13ae7b6289a1af162245d2ad9a24d9",
+      "summary": "40 passed, 2 warnings in 6.62s"
+    }
+  ]
+}

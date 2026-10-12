@@ -1,0 +1,369 @@
+{
+  "identity": {
+    "dataset_sha256": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+    "source_sha256": "2e4af1a87192b0bb5bac5b17c6f5ba8f03a967c550b70b952bd74cc92a99f3da",
+    "commit": "4fc48a3151ccaf0e02c2d20fd1a0ac71825c501f",
+    "config": {
+      "mesh_level": 2,
+      "hidden": 32,
+      "epochs": 12,
+      "patience": 4,
+      "threads": 8,
+      "seed": 43,
+      "learning_rate": 0.0001,
+      "weight_decay": 0.01,
+      "gradient_clip": 1.0,
+      "max_train_issues": 48,
+      "max_validation_issues": 12,
+      "max_test_issues": 12,
+      "max_records_per_window": 2000,
+      "surface_weight": 0.5,
+      "physical_policy": {
+        "schema": "profile-physical-policy-1",
+        "architecture": "hydrostatic_flow",
+        "huber_delta": 2.5,
+        "humidity_qc": true,
+        "maximum_water_relative_humidity": 2.0,
+        "humidity_min_pressure_pa": 30000.0,
+        "variable_weights": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "memory_budget_mib": 16384
+      }
+    },
+    "device": "cuda",
+    "python": "3.11.2",
+    "torch": "2.11.0+cu128",
+    "numpy": "2.4.6",
+    "cuda": "12.8",
+    "hardware": "NVIDIA GeForce RTX 4090",
+    "cuda_visible_devices": "0",
+    "cublas_workspace_config": ":4096:8",
+    "deterministic": true,
+    "tf32": false,
+    "architecture": "joint-measured-hydrostatic-v1",
+    "joint_dataset_path": "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/dataset",
+    "joint_fingerprint": {
+      "surface_dataset_sha256": "83a02c9280df8c15945b1a89d1ac43e78cb8d83c766e563334e2c6966dd52ac4",
+      "profile_dataset_sha256": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+      "surface_hourly_sha256": "8b10238ab3439c30c1b1b5e6b94557e5fee4e914feee815ef2a17e66b03ec3d4",
+      "surface_norm_sha256": "059e350997e8e552f702bcbb7e5149143fab29745b50c98d29de724cf27f8962",
+      "profile_database_sha256": "d5e7178810fb261f427c43443c1f8f0cca2e4b328636147bf35ce6d06b7668b3",
+      "horizon_hours": 72,
+      "issue_stride_hours": 24
+    },
+    "norm_path": "/home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json",
+    "norm_sha256": "4a2a84b832d2df6db9eee9e44b9187035d84cdc22a09bfa703d42d7af6a3b97a",
+    "station_climatology_path": "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/training/station_climatology.npz",
+    "station_climatology_sha256": "c5aa54f6f47a86b6dd23a9763da08620cb3fe10cf310a9b11ca9ac72c4c107e5",
+    "climatology_path": "/home/user/global-ml-weather/outputs/climatology-level-2",
+    "climatology_sha256": "d10f58b9887e08f3ffd84ade95efaba8e71190825133e4e391c04acb8ed84497",
+    "static_path": "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/static",
+    "static_fingerprint": "25e3a21b71adf518bf9f0f106bc3d9d3500956e928fec52145758f2cc3c0d566",
+    "joint_source_sha256": {
+      "joint_observation_model.py": "ee16691e133fed86528468bae1fe0b50cf3cd4de8c61352cad30827ab0df2d81",
+      "joint_observation_training.py": "52e7254259d03131b3b3d95362456ade1f2b595c9d30d66809b00e7dbcca3997",
+      "joint_observation_data.py": "0e1f9d2c7303414c863af49e95989ba0b3cb0818159d03dc183d1b7577d0c08f",
+      "profile_hydrostatic_model.py": "0eb28ba8e2443ec4e11e0abf12321b89220c81b3d3cc26e5cb6581ee8b3d67ee",
+      "profile_model_v2.py": "5de9fae31ce182f220c5181d099752ed3c86cce8e469003e60dd54bbdb475872",
+      "profile_physics.py": "6fd756697a81e78611389b8e0c6e066098f0b7580200a210e1c390a780d09890"
+    }
+  },
+  "status": "joint_measured_observation_research_trained",
+  "best_epoch": 12,
+  "scientific_acceptance": false,
+  "omega": "unavailable_no_measured_targets",
+  "below_ground_issuance": "unknown_global_surface_pressure",
+  "test_independence": "previously seen periods; diagnostic only",
+  "trained_variable_mask": [
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      true,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      true
+    ],
+    [
+      true,
+      false,
+      true,
+      true,
+      false
+    ],
+    [
+      false,
+      false,
+      false,
+      false,
+      false
+    ],
+    [
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  ],
+  "lead_hours": [
+    3,
+    6,
+    9,
+    12,
+    15,
+    18,
+    21,
+    24,
+    27,
+    30,
+    33,
+    36,
+    39,
+    42,
+    45,
+    48,
+    51,
+    54,
+    57,
+    60,
+    63,
+    66,
+    69,
+    72
+  ]
+}

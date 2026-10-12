@@ -1,0 +1,33 @@
+{
+  "stage": "forecast",
+  "started_utc": "2026-10-12T14:11:23.405138+00:00",
+  "source_sha": "4fc48a3151ccaf0e02c2d20fd1a0ac71825c501f",
+  "command": [
+    "/home/user/global-ml-weather/.venv/bin/python",
+    "-m",
+    "global_weather.joint_observation_inference",
+    "--dataset",
+    "outputs/joint-20261012/dataset",
+    "--training",
+    "outputs/joint-20261012/training",
+    "--static",
+    "outputs/joint-20261012/static",
+    "--split",
+    "test",
+    "--limit",
+    "3",
+    "--horizon-hours",
+    "72",
+    "--device",
+    "auto",
+    "--source-revision",
+    "4fc48a3151ccaf0e02c2d20fd1a0ac71825c501f",
+    "--output",
+    "outputs/joint-20261012/forecast-batch"
+  ],
+  "timeout_seconds": 1800,
+  "status": "complete",
+  "pid": 2352756,
+  "exit_code": 0,
+  "finished_utc": "2026-10-12T14:16:27.195660+00:00"
+}
