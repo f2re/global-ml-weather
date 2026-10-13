@@ -18,6 +18,16 @@
 Автоматическое включение спутников в новый цикл требует следующего этапа физического допуска.
 [Установка, доступы и ограничения](docs/AUTONOMOUS_TRAINING.md).
 
+## R11: физически согласованная ассимиляция
+
+Новый основной контур усваивает измерения всех платформ и прогнозирует до 72 часов.
+Гидростатика, масса сухого воздуха, насыщение и omega замкнуты конструкцией модели.
+[Руководство R11](docs/PHYSICAL_ASSIMILATION.md) · [решение 0020](docs/decisions/0020-physical-assimilation-r11.md).
+
+```bash
+python -m global_weather.assimilation selftest --output outputs/r11-selftest
+```
+
 ## Визуальное руководство
 
 ![Общая архитектура](docs/images/architecture/01-global-architecture-overview.webp)

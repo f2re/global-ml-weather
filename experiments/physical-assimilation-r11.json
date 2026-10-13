@@ -1,0 +1,101 @@
+{
+  "schema": "global-weather-experiment-1",
+  "experiment_id": "physical-assimilation-r11",
+  "contract_id": "GLOBAL-WEATHER-R11",
+  "decision": "docs/decisions/0020-physical-assimilation-r11.md",
+  "guide": "docs/PHYSICAL_ASSIMILATION.md",
+  "audit": "docs/audits/2026-10-13-physical-consistency.md",
+  "config": "configs/physical_assimilation_r11.json",
+  "smoke_config": "configs/physical_assimilation_smoke.json",
+  "observation_errors": "configs/observation_errors_r11.json",
+  "status": "implemented_program_checks_passed_real_training_pending",
+  "scientific_acceptance": false,
+  "satellite_supervision": false,
+  "era5_role": "separate_frozen_verification_only",
+  "latent_mesh": {
+    "level": 5,
+    "nodes": 10242,
+    "multimesh_levels": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "directed_edges": 81900,
+    "mean_node_spacing_km": 240.6,
+    "min_one_step_reach_km_8_layers": 17843,
+    "required_reach_km": 1620
+  },
+  "model": {
+    "architecture": "physical-assimilation-multimesh-v1",
+    "parameters": 8237724,
+    "hidden": 256,
+    "processor_layers": 8,
+    "analysis_layers": 8,
+    "state_channels": 191,
+    "step_hours": 3,
+    "horizon_hours": 72,
+    "input_hours": 12
+  },
+  "physics": {
+    "geopotential": "hydrostatic from surface geopotential g*z_s",
+    "dry_air_mass": "uniform surface-pressure corrector",
+    "humidity": "q = RH q_s(T,p), RH <= 1.05",
+    "wind": "Cartesian tangent vector",
+    "omega": "continuity with kinematic surface boundary"
+  },
+  "program_checks": {
+    "selftest": "8 of 8 properties passed on synthetic analytic data",
+    "dry_mass_relative_drift_72h": 3.8e-08,
+    "hydrostatic_residual_max_m2_s2": 0.066,
+    "one_step_influence_km": 20013
+  },
+  "cpu_probe": {
+    "mesh_level": 5,
+    "rollout_hours": 6,
+    "input_tokens": 41317,
+    "targets": 33102,
+    "forward_seconds": 14.8,
+    "backward_seconds": 43.3,
+    "peak_rss_bytes": 5673400000,
+    "device": "2 CPU cores, synthetic data"
+  },
+  "stages": {
+    "R0_program": {
+      "status": "passed_locally",
+      "command": "python -m global_weather.assimilation selftest --output outputs/r11-selftest"
+    },
+    "R1_static_mesh5": {
+      "status": "pending_node",
+      "required": [
+        "area-mean DEM static on mesh 5",
+        "independent land polygons"
+      ]
+    },
+    "R2_smoke_real": {
+      "status": "pending_node",
+      "config": "configs/physical_assimilation_smoke.json"
+    },
+    "R3_train": {
+      "status": "pending_node",
+      "config": "configs/physical_assimilation_r11.json",
+      "measure": [
+        "CUDA peak memory",
+        "seconds per epoch"
+      ]
+    },
+    "R4_validation": {
+      "status": "pending",
+      "gates": [
+        "analysis of withheld groups beats persistence and climatology",
+        "+24/+48/+72 h beat persistence and climatology with episode bootstrap"
+      ]
+    },
+    "R5_test_once": {
+      "status": "pending",
+      "rule": "frozen weights; test split read once"
+    }
+  }
+}

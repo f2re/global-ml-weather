@@ -73,3 +73,45 @@ def test_geometric_issuance_mask_preserves_target_mask_and_diagnostic_origin():
     output, issued, _ = apply_forecast_physics(profiles, mask, grid, np.zeros(grid.n_cells))
     assert not issued[..., 0, :].any()
     assert np.isnan(output[..., 0, :]).all()
+
+
+def test_dual_geometry_without_polygons_matches_spherical_voronoi():
+    """Mesh8 has no materialised polygons; the face-circumcentre dual must agree."""
+    from global_weather.joint_forecast_physics import dual_geometry
+    with_polygons = build_grid(3)
+    without_polygons = build_grid(3, exact_voronoi_max_cells=12)
+    assert with_polygons.has_polygon_geometry and not without_polygons.has_polygon_geometry
+    np.testing.assert_allclose(dual_geometry(without_polygons)['areas_m2'], with_polygons.areas_m2, rtol=1e-11)
+    rng = np.random.default_rng(7)
+    u, v = rng.normal(size=(2, 2, with_polygons.n_cells, 5))
+    mask = np.ones_like(u, bool)
+    mask[1, 17, 3] = False
+    first, first_mask = spherical_wind_divergence(u, v, mask, with_polygons)
+    second, second_mask = spherical_wind_divergence(u, v, mask, without_polygons)
+    assert np.array_equal(first_mask, second_mask)
+    np.testing.assert_allclose(second[second_mask], first[first_mask], rtol=1e-9, atol=1e-18)
+
+
+def test_potential_flow_divergence_converges_with_resolution():
+    """chi = R V0 sin(lat): u = 0, v = V0 cos(lat), div = -2 V0 sin(lat) / R."""
+    errors = []
+    for level in (2, 3, 4):
+        grid = build_grid(level, exact_voronoi_max_cells=12)
+        latitude = np.deg2rad(latlon(grid.xyz)[:, 0])
+        v = (10. * np.cos(latitude))[:, None]
+        divergence, mask = spherical_wind_divergence(np.zeros_like(v), v, np.ones_like(v, bool), grid)
+        exact = (-20. * np.sin(latitude) / EARTH_RADIUS_M)[:, None]
+        assert mask.all()
+        errors.append(np.sqrt(np.sum(grid.areas_m2[:, None] * (divergence - exact) ** 2)
+                              / np.sum(grid.areas_m2[:, None] * exact ** 2)))
+    assert errors[-1] < 3e-3
+    assert errors[0] / errors[1] > 2.5 and errors[1] / errors[2] > 2.5
+
+
+def test_edge_chunking_does_not_change_divergence():
+    grid = build_grid(2)
+    rng = np.random.default_rng(3)
+    u, v = rng.normal(size=(2, grid.n_cells, 3))
+    whole, _ = spherical_wind_divergence(u, v, np.ones_like(u, bool), grid)
+    chunked, _ = spherical_wind_divergence(u, v, np.ones_like(u, bool), grid, edge_chunk=17)
+    np.testing.assert_allclose(chunked, whole, rtol=1e-12, atol=1e-20)

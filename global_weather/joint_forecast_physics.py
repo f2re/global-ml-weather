@@ -3,15 +3,24 @@
 This is a continuity diagnostic, not a directly observed or learned omega.
 The imposed upper boundary is omega(100 Pa)=0. No mass correction or lower
 boundary condition is imposed; incomplete wind paths remain missing.
+
+The dual (Voronoi) geometry is derived from the Delaunay faces of the mesh:
+the two endpoints of the dual edge are the spherical circumcentres of the two
+faces sharing a primal edge. This is the same geometry as SphericalVoronoi on
+historical meshes, but it does not require materialised polygons and therefore
+also works on mesh8. Flux accumulation is vectorised through a sparse signed
+incidence matrix, processed in bounded edge chunks.
 """
 from __future__ import annotations
 
 import numpy as np
+from scipy import sparse
 
 from .grid import EARTH_RADIUS_M, latlon
 from .vertical import PRESSURE_HPA
 
 G0 = 9.80665
+DEFAULT_EDGE_CHUNK = 262_144
 
 
 def _transport(vector, origin, destination):
@@ -20,30 +29,77 @@ def _transport(vector, origin, destination):
                      (1 + np.sum(origin * destination, axis=-1)))[..., None] * (origin + destination)
 
 
-def _edge_geometry(grid):
-    cached = getattr(grid, '_joint_flux_geometry', None)
+def _circumcentres(xyz, faces):
+    """Unit circumcentres of spherical Delaunay faces, oriented outward."""
+    a, b, c = xyz[faces[:, 0]], xyz[faces[:, 1]], xyz[faces[:, 2]]
+    normal = np.cross(b - a, c - a)
+    normal /= np.linalg.norm(normal, axis=1, keepdims=True)
+    flip = np.einsum('ij,ij->i', normal, a + b + c) < 0
+    normal[flip] *= -1
+    return normal
+
+
+def _spherical_triangle_area(a, b, c):
+    """Unit-sphere area of triangles (a,b,c), Van Oosterom-Strackee formula."""
+    numerator = np.abs(np.einsum('ij,ij->i', a, np.cross(b, c)))
+    denominator = 1.0 + np.einsum('ij,ij->i', a, b) + np.einsum('ij,ij->i', b, c) + np.einsum('ij,ij->i', c, a)
+    return 2.0 * np.arctan2(numerator, denominator)
+
+
+def dual_geometry(grid):
+    """Return undirected pairs, dual-edge midpoint, normal, length and dual areas.
+
+    pairs[e] = (left, right) with left < right. normal points left -> right.
+    Areas are the exact spherical Voronoi areas built from the same circumcentres,
+    so divergence and the dual edges use one consistent control volume.
+    """
+    cached = getattr(grid, '_dual_flux_geometry', None)
     if cached is not None:
         return cached
-    pairs = grid.edges[:, grid.edges[0] < grid.edges[1]].T
-    midpoints, normals, lengths = [], [], []
-    for left, right in pairs:
-        shared = sorted(set(grid.regions[left]) & set(grid.regions[right]))
-        if len(shared) != 2:
-            raise ValueError('A closed Voronoi edge requires exactly two shared vertices.')
-        va, vb = grid.vertices[shared]
-        midpoint = va + vb
-        midpoint /= np.linalg.norm(midpoint)
-        normal = grid.xyz[right] - grid.xyz[left]
-        normal /= np.linalg.norm(normal)
-        midpoints.append(midpoint)
-        normals.append(normal)
-        lengths.append(EARTH_RADIUS_M * np.arccos(np.clip(np.dot(va, vb), -1, 1)))
-    cached = pairs, np.asarray(midpoints), np.asarray(normals), np.asarray(lengths)
-    grid._joint_flux_geometry = cached
+    faces = np.asarray(grid.faces, dtype=np.int64)
+    xyz = np.asarray(grid.xyz, dtype=np.float64)
+    raw = np.concatenate((faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]))
+    raw.sort(axis=1)
+    owner = np.tile(np.arange(len(faces)), 3)
+    pairs, inverse, counts = np.unique(raw, axis=0, return_inverse=True, return_counts=True)
+    inverse = inverse.reshape(-1)
+    if not np.all(counts == 2):
+        raise ValueError('Every primal edge must be shared by exactly two faces.')
+    order = np.argsort(inverse, kind='stable')
+    face_pair = owner[order].reshape(-1, 2)
+    centres = _circumcentres(xyz, faces)
+    va, vb = centres[face_pair[:, 0]], centres[face_pair[:, 1]]
+    midpoint = va + vb
+    midpoint /= np.linalg.norm(midpoint, axis=1, keepdims=True)
+    left, right = pairs[:, 0], pairs[:, 1]
+    normal = xyz[right] - xyz[left]
+    normal /= np.linalg.norm(normal, axis=1, keepdims=True)
+    length = EARTH_RADIUS_M * np.arccos(np.clip(np.einsum('ij,ij->i', va, vb), -1, 1))
+    # Each dual edge closes two Voronoi sub-triangles: (left, va, vb) and (right, va, vb).
+    sub = np.concatenate((_spherical_triangle_area(xyz[left], va, vb),
+                          _spherical_triangle_area(xyz[right], va, vb)))
+    areas = np.bincount(np.concatenate((left, right)), weights=sub, minlength=len(xyz)) * EARTH_RADIUS_M**2
+    if not np.isfinite(areas).all() or np.any(areas <= 0):
+        raise RuntimeError('Nonpositive dual control volume.')
+    if not np.isclose(areas.sum(), 4 * np.pi * EARTH_RADIUS_M**2, rtol=1e-9):
+        raise RuntimeError('Dual control volumes do not close the sphere.')
+    incidence = sparse.csr_matrix(
+        (np.r_[np.ones(len(pairs)), -np.ones(len(pairs))],
+         (np.r_[left, right], np.r_[np.arange(len(pairs)), np.arange(len(pairs))])),
+        shape=(len(xyz), len(pairs)))
+    cached = {'pairs': pairs, 'midpoint': midpoint, 'normal': normal, 'length': length,
+              'areas_m2': areas, 'incidence': incidence, 'abs_incidence': abs(incidence).tocsr()}
+    grid._dual_flux_geometry = cached
     return cached
 
 
-def spherical_wind_divergence(u, v, mask, grid):
+def _edge_geometry(grid):
+    """Historical interface: (pairs, midpoints, normals, lengths)."""
+    geometry = dual_geometry(grid)
+    return geometry['pairs'], geometry['midpoint'], geometry['normal'], geometry['length']
+
+
+def spherical_wind_divergence(u, v, mask, grid, *, edge_chunk=DEFAULT_EDGE_CHUNK):
     """Return divergence [s^-1] and support for arrays (...,cell,pressure).
 
     A shared edge has one midpoint flux, added with opposite signs to the two
@@ -54,28 +110,43 @@ def spherical_wind_divergence(u, v, mask, grid):
     u, v, mask = np.asarray(u, float), np.asarray(v, float), np.asarray(mask, bool)
     if u.shape != v.shape or mask.shape != u.shape or u.ndim < 2 or u.shape[-2] != grid.n_cells:
         raise ValueError('Wind arrays require matching (...,cell,pressure) shapes.')
+    if type(edge_chunk) is not int or edge_chunk < 1:
+        raise ValueError('edge_chunk must be a positive integer.')
+    geometry = dual_geometry(grid)
+    pairs, midpoint, normal, length = (geometry[key] for key in ('pairs', 'midpoint', 'normal', 'length'))
+    lead_shape, levels = u.shape[:-2], u.shape[-1]
     valid = mask & np.isfinite(u) & np.isfinite(v)
+    # Cell-major layout (cell, lead*level) for sparse accumulation.
+    uu = np.moveaxis(np.where(valid, u, 0).reshape(-1, grid.n_cells, levels), 1, 0).reshape(grid.n_cells, -1)
+    vv = np.moveaxis(np.where(valid, v, 0).reshape(-1, grid.n_cells, levels), 1, 0).reshape(grid.n_cells, -1)
+    ok = np.moveaxis(valid.reshape(-1, grid.n_cells, levels), 1, 0).reshape(grid.n_cells, -1)
     ll = np.deg2rad(latlon(grid.xyz))
     lat, lon = ll[:, 0], ll[:, 1]
     east = np.stack((-np.sin(lon), np.cos(lon), np.zeros_like(lon)), axis=-1)
     north = np.stack((-np.sin(lat) * np.cos(lon), -np.sin(lat) * np.sin(lon), np.cos(lat)), axis=-1)
-    velocity = (np.where(valid, u, 0)[..., None] * east[:, None, :]
-                + np.where(valid, v, 0)[..., None] * north[:, None, :])
-    pairs, midpoint, normal, length = _edge_geometry(grid)
-    sums = np.zeros_like(u)
-    supported = valid.copy()
-    for edge, (left, right) in enumerate(pairs):
-        vl = _transport(velocity[..., left, :, :], grid.xyz[left], midpoint[edge])
-        vr = _transport(velocity[..., right, :, :], grid.xyz[right], midpoint[edge])
-        edge_valid = valid[..., left, :] & valid[..., right, :]
-        flux = np.sum(.5 * (vl + vr) * normal[edge], axis=-1) * length[edge]
-        flux = np.where(edge_valid, flux, 0)
-        sums[..., left, :] += flux
-        sums[..., right, :] -= flux
-        supported[..., left, :] &= edge_valid
-        supported[..., right, :] &= edge_valid
-    divergence = sums / grid.areas_m2[:, None]
-    return np.where(supported, divergence, np.nan), supported
+    flux = np.zeros((len(pairs), uu.shape[1]))
+    edge_valid = np.zeros((len(pairs), uu.shape[1]), dtype=bool)
+    for start in range(0, len(pairs), edge_chunk):
+        stop = min(start + edge_chunk, len(pairs))
+        left, right = pairs[start:stop, 0], pairs[start:stop, 1]
+        mid = midpoint[start:stop][:, None, :]
+        vel_l = uu[left][..., None] * east[left][:, None, :] + vv[left][..., None] * north[left][:, None, :]
+        vel_r = uu[right][..., None] * east[right][:, None, :] + vv[right][..., None] * north[right][:, None, :]
+        vl = _transport(vel_l, grid.xyz[left][:, None, :], mid)
+        vr = _transport(vel_r, grid.xyz[right][:, None, :], mid)
+        both = ok[left] & ok[right]
+        value = np.sum(.5 * (vl + vr) * normal[start:stop][:, None, :], axis=-1) * length[start:stop][:, None]
+        flux[start:stop] = np.where(both, value, 0)
+        edge_valid[start:stop] = both
+    sums = np.asarray(geometry['incidence'] @ flux)
+    invalid = np.asarray(geometry['abs_incidence'] @ (~edge_valid).astype(np.float64)) > 0
+    supported = ok & ~invalid
+    divergence = np.where(supported, sums / geometry['areas_m2'][:, None], np.nan)
+
+    def restore(array):
+        return np.moveaxis(array.reshape(grid.n_cells, -1, levels), 0, 1).reshape(*lead_shape, grid.n_cells, levels)
+
+    return restore(divergence), restore(supported)
 
 
 def integrate_pressure_velocity(divergence, mask, pressure_pa):
@@ -124,7 +195,8 @@ def apply_forecast_physics(profiles, profile_mask, grid, elevation_m):
         'omega_units': 'Pa s-1', 'omega_supervised': False,
         'omega_equation': 'div_h(V) + d(omega)/dp = 0',
         'omega_boundary': 'omega(p=100 Pa)=0 imposed; no lower boundary or mass correction',
-        'omega_discretization': 'shared spherical Voronoi edge midpoint flux; parallel-transported pair winds; vertical trapezoid',
+        'omega_discretization': ('spherical Voronoi dual edges from Delaunay face circumcentres; '
+                                 'midpoint flux of parallel-transported pair winds; vertical trapezoid'),
         'omega_support': 'both wind components and geometric support at every adjacent cell and top-to-level path',
         'issuance_mask': 'predicted geopotential >= g0 * independent land-aware point DEM height',
         'target_mask_modified': False,
