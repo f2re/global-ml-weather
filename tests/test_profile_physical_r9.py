@@ -1,4 +1,4 @@
-"""R9 analytical/structural checks. No remote archive or weather skill claim."""
+"""Physical analytical/structural checks. No remote archive or weather skill claim."""
 from datetime import timedelta
 from types import SimpleNamespace
 import hashlib
@@ -13,7 +13,7 @@ from global_weather.grid import build_grid
 from global_weather.profile_physics import (PhysicalPolicy, parse_policy,
     pressure_layer_thickness, saturation_pressure_water, screen_humidity,
     hydrostatic_projection, physical_objective, RD, EPSILON)
-from global_weather.profile_hydrostatic_model import HydrostaticFlowProfileModel
+from global_weather.profile_hydrostatic_model import HydrostaticFlowProfileModel, KAPPA
 from global_weather.profile_training import START, VARIABLES
 from global_weather.vertical import PRESSURE_HPA, PROFILE_UNITS
 from test_profile_seasonal_model import normalization, rows, ClimateFixture
@@ -65,7 +65,6 @@ def test_unknown_temperature_or_another_launch_never_becomes_a_false_rejection()
     retained,report=screen_humidity([q,t],PhysicalPolicy())
     assert retained==[q,t]
     assert report['reasons']['humidity_unchecked_missing_or_conflicting_paired_temperature']==1
-    # Different time/position is not a thermodynamic pair.
     t=dict(t,profile_id=q['profile_id'],observed_at=(START+timedelta(seconds=1)).isoformat())
     assert screen_humidity([q,t],PhysicalPolicy())[0]==[q,t]
 
@@ -145,18 +144,37 @@ def test_new_model_hydrostatics_causality_masks_and_all_branch_gradients(climate
     for name,value in before.items():assert torch.equal(value,dict(model.named_buffers())[name])
 
 
-def test_flow_conditioning_keeps_constant_state_and_responds_to_wind():
+def test_flow_conditioning_responds_to_advection_pressure_gradient_and_coriolis():
     torch.manual_seed(11);model=HydrostaticFlowProfileModel(build_grid(0),normalization(),8)
     state=torch.randn(12,37,8)
     frame=model._decode(state,START,0);frame.profiles=frame.profiles.detach().clone()
     frame.profiles[...,2:4]=0
+    frame.profiles[...,4]=10000.
     assert torch.allclose(model._flow_neighbours(state,frame),model.graph.neighbours(state),atol=1e-6)
     assert torch.allclose(model._flow_neighbours(torch.ones_like(state),frame),torch.ones_like(state))
+    flat=model._flow_neighbours(state,frame)
+    frame.profiles[...,4]=torch.arange(model.grid.n_cells)[:,None]*500.
+    pressure_forced=model._flow_neighbours(state,frame)
+    assert not torch.allclose(flat,pressure_forced)
+    frame.profiles[...,4]=10000.
     frame.profiles[...,2]=100.
     east=model._flow_neighbours(state,frame)
     frame.profiles[...,2]=-100.
     west=model._flow_neighbours(state,frame)
     assert not torch.allclose(east,west)
+
+
+def test_static_stability_reduces_vertical_cross_interface_mixing():
+    model=HydrostaticFlowProfileModel(build_grid(0),normalization(),4)
+    state=torch.zeros(12,37,4);state[:,10]=1.
+    frame=model._decode(state,START,0);frame.profiles=frame.profiles.detach().clone()
+    theta=torch.full((37,),300.)
+    neutral_t=theta*(model.pressure_pa/100000.).pow(KAPPA)
+    frame.profiles[...,0]=neutral_t
+    neutral=model._stability_neighbours(state,frame)
+    frame.profiles[:,10:,0]+=50.*(model.pressure_pa[10:]/100000.).pow(KAPPA)
+    stable=model._stability_neighbours(state,frame)
+    assert torch.all(stable[:,9] < neutral[:,9])
 
 
 def test_robust_loss_grouping_and_gradient_without_changing_sigma(monkeypatch):
@@ -173,7 +191,6 @@ def test_robust_loss_grouping_and_gradient_without_changing_sigma(monkeypatch):
     b,_,_=physical_objective(model,frames,targets*25,PhysicalPolicy())
     assert torch.equal(a,b)
     a.backward();assert parameter.grad==pytest.approx(2.5)
-    # Original normalized MSE would give derivative 2000 for this residual.
     uncertain=[dict(targets[0],observation_error=3.)]
     c,_,_=physical_objective(model,frames,uncertain,PhysicalPolicy())
     assert c<a
@@ -190,8 +207,6 @@ def test_config_preserves_legacy_limits_and_checks_new_resource_budget():
 
 @pytest.mark.parametrize('architecture',['legacy','hydrostatic_flow'])
 def test_r9_measured_pipeline_contract_resume_and_physical_diagnostics(tmp_path,monkeypatch,architecture):
-    # Synthetic records with an explicitly marked test fixture; no remote
-    # measurements acquired. The genuine fixed GraphCast norm bytes are reused.
     from global_weather import profile_training_v2 as training
     from global_weather.profile_training import prepare,TRAIN_END,VAL_END
     from global_weather.profile_graphcast_normalization import create
