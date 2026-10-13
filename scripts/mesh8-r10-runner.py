@@ -27,19 +27,36 @@ def now():
     return datetime.now(timezone.utc)
 
 
+def safe_path(path, *, required=None):
+    """Make a path absolute without erasing evidence of a symlink component."""
+    value = Path(os.path.abspath(os.fspath(Path(path).expanduser())))
+    for component in (value, *value.parents):
+        if component.is_symlink():
+            raise ValueError('R10 paths may not contain symlinks: '+str(component))
+    if required == 'file' and not value.is_file():
+        raise ValueError('Required R10 file is missing: '+str(value))
+    if required == 'directory' and not value.is_dir():
+        raise ValueError('Required R10 directory is missing: '+str(value))
+    return value
+
+
 def digest(path):
     h = hashlib.sha256()
-    with Path(path).open('rb') as stream:
+    with safe_path(path, required='file').open('rb') as stream:
         for block in iter(lambda: stream.read(1024**2), b''):
             h.update(block)
     return h.hexdigest()
 
 
 def save(path, value):
-    path = Path(path); temporary = path.with_suffix(path.suffix+'.tmp')
-    temporary.write_text(json.dumps(value, indent=2, allow_nan=False)+'\n')
-    with temporary.open('rb') as stream:
-        os.fsync(stream.fileno())
+    path = safe_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix+'.tmp')
+    if temporary.exists() and temporary.is_symlink():
+        raise ValueError('R10 temporary output may not be a symlink.')
+    with temporary.open('w') as stream:
+        stream.write(json.dumps(value, indent=2, allow_nan=False)+'\n')
+        stream.flush(); os.fsync(stream.fileno())
     os.replace(temporary, path)
 
 
@@ -96,11 +113,15 @@ def main(argv=None):
     if deadline.tzinfo is None or deadline <= now():
         raise SystemExit('R10 deadline must be a future offset-aware timestamp.')
 
-    run_root = Path(args.run_root).expanduser().resolve()
-    if run_root.is_symlink() or any(parent.is_symlink() for parent in run_root.parents):
-        raise SystemExit('R10 run root may not use symlinks.')
+    dataset = safe_path(args.dataset, required='directory')
+    norm = safe_path(args.norm, required='file')
+    climatology = safe_path(args.climatology, required='directory')
+    static = safe_path(args.static, required='directory')
+    config = safe_path(args.config, required='file')
+    run_root = safe_path(args.run_root)
     run_root.mkdir(parents=True, exist_ok=True)
-    logs = run_root/'logs'; logs.mkdir(exist_ok=True)
+    run_root = safe_path(run_root, required='directory')
+    logs = run_root/'logs'; logs.mkdir(exist_ok=True); safe_path(logs, required='directory')
     evidence_path = run_root/'execution-evidence.json'
     evidence = json.loads(evidence_path.read_text()) if evidence_path.exists() else {
         'schema': 'mesh8-r10-execution-evidence-1', 'source_commit': actual_sha,
@@ -111,16 +132,16 @@ def main(argv=None):
     evidence['status'] = 'running'; save(evidence_path, evidence)
 
     python = sys.executable
-    common = ['--dataset', str(Path(args.dataset).resolve()), '--norm', str(Path(args.norm).resolve()),
-              '--climatology', str(Path(args.climatology).resolve()), '--static', str(Path(args.static).resolve())]
+    common = ['--dataset', str(dataset), '--norm', str(norm),
+              '--climatology', str(climatology), '--static', str(static)]
     preflight = [python, '-m', 'global_weather.mesh8_preflight', *common,
-                 '--config', str(Path(args.config).resolve()), '--run-root', str(run_root),
+                 '--config', str(config), '--run-root', str(run_root),
                  '--expected-sha', actual_sha]
     training = [python, '-m', 'global_weather.joint_observation_training', *common,
-                '--config', str(Path(args.config).resolve()), '--output', str(run_root/'training')]
+                '--config', str(config), '--output', str(run_root/'training')]
     inference = [python, '-m', 'global_weather.joint_observation_inference',
-                 '--dataset', str(Path(args.dataset).resolve()), '--training', str(run_root/'training'),
-                 '--static', str(Path(args.static).resolve()), '--output', str(run_root/'forecast'),
+                 '--dataset', str(dataset), '--training', str(run_root/'training'),
+                 '--static', str(static), '--output', str(run_root/'forecast'),
                  '--split', 'validation', '--limit', '2', '--horizon-hours', '3', '--device', 'cuda:0',
                  '--warmups', '1', '--repeats', '3', '--threads', '8', '--spacing-degrees', '5',
                  '--source-revision', actual_sha]
