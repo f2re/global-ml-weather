@@ -103,7 +103,9 @@ def spherical_wind_divergence(u, v, mask, grid, *, edge_chunk=DEFAULT_EDGE_CHUNK
     Arrays are ``(..., cell, pressure)``. Fluxes are processed by edge and
     pressure chunks, so mesh8 never materialises a
     ``[1_966_080, 37, 3]`` velocity tensor. A cell-level divergence is supported
-    only if all of its surrounding edge winds are supported.
+    only if all of its surrounding edge winds are supported. Support is derived
+    from the original wind mask only; an invalid cell may invalidate its direct
+    neighbours but cannot propagate farther because of edge iteration order.
     """
     raw_u, raw_v = np.asarray(u), np.asarray(v)
     output_dtype = np.float64 if raw_u.dtype.itemsize >= 8 or raw_v.dtype.itemsize >= 8 else np.float32
@@ -125,6 +127,7 @@ def spherical_wind_divergence(u, v, mask, grid, *, edge_chunk=DEFAULT_EDGE_CHUNK
     ll = np.deg2rad(latlon(grid.xyz))
     lat, lon = ll[:, 0], ll[:, 1]
     basis_dtype = np.float64 if output_dtype == np.float64 else np.float32
+    xyz = np.asarray(grid.xyz, dtype=basis_dtype)
     east = np.stack((-np.sin(lon), np.cos(lon), np.zeros_like(lon)), axis=-1).astype(basis_dtype)
     north = np.stack((-np.sin(lat)*np.cos(lon), -np.sin(lat)*np.sin(lon), np.cos(lat)), axis=-1).astype(basis_dtype)
     pairs, midpoint, normal, length, _ = _edge_geometry(grid)
@@ -136,12 +139,13 @@ def spherical_wind_divergence(u, v, mask, grid, *, edge_chunk=DEFAULT_EDGE_CHUNK
             level_stop = min(level_start + level_chunk, pressure_count)
             section = slice(level_start, level_stop)
             sums = np.zeros((grid.n_cells, level_stop-level_start), dtype=np.float64)
-            local_support = validf[sample, :, section].copy()
+            base_support = validf[sample, :, section]
+            local_support = base_support.copy()
             for edge_start in range(0, len(pairs), edge_chunk):
                 edge_stop = min(edge_start + edge_chunk, len(pairs))
                 left = pairs[edge_start:edge_stop, 0]
                 right = pairs[edge_start:edge_stop, 1]
-                edge_valid = local_support[left] & local_support[right]
+                edge_valid = base_support[left] & base_support[right]
                 ul = np.where(edge_valid, uf[sample, left, section], 0)
                 vl = np.where(edge_valid, vf[sample, left, section], 0)
                 ur = np.where(edge_valid, uf[sample, right, section], 0)
@@ -149,8 +153,8 @@ def spherical_wind_divergence(u, v, mask, grid, *, edge_chunk=DEFAULT_EDGE_CHUNK
                 left_vector = ul[..., None]*east[left, None, :] + vl[..., None]*north[left, None, :]
                 right_vector = ur[..., None]*east[right, None, :] + vr[..., None]*north[right, None, :]
                 mid = midpoint[edge_start:edge_stop]
-                left_vector = _transport(left_vector, grid.xyz[left, None, :], mid[:, None, :])
-                right_vector = _transport(right_vector, grid.xyz[right, None, :], mid[:, None, :])
+                left_vector = _transport(left_vector, xyz[left, None, :], mid[:, None, :])
+                right_vector = _transport(right_vector, xyz[right, None, :], mid[:, None, :])
                 flux = np.sum(.5*(left_vector+right_vector)*normal[edge_start:edge_stop, None, :], axis=-1)
                 flux *= length[edge_start:edge_stop, None]
                 flux = np.where(edge_valid, flux, 0).astype(np.float64, copy=False)
@@ -270,16 +274,21 @@ def _common_support_budget(profiles, mask, grid, pressure):
             'interpretation': 'pressure-coordinate integrals on common issued support; diagnostics, not enforced closed-system budgets'}
 
 
-def apply_forecast_physics(profiles, profile_mask, grid, elevation_m, *, copy=True,
+def apply_forecast_physics(profiles, profile_mask, grid, elevation_m, *, copy=None,
                            edge_chunk=DEFAULT_EDGE_CHUNK, level_chunk=DEFAULT_LEVEL_CHUNK):
     """Apply issuance physics and return auditable diagnostics.
 
-    ``copy=False`` is intended for the mesh8 inference pipeline where the newly
-    stacked forecast arrays are disposable and duplicating them would cost more
-    than a gigabyte. Callers needing value semantics keep the default.
+    Small-grid callers retain value semantics by default. Mesh8 defaults to
+    in-place processing because inference has just created disposable stacked
+    arrays and duplicating the profile tensor costs more than a gigabyte.
+    Explicit ``copy=True/False`` always overrides this policy.
     """
     profiles = np.asarray(profiles, dtype=np.float32)
     mask = np.asarray(profile_mask, dtype=bool)
+    if copy is None:
+        copy = grid.level != 8
+    if type(copy) is not bool:
+        raise ValueError('copy must be bool or None.')
     if copy:
         profiles, mask = profiles.copy(), mask.copy()
     elevation = np.asarray(elevation_m, np.float32)
