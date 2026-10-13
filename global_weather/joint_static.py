@@ -8,7 +8,7 @@ import tempfile
 
 import numpy as np
 
-from .grid import EARTH_RADIUS_M, build_grid, latlon
+from .grid import EARTH_RADIUS_M, build_grid, build_mesh8_grid, latlon
 from .observation_training import digest, save
 from .terrain import dem_samples, local_file
 
@@ -90,7 +90,7 @@ def prepare_static(dem_path, dem_manifest, land_geojson, land_sha256, output, *,
             or digest(land_path) != land_sha256):
         raise ValueError('Independent land GeoJSON hash differs.')
     dem_metadata = json.loads(manifest_path.read_text())
-    grid = build_grid(mesh_level)
+    grid = build_mesh8_grid() if mesh_level == 8 else build_grid(mesh_level)
     ll = latlon(grid.xyz)
     land = land_at_points(json.loads(land_path.read_text()), ll[:, 0], ll[:, 1])
     sampled = dem_samples(dem_path, dem_metadata, ll[:, 0], ll[:, 1])
