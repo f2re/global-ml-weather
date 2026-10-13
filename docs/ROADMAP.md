@@ -8,7 +8,7 @@
 
 ## Текущий приоритет: mesh8 R10
 
-[Решение 0018](decisions/0018-mesh8-end-to-end-qualification.md) фиксирует `joint-mesh8-qualification-r10`.
+[Решение 0018](decisions/0018-mesh8-end-to-end-qualification.md) фиксирует геометрию и первоначальный контур `joint-mesh8-qualification-r10`. [Решение 0019](decisions/0019-r10-physical-core-and-final-execution.md) фиксирует завершённую реализацию physical-v2 и fail-closed Q4→Q5. Операторский порядок приведён в [финальном runbook](MESH8_R10_FINAL_RUN.md).
 
 Цель R10 — не доказать качество прогноза, а квалифицировать полный вычислительный тракт на `mesh_level=8`:
 
@@ -17,13 +17,18 @@
 3. сезонный NCEP1 context;
 4. mesh8 DEM/static fields;
 5. CUDA forward/backward, validation и checkpoint;
-6. frozen reload, физические диагностики и GRIB2.
+6. frozen reload, physical-v2 diagnostics и GRIB2;
+7. независимый final evidence gate с SHA256 и фактической CUDA telemetry.
 
-Q0 уже пройден на полной сетке. Канонический fingerprint mesh8: `992e223cc99417d5f12f8ed6d314579d4006a788ca9d935af1f5abc22b2b76b9`. Full graph smoke подтвердил 655362 ячейки, 3932160 направленных рёбер и глобальное замыкание площади.
+Q0 пройден на полной сетке. Канонический fingerprint mesh8: `992e223cc99417d5f12f8ed6d314579d4006a788ca9d935af1f5abc22b2b76b9`. Full graph smoke подтвердил 655362 ячейки, 3932160 направленных рёбер и глобальное замыкание площади.
 
-Q1–Q3 имеют реализованные fail-closed пути, но их реальные data artifacts должны быть построены и проверены на вычислительном узле. Q4 требует реального CUDA executor; Q5 закрывается только frozen checkpoint из Q4. Пока Q4/Q5 не выполнены, статус R10 остаётся `scientific_acceptance=false` и переход к 72 часам запрещён.
+Реализация physical-v2 завершена. Профильный processor использует жёсткую гидростатическую проекцию, ограниченный specific humidity, wind-directed exchange с conditioning по градиенту геопотенциала и Кориолису, а вертикальная связь зависит от устойчивости по потенциальной температуре. Joint surface head ограничивает `T>0`, `Td<=T`, `Ps>0` и `MSLP>0`. Mesh8 `omega` вычисляется memory-bounded finite-volume continuity operator без полного Voronoi; дополнительно выдаются hydrostatic/continuity residuals и диагностические интегралы воды и энергии.
 
-После успешного R10 создаётся новый experiment ID для mesh8 72h. До него обязательны streaming/checkpointed rollout и streaming export; нельзя автоматически поднимать `hidden`, epochs или horizon.
+Эти свойства не превращают сеть в явный решатель примитивных уравнений: точное сохранение полной массы/энергии и CFL-устойчивость не заявляются.
+
+Q1–Q3 имеют реализованные fail-closed пути и preflight, но их реальные data artifacts ещё должны быть построены и проверены на вычислительном узле. Q4 и Q5 программно готовы: фиксированный runner выполняет `preflight → one-epoch CUDA qualification → frozen +3h inference → physics/GRIB2 → final evidence gate`. Фактический CUDA запуск ещё не выполнен, поэтому `scientific_acceptance=false` и переход к 72 часам запрещён.
+
+После успешного R10 создаётся новый experiment ID для mesh8 72h. До него обязательны фактическая VRAM/RSS telemetry, streaming/checkpointed rollout, streaming export и независимая skill verification; нельзя автоматически поднимать `hidden`, epochs или horizon.
 
 ## Приоритет: непрерывное обучение по датам
 
@@ -41,10 +46,10 @@ Joint GHCNh + IGRA уже используется в реальном проф�
 
 После инженерной квалификации mesh8:
 
-1. построить и зафиксировать реальные Q1–Q3 artifacts;
-2. выполнить R10 на CUDA с фактической VRAM/RSS telemetry;
-3. перезагрузить immutable best checkpoint и закрыть Q5;
-4. реализовать streaming 72h rollout/export;
+1. построить и зафиксировать реальные Q2 climate и Q3 static artifacts;
+2. выполнить preflight на exact clean SHA и CUDA-узле;
+3. выполнить R10 Q4→Q5 фиксированным runner и сохранить final-verification;
+4. по фактической VRAM/RSS разработать streaming 72h rollout/export;
 5. создать отдельный mesh8 72h experiment;
 6. верифицировать RMSE/MAE/ACC по срокам и уровням относительно climatology/persistence и независимого эталона;
 7. проверить гидростатику, continuity, водный/энергетический баланс и спектральное разрешение;
@@ -56,4 +61,4 @@ Joint GHCNh + IGRA уже используется в реальном проф�
 
 Точечная выборка DEM не заменяет среднее по площади и характеристики неразрешённой орографии. Нужны консервативные операторы, дисперсия рельефа и согласованность орографии с обучающими целями.
 
-Полный водный бюджет требует источников, стоков, конденсата и устойчивого переноса. Ансамбль, вероятностная калибровка, HEALPix и распределённое обучение остаются отдельными исследованиями. Оперативный выпуск требует независимой научной приёмки.
+Полный физически замкнутый водный бюджет требует источников, стоков, конденсата и переноса в самом prognostic core. Текущие water/dry-static/kinetic integrals являются диагностикой на общей маске, а не hard conservation law. Ансамбль, вероятностная калибровка, HEALPix и распределённое обучение остаются отдельными исследованиями. Оперативный выпуск требует независимой научной приёмки.
