@@ -10,8 +10,10 @@ import torch
 
 from global_weather.grid import (
     EARTH_RADIUS_M,
+    MESH8_FINGERPRINT_QUANTIZATION,
     _base_icosahedron,
     _directed_edges,
+    _mesh8_geometry_fingerprint,
     _vector_refine_once,
     build_grid,
     grid_cell_count,
@@ -76,6 +78,19 @@ def test_vector_refinement_preserves_icosahedral_topology_on_small_fixture():
     degree = np.bincount(edges[0], minlength=len(refined_xyz))
     assert np.count_nonzero(degree == 5) == 12
     assert np.isin(degree, [5, 6]).all()
+
+
+def test_mesh8_fingerprint_ignores_harmless_sub_quantum_float_drift():
+    # Identity must not depend on sub-metre normalisation drift between NumPy
+    # builds. A displacement larger than the declared quantisation must still
+    # change the geometry identity.
+    xyz = np.array([[.12345671, .2, .3], [-.4, .5, .6]], dtype=np.float64)
+    edges = np.array([[0, 1], [1, 0]], dtype=np.int64)
+    baseline = _mesh8_geometry_fingerprint(xyz, edges)
+    tiny = xyz.copy(); tiny[0, 0] += .1/MESH8_FINGERPRINT_QUANTIZATION
+    assert _mesh8_geometry_fingerprint(tiny, edges) == baseline
+    shifted = xyz.copy(); shifted[0, 0] += 2/MESH8_FINGERPRINT_QUANTIZATION
+    assert _mesh8_geometry_fingerprint(shifted, edges) != baseline
 
 
 def test_high_resolution_area_algorithm_closes_sphere_without_voronoi_polygons():
