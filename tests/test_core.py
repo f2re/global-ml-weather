@@ -65,7 +65,7 @@ def test_mask_crosses_dateline(grids):
     assert np.array_equal(g.region_mask(-90,90,150,-150),expected)
 
 def test_build_memory_guard():
-    with pytest.raises(ValueError): build_grid(8)
+    with pytest.raises(ValueError): build_grid(8, max_cells=200_000)
 
 @pytest.mark.parametrize('levels',[(100,100),(100,200),(100,np.nan),(100,0)])
 def test_bad_pressure_axis(levels):

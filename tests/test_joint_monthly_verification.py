@@ -219,3 +219,57 @@ def test_two_stages_raw_error_pairs_and_complete_aggregate(tmp_path, monkeypatch
     assert len(scored) == 2
     assert all(row['metrics']['model']['bias'] == pytest.approx(-5., abs=1e-3) for row in scored)
     assert all(row['metrics']['persistence']['count'] == row['metrics']['persistence_model_paired']['count'] == 1 for row in scored)
+
+
+@pytest.mark.parametrize('level,rollout,role', [(0, 3, 'joint_measured_science_pilot'),
+                                             (8, 3, 'mesh8_end_to_end_qualification'),
+                                             (8, 72, 'mesh8_end_to_end_qualification'),
+                                             (0, 72, 'mesh8_end_to_end_qualification')])
+def test_monthly_forecast_rejects_unqualified_checkpoint_before_history_or_output(tmp_path, monkeypatch, level, rollout, role):
+    import global_weather.joint_observation_training as training
+    import global_weather.joint_static as static
+    state = {'config': {'mesh_level': level, 'rollout_hours': rollout, 'experiment_role': role}}
+    model = SimpleNamespace(grid=SimpleNamespace(level=level), xyz=torch.zeros(1),
+                            frozen_metadata=state, frozen_checkpoint_sha256='a'*64)
+    class ForbiddenHistory:
+        def forecast_history(self, *args): pytest.fail('Unqualified monthly forecast read observations.')
+    monkeypatch.setattr(training, 'load_frozen', lambda *args, **kwargs: (model, ForbiddenHistory()))
+    monkeypatch.setattr(static, 'load_static', lambda *args: pytest.fail('Unqualified forecast read static fields.'))
+    monkeypatch.setattr(module, 'timed_forecast', lambda *args, **kwargs: pytest.fail('Unqualified rollout executed.'))
+    output = tmp_path/'unqualified-month'
+    with pytest.raises(ValueError, match='checkpoint-qualified|Mesh-8 qualification'):
+        module.forecast_month('dataset', 'training', 'static', output)
+    assert not output.exists()
+
+
+def test_monthly_verification_rejects_mesh8_checkpoint_before_target_reads(tmp_path, monkeypatch):
+    import global_weather.joint_observation_training as training
+    from global_weather.grib_export import sha256
+    issue = module.monthly_issues()[0]
+    forecasts = tmp_path/'forecasts'; forecasts.mkdir()
+    folder = forecasts/issue.strftime('%Y%m%dT%H%M%SZ'); folder.mkdir()
+    descriptor = {'issue_time': issue.isoformat(), 'directory': folder.name}
+    for name, key in (('verification-state.npz', 'verification_state_sha256'),
+                      ('inputs.npz', 'inputs_sha256'), ('profile_inputs.json', 'profile_inputs_sha256')):
+        (folder/name).write_bytes(b'bound raw artifact; guard must precede opening arrays')
+        descriptor[key] = sha256(folder/name)
+    (forecasts/'month.json').write_text(json.dumps({'schema': module.SCHEMA, 'stage': 'forecast',
+        'status': 'complete', 'future_targets_read': False, 'products': [descriptor],
+        'lead_hours': module.LEADS.tolist()}))
+    model = SimpleNamespace(grid=SimpleNamespace(level=8), frozen_checkpoint_sha256='a'*64,
+                frozen_metadata={'config': {'mesh_level': 8, 'rollout_hours': 3,
+                                           'experiment_role': 'mesh8_end_to_end_qualification'}})
+    monkeypatch.setattr(module, 'monthly_issues', lambda *args: [issue])
+    monkeypatch.setattr(training, 'load_frozen', lambda *args, **kwargs: (model, object()))
+    monkeypatch.setattr(module, 'iter_target_groups', lambda *args, **kwargs: pytest.fail('Unqualified verification opened profile targets.'))
+    monkeypatch.setattr(module, 'iter_native_targets', lambda *args, **kwargs: pytest.fail('Unqualified verification opened native targets.'))
+    output = tmp_path/'scores'
+    with pytest.raises(ValueError, match='checkpoint-qualified'):
+        module.verify_month('dataset', 'training', 'static', forecasts, output)
+    assert not output.exists()
+
+
+def test_monthly_qualification_preserves_legacy_full_horizon_convention():
+    model = SimpleNamespace(grid=SimpleNamespace(level=2))
+    module._require_monthly_qualification(model, {'config': {}})
+    module._require_monthly_qualification(model, {'config': {'rollout_hours': 72, 'mesh_level': 2}})

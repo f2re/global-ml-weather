@@ -79,6 +79,19 @@ def _bind_config(state, checkpoint_hash, config):
         raise ValueError('Configured checkpoint or causal input budget differs from frozen training.')
 
 
+def _require_monthly_qualification(model, state):
+    """Monthly diagnostics require the checkpoint-qualified full 72-hour path."""
+    checkpoint_config = state['config']
+    # Match the existing frozen inference convention for historical checkpoints
+    # that predate the explicit rollout_hours field; do not modify their identity.
+    qualified_horizon = int(checkpoint_config.get('rollout_hours', 72))
+    if qualified_horizon < 72:
+        raise ValueError('Monthly 72-hour horizon exceeds the checkpoint-qualified rollout.')
+    if (model.grid.level == 8 or checkpoint_config.get('mesh_level') == 8
+            or checkpoint_config.get('experiment_role') == 'mesh8_end_to_end_qualification'):
+        raise ValueError('Mesh-8 qualification is limited to the reviewed 3-hour inference path; monthly verification is unavailable.')
+
+
 def monthly_issues(month='2022-09', issue_hour=6):
     if type(issue_hour) is not int or not 0 <= issue_hour <= 23:
         raise ValueError('Issue hour must be an integer in 0..23 UTC.')
@@ -145,6 +158,7 @@ def forecast_month(dataset, training, static, output, *, month='2022-09', issue_
     model, joint = load_frozen(dataset, training, device=device)
     selected_device = model.xyz.device
     state, checkpoint_hash = model.frozen_metadata, model.frozen_checkpoint_sha256
+    _require_monthly_qualification(model, state)
     _bind_config(state, checkpoint_hash, config)
     static_fields = load_static(static, model.grid)
     if static_fields['static_sha256'] != state['identity']['static_fingerprint']:
@@ -366,6 +380,7 @@ def verify_month(dataset, training, static, forecasts, output, *, month='2022-09
                 raise ValueError('Monthly frozen raw forecast or inputs changed.')
     model, joint = load_frozen(dataset, training, device='cpu')
     state = model.frozen_metadata
+    _require_monthly_qualification(model, state)
     _bind_config(state, model.frozen_checkpoint_sha256, config)
     if (model.frozen_checkpoint_sha256 != frozen['checkpoint_sha256'] or state['identity'] != frozen['identity']
             or joint.fingerprint != frozen['dataset_fingerprint']
