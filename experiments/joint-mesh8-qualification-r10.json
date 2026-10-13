@@ -14,6 +14,8 @@
     "faces": 1310720,
     "directed_edges": 3932160,
     "five_neighbour_cells": 12,
+    "six_neighbour_cells": 655350,
+    "grid_fingerprint": "992e223cc99417d5f12f8ed6d314579d4006a788ca9d935af1f5abc22b2b76b9",
     "nominal_area_scale_km": 27.897963965175485,
     "area_method": "one_third_spherical_triangle_control_volume",
     "meteorological_resolution_claimed": false
@@ -42,12 +44,13 @@
     "Q0_geometry_graph": {
       "status": "passed",
       "workflow": "mesh8-qualification",
-      "workflow_run_id": 38332731835,
-      "head_sha": "6b6163548a3c145c716ef7b31088ead146c5294b",
-      "artifact_id": 11783024621,
-      "geometry_seconds": 5.376558513999981,
-      "graph_exchange_seconds": 0.37312641200000485,
-      "peak_rss_bytes": 684527616,
+      "workflow_run_id": 38333408280,
+      "head_sha": "0c26d09ef97fe525411c5414ebc775ce4c229125",
+      "artifact_id": 11784180964,
+      "grid_fingerprint": "992e223cc99417d5f12f8ed6d314579d4006a788ca9d935af1f5abc22b2b76b9",
+      "geometry_seconds": 5.987518522000002,
+      "graph_exchange_seconds": 0.38455290399998887,
+      "peak_rss_bytes": 737333248,
       "relative_area_closure_error": 6.126659548448028e-16,
       "contract_tests": "6 passed"
     },
