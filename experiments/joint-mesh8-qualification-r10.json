@@ -52,10 +52,16 @@
     "directed_edges": 3932160,
     "five_neighbour_cells": 12,
     "six_neighbour_cells": 655350,
-    "grid_fingerprint": "992e223cc99417d5f12f8ed6d314579d4006a788ca9d935af1f5abc22b2b76b9",
-    "nominal_area_scale_km": 27.897963965175485,
+    "grid_fingerprint": "64c3e32f792a42ad7d363635e5217cd3c845743a9b92487fdc226da5f1937aa9",
+    "fingerprint_schema": "mesh8-geometry-q1e-7-v1",
+    "fingerprint_coordinate_quantization": 10000000,
+    "nominal_area_scale_km": 27.897963965175478,
     "area_method": "one_third_spherical_triangle_control_volume",
-    "meteorological_resolution_claimed": false
+    "meteorological_resolution_claimed": false,
+    "retired_identity": {
+      "fingerprint": "992e223cc99417d5f12f8ed6d314579d4006a788ca9d935af1f5abc22b2b76b9",
+      "reason": "environment-sensitive 1e-12 floating-point byte identity; geometry/topology unchanged"
+    }
   },
   "qualification_envelope": {
     "rollout_hours": 3,
@@ -90,17 +96,18 @@
   },
   "stages": {
     "Q0_geometry_graph": {
-      "status": "passed",
+      "status": "passed_requalified_stable_identity",
       "workflow": "mesh8-qualification",
-      "workflow_run_id": 38333408280,
-      "head_sha": "0c26d09ef97fe525411c5414ebc775ce4c229125",
-      "artifact_id": 11784180964,
-      "grid_fingerprint": "992e223cc99417d5f12f8ed6d314579d4006a788ca9d935af1f5abc22b2b76b9",
-      "geometry_seconds": 5.987518522000002,
-      "graph_exchange_seconds": 0.38455290399998887,
-      "peak_rss_bytes": 737333248,
-      "relative_area_closure_error": 6.126659548448028e-16,
-      "contract_tests": "6 passed"
+      "workflow_run_id": 38389968579,
+      "head_sha": "145ba93e4aa3ff60246773b49ffb462cc9b58136",
+      "artifact_id": 11808376808,
+      "grid_fingerprint": "64c3e32f792a42ad7d363635e5217cd3c845743a9b92487fdc226da5f1937aa9",
+      "fingerprint_schema": "mesh8-geometry-q1e-7-v1",
+      "geometry_seconds": 3.4873862130000077,
+      "graph_exchange_seconds": 0.24826702199999318,
+      "peak_rss_bytes": 675614720,
+      "relative_area_closure_error": 1.2253319096896055e-16,
+      "physical_and_r10_contract_tests": "48 passed"
     },
     "Q1_data_normalization": {
       "status": "implemented_preflight_runtime_verification_pending",
@@ -115,11 +122,13 @@
     "Q2_climate_context": {
       "status": "implemented_artifact_build_and_preflight_pending",
       "required_source_mesh_level": 4,
-      "target_mesh_level": 8
+      "target_mesh_level": 8,
+      "note": "artifacts produced with the retired mesh8 fingerprint must be rebuilt or explicitly migrated"
     },
     "Q3_static_terrain": {
       "status": "implemented_artifact_build_and_preflight_pending",
-      "target_mesh_level": 8
+      "target_mesh_level": 8,
+      "note": "artifacts produced with the retired mesh8 fingerprint must be rebuilt or explicitly migrated"
     },
     "Q4_cuda_train_validation": {
       "status": "implementation_complete_pending_executor_run",
