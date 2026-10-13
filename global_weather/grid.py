@@ -1,7 +1,14 @@
-"""Icosahedral Delaunay mesh and its spherical Voronoi (hex/pent) dual.
+"""Icosahedral Delaunay mesh and its spherical dual geometry.
 
 This is NOT H3. The native hierarchy has 10*4**level+2 cells. Pooling groups
 are nearest-coarse-centre groups, not exact nested polygon intersections.
+
+Levels up to the reviewed small-grid range retain the historical construction
+order and exact :class:`scipy.spatial.SphericalVoronoi` areas so existing
+fingerprints/checkpoints do not change. High-resolution levels use vectorised
+refinement and vertex-centred one-third spherical-triangle control-volume
+areas. The latter close globally and are suitable for conservative weighting,
+but they are not exact Voronoi polygons and are labelled accordingly.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -11,6 +18,12 @@ import numpy as np
 from scipy.spatial import ConvexHull, SphericalVoronoi, cKDTree
 
 EARTH_RADIUS_M = 6_371_008.8
+MESH8_LEVEL = 8
+MESH8_CELLS = 655_362
+# Keep exact Voronoi/polygon construction away from the 655k-cell experiment.
+EXACT_VORONOI_MAX_CELLS = 50_000
+# Level 8 is the supported high-resolution research ceiling by default.
+DEFAULT_MAX_CELLS = MESH8_CELLS
 
 
 def grid_cell_count(level: int) -> int:
@@ -50,6 +63,8 @@ class SphereGrid:
     areas_m2: np.ndarray
     vertices: np.ndarray
     regions: list[list[int]]
+    area_method: str = 'spherical_voronoi'
+    has_polygon_geometry: bool = True
 
     @property
     def n_cells(self):
@@ -72,7 +87,7 @@ class SphereGrid:
         return h.hexdigest()
 
     def locate(self, lat_deg, lon_deg):
-        """Nearest centre identifies a Voronoi cell, including poles/dateline."""
+        """Nearest centre identifies a model cell, including poles/dateline."""
         if not np.all(np.isfinite(lat_deg)) or not np.all(np.isfinite(lon_deg)):
             raise ValueError('Coordinates must be finite.')
         if np.any(np.abs(np.asarray(lat_deg)) > 90):
@@ -89,19 +104,21 @@ class SphereGrid:
         return (ll[:, 0] >= south) & (ll[:, 0] <= north) & lon_ok
 
     def save(self, path):
-        offsets = np.r_[0, np.cumsum([len(x) for x in self.regions])]
+        lengths = [len(x) for x in self.regions]
+        offsets = np.r_[0, np.cumsum(lengths)]
+        polygon_indices = (np.concatenate(self.regions).astype(np.int64, copy=False)
+                           if self.regions else np.empty(0, dtype=np.int64))
         np.savez_compressed(path, level=self.level, xyz=self.xyz, faces=self.faces,
                             edge_index=self.edges, area_m2=self.areas_m2,
                             polygon_vertices=self.vertices,
-                            polygon_offsets=offsets, polygon_indices=np.concatenate(self.regions),
+                            polygon_offsets=offsets, polygon_indices=polygon_indices,
                             fingerprint=self.fingerprint,
-                            nominal_area_scale_km=self.nominal_area_scale_km)
+                            nominal_area_scale_km=self.nominal_area_scale_km,
+                            area_method=self.area_method,
+                            has_polygon_geometry=self.has_polygon_geometry)
 
 
-def build_grid(level=1, *, max_cells=200_000):
-    n = grid_cell_count(level)
-    if n > max_cells:
-        raise ValueError(f'{n} cells exceeds explicit build limit {max_cells}.')
+def _base_icosahedron():
     phi = (1 + np.sqrt(5.)) / 2
     points = []
     for a in (-1., 1.):
@@ -111,9 +128,15 @@ def build_grid(level=1, *, max_cells=200_000):
     xyz /= np.linalg.norm(xyz, axis=1, keepdims=True)
     faces = np.sort(ConvexHull(xyz).simplices, axis=1)
     faces = faces[np.lexsort(faces.T[::-1])]
-    for _ in range(level):
+    return xyz, faces.astype(np.int64, copy=False)
+
+
+def _legacy_refine(xyz, faces, steps):
+    """Historical refinement order used by existing small-grid fingerprints."""
+    for _ in range(steps):
         points = list(xyz)
         midpoints = {}
+
         def midpoint(i, j):
             key = tuple(sorted((int(i), int(j))))
             if key not in midpoints:
@@ -121,24 +144,100 @@ def build_grid(level=1, *, max_cells=200_000):
                 midpoints[key] = len(points)
                 points.append(p / np.linalg.norm(p))
             return midpoints[key]
+
         refined = []
         for a, b, c in faces:
             ab, bc, ca = midpoint(a, b), midpoint(b, c), midpoint(c, a)
             refined.extend(((a, ab, ca), (b, bc, ab), (c, ca, bc), (ab, bc, ca)))
         xyz = np.asarray(points)
         faces = np.asarray(refined, dtype=np.int64)
-    pairs = np.concatenate((faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]]))
-    pairs = np.unique(np.sort(pairs, axis=1), axis=0)
-    edges = np.concatenate((pairs, pairs[:, ::-1])).T
-    voronoi = SphericalVoronoi(xyz)
-    voronoi.sort_vertices_of_regions()
-    areas = voronoi.calculate_areas() * EARTH_RADIUS_M**2
+    return xyz, faces
+
+
+def _vector_refine_once(xyz, faces):
+    """Memory-bounded deterministic refinement used only above the legacy range."""
+    f = len(faces)
+    raw = np.concatenate((faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]])).astype(np.int64, copy=False)
+    raw.sort(axis=1)
+    pairs, inverse = np.unique(raw, axis=0, return_inverse=True)
+    midpoint_xyz = xyz[pairs[:, 0]] + xyz[pairs[:, 1]]
+    midpoint_xyz /= np.linalg.norm(midpoint_xyz, axis=1, keepdims=True)
+    base = len(xyz)
+    mids = base + inverse
+    ab, bc, ca = mids[:f], mids[f:2*f], mids[2*f:]
+    refined = np.empty((4*f, 3), dtype=np.int64)
+    a, b, c = faces[:, 0], faces[:, 1], faces[:, 2]
+    refined[0::4] = np.column_stack((a, ab, ca))
+    refined[1::4] = np.column_stack((b, bc, ab))
+    refined[2::4] = np.column_stack((c, ca, bc))
+    refined[3::4] = np.column_stack((ab, bc, ca))
+    return np.concatenate((xyz, midpoint_xyz), axis=0), refined
+
+
+def _topology(level):
+    xyz, faces = _base_icosahedron()
+    # Preserve the historical order through level 6; level 8 is produced by
+    # only two vectorised refinements instead of millions of Python operations.
+    legacy_level = min(level, 6)
+    xyz, faces = _legacy_refine(xyz, faces, legacy_level)
+    for _ in range(legacy_level, level):
+        xyz, faces = _vector_refine_once(xyz, faces)
+    return xyz, faces
+
+
+def _directed_edges(faces):
+    pairs = np.concatenate((faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]])).astype(np.int64, copy=False)
+    pairs.sort(axis=1)
+    pairs = np.unique(pairs, axis=0)
+    return np.concatenate((pairs, pairs[:, ::-1])).T
+
+
+def _triangle_control_areas(xyz, faces):
+    """Vertex-centred 1/3 spherical-triangle areas with exact global closure."""
+    a, b, c = xyz[faces[:, 0]], xyz[faces[:, 1]], xyz[faces[:, 2]]
+    numerator = np.abs(np.einsum('ij,ij->i', a, np.cross(b, c)))
+    denominator = 1.0 + np.einsum('ij,ij->i', a, b) + np.einsum('ij,ij->i', b, c) + np.einsum('ij,ij->i', c, a)
+    triangle = 2.0 * np.arctan2(numerator, denominator) * EARTH_RADIUS_M**2
+    areas = np.zeros(len(xyz), dtype=np.float64)
+    np.add.at(areas, faces.reshape(-1), np.repeat(triangle / 3.0, 3))
+    return areas
+
+
+def build_grid(level=1, *, max_cells=DEFAULT_MAX_CELLS, exact_voronoi_max_cells=EXACT_VORONOI_MAX_CELLS):
+    n = grid_cell_count(level)
+    if type(max_cells) is not int or max_cells < 12 or n > max_cells:
+        raise ValueError(f'{n} cells exceeds explicit build limit {max_cells}.')
+    if type(exact_voronoi_max_cells) is not int or exact_voronoi_max_cells < 12:
+        raise ValueError('exact_voronoi_max_cells must be an integer >= 12.')
+    xyz, faces = _topology(level)
+    if len(xyz) != n:
+        raise RuntimeError('Icosahedral refinement produced an unexpected cell count.')
+    edges = _directed_edges(faces)
     degrees = np.bincount(edges[0], minlength=len(xyz))
     if np.count_nonzero(degrees == 5) != 12 or not np.isin(degrees, [5, 6]).all():
         raise RuntimeError('Unexpected mesh topology.')
+
+    if n <= exact_voronoi_max_cells:
+        voronoi = SphericalVoronoi(xyz)
+        voronoi.sort_vertices_of_regions()
+        areas = voronoi.calculate_areas() * EARTH_RADIUS_M**2
+        vertices = voronoi.vertices
+        regions = voronoi.regions
+        area_method = 'spherical_voronoi'
+        has_polygons = True
+    else:
+        areas = _triangle_control_areas(xyz, faces)
+        vertices = np.empty((0, 3), dtype=np.float64)
+        regions = []
+        area_method = 'one_third_spherical_triangle_control_volume'
+        has_polygons = False
+
+    if not np.isfinite(areas).all() or np.any(areas <= 0):
+        raise RuntimeError('Nonpositive or nonfinite spherical cell area.')
     if not np.isclose(areas.sum(), 4*np.pi*EARTH_RADIUS_M**2, rtol=1e-9):
         raise RuntimeError('Spherical area closure failed.')
-    return SphereGrid(level, xyz, faces, edges, areas, voronoi.vertices, voronoi.regions)
+    return SphereGrid(level, xyz, faces, edges, areas, vertices, regions,
+                      area_method=area_method, has_polygon_geometry=has_polygons)
 
 
 def build_pyramid(level=1):
