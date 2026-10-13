@@ -1,4 +1,11 @@
-"""Bounded fresh joint experiment; measured targets and atomic C2 epochs only."""
+"""Bounded joint measured-observation experiment with an explicit mesh-8 qualifier.
+
+The historical measured GHCNh+IGRA contour remains reproducible.  Mesh level 8
+is admitted only through a deliberately bounded end-to-end qualification run:
+3 h rollout, small hidden width, chunked edge exchange and explicit static and
+climatology artifacts.  A 72 h mesh-8 science run is a later experiment and is
+not silently enabled by this module.
+"""
 from __future__ import annotations
 
 import argparse
@@ -13,7 +20,7 @@ import time
 import numpy as np
 import torch
 
-from .grid import build_pyramid
+from .grid import build_grid, grid_cell_count, nominal_area_scale_km
 from .joint_observation_data import JointObservationDataset
 from .joint_observation_model import ARCHITECTURE, JointObservationModel
 from .observation_data import START, TRAIN_END
@@ -21,12 +28,41 @@ from .observation_training import checkpoint_path, digest, save, sync_directory
 from .observations import utc
 from .profile_normalization import load_normalization
 from .profile_physics import parse_policy, screen_humidity
-from .profile_training import configuration, identity, _restore_rng
+from .profile_training import DEFAULT_CONFIG as PROFILE_DEFAULT_CONFIG, identity, _restore_rng
 from .profile_training_v2 import objective
 from .station_anomaly_model import anomaly_loss
 from .station_climatology import StationClimatology
 
 STATUS = 'joint_measured_observation_research_trained'
+MESH8_ROLE = 'mesh8_end_to_end_qualification'
+
+
+def _profile_config(value):
+    """Validate shared training bounds without inheriting the old mesh<=2 pilot gate."""
+    if set(value) - set(PROFILE_DEFAULT_CONFIG):
+        raise ValueError('Unknown joint profile training configuration: ' + ', '.join(sorted(set(value)-set(PROFILE_DEFAULT_CONFIG))))
+    result = dict(PROFILE_DEFAULT_CONFIG)
+    result.update(value)
+    for key in ('mesh_level', 'hidden', 'epochs', 'patience', 'threads', 'seed',
+                'max_train_issues', 'max_validation_issues', 'max_test_issues',
+                'max_records_per_window'):
+        if type(result[key]) is not int:
+            raise ValueError('Joint integer configuration differs: '+key)
+    for key in ('hidden', 'epochs', 'patience', 'threads', 'max_train_issues',
+                'max_validation_issues', 'max_test_issues', 'max_records_per_window'):
+        if result[key] <= 0:
+            raise ValueError('Invalid joint training bound: '+key)
+    if not 0 <= result['mesh_level'] <= 8:
+        raise ValueError('Joint mesh_level must be within 0..8.')
+    if result['epochs'] > 100 or result['max_records_per_window'] > 20000:
+        raise ValueError('Joint experiment exceeds reviewed research limits.')
+    for key in ('learning_rate', 'weight_decay', 'gradient_clip'):
+        number = result[key]
+        if type(number) not in (int, float) or not np.isfinite(number) or number < 0:
+            raise ValueError('Invalid joint optimizer configuration: '+key)
+    if result['learning_rate'] <= 0 or result['gradient_clip'] <= 0:
+        raise ValueError('Positive learning rate and gradient clip are required.')
+    return result
 
 
 def _config(value):
@@ -37,10 +73,47 @@ def _config(value):
     surface_weight = value.pop('surface_weight', .5)
     if type(surface_weight) not in (int, float) or not 0 < surface_weight < 1:
         raise ValueError('Both measured branches require a positive loss weight.')
-    result = configuration(value)
+    rollout_hours = value.pop('rollout_hours', 72)
+    edge_chunk_size = value.pop('edge_chunk_size', None)
+    experiment_id = value.pop('experiment_id', 'joint-measured-observation-pilot')
+    experiment_role = value.pop('experiment_role', 'joint_measured_science_pilot')
+    scientific_acceptance = value.pop('scientific_acceptance', False)
+    if (type(rollout_hours) is not int or rollout_hours < 3 or rollout_hours > 72
+            or rollout_hours % 3):
+        raise ValueError('Joint rollout_hours must be a 3-hour step within 3..72.')
+    if edge_chunk_size is not None and (type(edge_chunk_size) is not int or edge_chunk_size < 1):
+        raise ValueError('edge_chunk_size must be a positive integer or null.')
+    if not isinstance(experiment_id, str) or not experiment_id.strip():
+        raise ValueError('A nonempty experiment_id is required.')
+    if not isinstance(experiment_role, str) or not experiment_role.strip():
+        raise ValueError('A nonempty experiment_role is required.')
+    if scientific_acceptance is not False:
+        raise ValueError('Joint research configuration cannot predeclare scientific acceptance.')
+
+    result = _profile_config(value)
     if result['hidden'] > 128:
         raise ValueError('Joint hidden exceeds reviewed budget.')
-    result.update(surface_weight=surface_weight, physical_policy=policy.payload())
+    if result['mesh_level'] == 8:
+        if experiment_role != MESH8_ROLE:
+            raise ValueError('mesh_level=8 is currently admitted only by the mesh8 qualification role.')
+        if rollout_hours != 3:
+            raise ValueError('Mesh-8 qualification is intentionally limited to a 3-hour rollout.')
+        if result['hidden'] > 4:
+            raise ValueError('Mesh-8 qualification hidden width is capped at 4 pending measured VRAM telemetry.')
+        if result['epochs'] != 1:
+            raise ValueError('Mesh-8 qualification performs exactly one training epoch.')
+        if result['max_train_issues'] > 4 or result['max_validation_issues'] > 2 or result['max_test_issues'] > 2:
+            raise ValueError('Mesh-8 qualification issue counts exceed the reviewed execution envelope.')
+        if edge_chunk_size is None or edge_chunk_size > 65536:
+            raise ValueError('Mesh-8 qualification requires explicit edge chunks <= 65536.')
+        if policy.memory_budget_mib < 16384:
+            raise ValueError('Mesh-8 qualification requires at least a declared 16 GiB activation budget.')
+        if grid_cell_count(8) != 655_362 or not 27.0 < nominal_area_scale_km(8) < 29.0:
+            raise RuntimeError('Mesh-8 geometry contract differs from the reviewed experiment.')
+    result.update(surface_weight=float(surface_weight), physical_policy=policy.payload(),
+                  rollout_hours=rollout_hours, edge_chunk_size=edge_chunk_size,
+                  experiment_id=experiment_id, experiment_role=experiment_role,
+                  scientific_acceptance=False)
     return result
 
 
@@ -49,11 +122,17 @@ def _device(name='auto'):
 
 
 def _build(dataset, norms, config, station_climate, device, climate_path=None, static_path=None):
-    grid = build_pyramid(config['mesh_level'])[0]
+    # The joint model consumes only the finest grid. Building 8->0 pyramids here
+    # wasted memory and made the 655k-cell qualification needlessly expensive.
+    grid = build_grid(config['mesh_level'])
     climate = None
     if climate_path is not None:
-        from .seasonal_climatology import SeasonalClimatology
-        climate = SeasonalClimatology(climate_path, grid=grid)
+        if config['mesh_level'] == 8:
+            from .mesh8_climatology import Mesh8SeasonalClimatology
+            climate = Mesh8SeasonalClimatology(climate_path, grid)
+        else:
+            from .seasonal_climatology import SeasonalClimatology
+            climate = SeasonalClimatology(climate_path, grid=grid)
     static = None
     if static_path is not None:
         from .joint_static import load_static
@@ -66,6 +145,7 @@ def _build(dataset, norms, config, station_climate, device, climate_path=None, s
     model.static_path = static_path
     model.static_fingerprint = static.get('fingerprint') if static is not None else None
     model.physical_policy = parse_policy(config['physical_policy'])
+    model.edge_chunk_size = config.get('edge_chunk_size')
     return model
 
 
@@ -78,13 +158,18 @@ def normalized_history(model, raw, mask, issue):
     return torch.where(m, (x-baseline)/model.surface_scales, torch.zeros_like(x)), m
 
 
-def _batch(model, dataset, issue, limit):
+def _batch(model, dataset, issue, limit, rollout_hours):
     raw, mask, target, target_mask, inputs, targets = dataset.sample(issue, limit)
     x, m = normalized_history(model, raw, mask, issue)
     policy = model.physical_policy
     inputs, _ = screen_humidity(inputs, policy)
+    cutoff = utc(issue) + timedelta(hours=rollout_hours)
+    targets = [row for row in targets if utc(row['observed_at']) <= cutoff]
     targets, report = screen_humidity(targets, policy)
-    frames = model(inputs, issue, surface_inputs=x, surface_mask=m, horizon_hours=dataset.horizon_hours)
+    steps = rollout_hours // 3
+    target = target[:steps]
+    target_mask = target_mask[:steps]
+    frames = model(inputs, issue, surface_inputs=x, surface_mask=m, horizon_hours=rollout_hours)
     profile_loss, counts = objective(model, frames, targets)
     prediction = torch.stack([f.native_normalized for f in frames[1:]])
     y = torch.as_tensor(target, dtype=torch.float32, device=model.xyz.device)
@@ -100,14 +185,15 @@ def score(model, dataset, config, split):
     rows = []
     with torch.no_grad():
         for issue in dataset.issues(split, config['max_'+split+'_issues']):
-            p, s, *_ = _batch(model, dataset, issue, config['max_records_per_window'])
+            p, s, *_ = _batch(model, dataset, issue, config['max_records_per_window'], config['rollout_hours'])
             rows.append((float(p), float(s)))
     if not rows:
         raise ValueError('No joint '+split+' support.')
     means = np.mean(rows, axis=0)
     return {'profile': float(means[0]), 'surface': float(means[1]),
             'joint': float((1-config['surface_weight'])*means[0]+config['surface_weight']*means[1]),
-            'issues': len(rows), 'horizon_hours': dataset.horizon_hours}
+            'issues': len(rows), 'rollout_hours': config['rollout_hours'],
+            'dataset_horizon_hours': dataset.horizon_hours}
 
 
 def _state(model, state):
@@ -145,7 +231,11 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
     config = _config(config)
     dataset = JointObservationDataset(dataset_path)
     if dataset.horizon_hours != 72:
-        raise ValueError('New joint experiment requires the reviewed 72-hour horizon.')
+        raise ValueError('Joint dataset identity currently requires the reviewed 72-hour guarded archive.')
+    if config['rollout_hours'] > dataset.horizon_hours:
+        raise ValueError('Experiment rollout exceeds the prepared guarded dataset horizon.')
+    if config['mesh_level'] == 8 and (climatology_path is None or static_path is None):
+        raise ValueError('Mesh-8 qualification requires verified climatology and static terrain artifacts.')
     norm_path = Path(norm_path).resolve()
     norm_hash = digest(norm_path)
     norms = load_normalization(json.loads(norm_path.read_text()))
@@ -158,6 +248,8 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
     with (output/'training.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         device = _device()
+        if config['mesh_level'] == 8 and device.type != 'cuda':
+            raise ValueError('Mesh-8 end-to-end qualification requires a CUDA compute node.')
         torch.set_num_threads(config['threads'])
         torch.use_deterministic_algorithms(True)
         torch.backends.cuda.matmul.allow_tf32 = False
@@ -176,6 +268,12 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
         model = _build(dataset, norms, config, station_climate, device, climatology_path, static_path)
         optimizer = torch.optim.AdamW(model.parameters(), lr=config['learning_rate'], weight_decay=config['weight_decay'])
         expected = {**identity(dataset.profile, config, device), 'architecture': ARCHITECTURE,
+                    'experiment_id': config['experiment_id'], 'experiment_role': config['experiment_role'],
+                    'grid_level': model.grid.level, 'grid_cells': model.grid.n_cells,
+                    'grid_fingerprint': model.grid.fingerprint,
+                    'grid_area_method': model.grid.area_method,
+                    'nominal_area_scale_km': model.grid.nominal_area_scale_km,
+                    'rollout_hours': config['rollout_hours'],
                     'joint_dataset_path': str(Path(dataset_path).resolve()), 'joint_fingerprint': dataset.fingerprint,
                     'norm_path': str(norm_path), 'norm_sha256': norm_hash,
                     'station_climatology_path': str(station_path), 'station_climatology_sha256': station_hash,
@@ -184,8 +282,9 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
                     'static_path': str(Path(static_path).resolve()) if static_path else None,
                     'static_fingerprint': model.static_fingerprint,
                     'joint_source_sha256': {name: digest(Path(__file__).parent/name) for name in
-                        ('joint_observation_model.py', 'joint_observation_training.py', 'joint_observation_data.py',
-                         'profile_hydrostatic_model.py', 'profile_model_v2.py', 'profile_physics.py')}}
+                        ('grid.py', 'joint_observation_model.py', 'joint_observation_training.py', 'joint_observation_data.py',
+                         'mesh8_climatology.py', 'profile_hydrostatic_model.py', 'profile_model_v2.py',
+                         'profile_physics.py', 'profile_seasonal_model.py')}}
         completed, best, best_epoch, stale = 0, float('inf'), None, 0
         best_ref = None
         trained = np.zeros((37, 5), dtype=bool)
@@ -211,7 +310,8 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             issues = dataset.issues('train', config['max_train_issues']); random.shuffle(issues)
             for issue in issues:
                 optimizer.zero_grad(set_to_none=True)
-                p, s, coverage, targets, nc, qc = _batch(model, dataset, issue, config['max_records_per_window'])
+                p, s, coverage, targets, nc, qc = _batch(
+                    model, dataset, issue, config['max_records_per_window'], config['rollout_hours'])
                 loss = (1-config['surface_weight'])*p+config['surface_weight']*s
                 if not torch.isfinite(loss): raise FloatingPointError('Nonfinite joint loss.')
                 loss.backward(); counts += coverage; native_counts += nc
@@ -227,7 +327,9 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
                 optimizer.step(); losses.append(float(loss.detach()))
                 save(output/'progress.json', {'epoch': epoch, 'optimizer_steps': len(losses), 'train_issues': len(issues),
                     'loss': losses[-1], 'profile_loss': float(p.detach()), 'surface_loss': float(s.detach()),
-                    'seconds': time.monotonic()-started, 'device': str(device), 'source_commit': expected['commit'], 'qc': qc})
+                    'seconds': time.monotonic()-started, 'device': str(device), 'source_commit': expected['commit'],
+                    'experiment_id': config['experiment_id'], 'mesh_level': model.grid.level,
+                    'grid_cells': model.grid.n_cells, 'rollout_hours': config['rollout_hours'], 'qc': qc})
             if not losses or not all(gradients.values()) or not (counts > 0).all() or not (native_counts > 0).all():
                 raise ValueError('Incomplete joint branch or measured variable gradient support.')
             validation = score(model, dataset, config, 'validation')
@@ -248,7 +350,14 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
                        'seconds': time.monotonic()-started, 'nonzero_gradients': gradients,
                        'profile_target_counts': counts.tolist(), 'native_target_counts': native_counts.tolist(),
                        'cuda_peak_allocated_bytes': torch.cuda.max_memory_allocated(device) if device.type == 'cuda' else None,
-                       'parameters': sum(p.numel() for p in model.parameters()), 'scientific_acceptance': False}
+                       'cuda_peak_reserved_bytes': torch.cuda.max_memory_reserved(device) if device.type == 'cuda' else None,
+                       'parameters': sum(p.numel() for p in model.parameters()),
+                       'experiment_id': config['experiment_id'], 'experiment_role': config['experiment_role'],
+                       'mesh_level': model.grid.level, 'grid_cells': model.grid.n_cells,
+                       'grid_fingerprint': model.grid.fingerprint, 'grid_area_method': model.grid.area_method,
+                       'nominal_area_scale_km': model.grid.nominal_area_scale_km,
+                       'rollout_hours': config['rollout_hours'], 'edge_chunk_size': config.get('edge_chunk_size'),
+                       'scientific_acceptance': False}
             save(temporary/'metrics.json', metrics); sync_directory(temporary)
             final = output/f'epoch-{epoch:04d}'; temporary.rename(final); sync_directory(output)
             ref = {'directory': final.name, 'epoch': epoch, 'sha256': digest(final/'state.pt')}
@@ -259,10 +368,16 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             print(json.dumps(metrics), flush=True)
             if stale >= config['patience']: break
         save(output/'complete.json', {'identity': expected, 'status': STATUS, 'best_epoch': best_epoch,
-            'scientific_acceptance': False, 'omega': 'unavailable_no_measured_targets',
+            'experiment_id': config['experiment_id'], 'experiment_role': config['experiment_role'],
+            'mesh_level': model.grid.level, 'grid_cells': model.grid.n_cells,
+            'nominal_area_scale_km': model.grid.nominal_area_scale_km,
+            'rollout_hours': config['rollout_hours'], 'scientific_acceptance': False,
+            'omega': 'unavailable_no_measured_targets',
             'below_ground_issuance': 'unknown_global_surface_pressure',
             'test_independence': 'previously seen periods; diagnostic only',
-            'trained_variable_mask': trained.tolist(), 'lead_hours': dataset.lead_hours})
+            'trained_variable_mask': trained.tolist(),
+            'lead_hours': list(range(3, config['rollout_hours']+1, 3)),
+            'dataset_lead_hours': dataset.lead_hours})
 
 
 def load_frozen(dataset_path, training, device='auto'):
@@ -283,6 +398,8 @@ def load_frozen(dataset_path, training, device='auto'):
     model = _build(dataset, norms, expected['config'], station, _device(device), expected['climatology_path'], expected.get('static_path'))
     _verify(dataset, norms, expected['norm_path'], expected['norm_sha256'], model,
             expected['station_climatology_path'], expected['station_climatology_sha256'])
+    if model.grid.fingerprint != expected.get('grid_fingerprint') or model.grid.n_cells != expected.get('grid_cells'):
+        raise ValueError('Frozen mesh geometry differs.')
     if model.static_fingerprint != expected.get('static_fingerprint'):
         raise ValueError('Frozen terrain fingerprint differs.')
     if hasattr(model, 'climatology') and model.climatology.fingerprint != expected['climatology_sha256']:

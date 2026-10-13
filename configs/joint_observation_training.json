@@ -1,21 +1,26 @@
 {
-  "mesh_level": 2,
-  "hidden": 32,
-  "epochs": 12,
-  "patience": 4,
+  "experiment_id": "joint-mesh8-qualification-r10",
+  "experiment_role": "mesh8_end_to_end_qualification",
+  "scientific_acceptance": false,
+  "mesh_level": 8,
+  "hidden": 4,
+  "epochs": 1,
+  "patience": 1,
   "threads": 8,
-  "seed": 43,
+  "seed": 44,
   "learning_rate": 0.0001,
   "weight_decay": 0.01,
   "gradient_clip": 1.0,
-  "max_train_issues": 48,
-  "max_validation_issues": 12,
-  "max_test_issues": 12,
+  "max_train_issues": 4,
+  "max_validation_issues": 2,
+  "max_test_issues": 2,
   "max_records_per_window": 2000,
   "surface_weight": 0.5,
+  "rollout_hours": 3,
+  "edge_chunk_size": 32768,
   "physical_policy": {
     "architecture": "hydrostatic_flow",
     "humidity_min_pressure_pa": 30000.0,
-    "memory_budget_mib": 16384
+    "memory_budget_mib": 22528
   }
 }

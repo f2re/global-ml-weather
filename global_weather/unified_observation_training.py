@@ -1,23 +1,22 @@
-"""Unified training pipeline assimilating surface, upper-air, and satellite observations.
+"""Legacy surface-control training on real station observations.
 
-Conditioned on official 30-year NOAA 1991-2020 NetCDF climatological normals and
-verified GMT Earth Relief 30s DEM (896 MB) topography.
-Learns global spherical atmospheric dynamics by supervising departures from climatology
-up to 10-day forecast horizons (240 h) with activation checkpointing and mixed precision.
+This module intentionally supervises only the GHCNh surface branch. Upper-air
+and satellite interfaces in UnifiedObservationModel are not trained here.
+The scientifically preferred measured surface+IGRA path is
+``global_weather.joint_observation_training``. Legacy Unified defaults to a
+72-hour horizon because native-station-dataset-1 was prepared with a 72-hour
+chronological guard. A 240-hour experiment requires a newly prepared dataset.
 """
 from __future__ import annotations
 
 import argparse
 from datetime import timedelta
 import fcntl
-import hashlib
 import json
 import os
 from pathlib import Path
 import random
 import shutil
-import sys
-import time
 
 import numpy as np
 os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
@@ -26,10 +25,10 @@ import torch
 from .grid import build_grid
 from .observation_data import ObservationDataset, START, TRAIN_END, VAL_END, END
 from .observations import utc
-from .observation_training import checkpoint_path, digest, save, sync_directory
+from .observation_training import digest, save, sync_directory
 from .station_climatology import StationClimatology
 from .terrain_features import extract_grid_terrain
-from .unified_observation_model import UnifiedObservationModel, unified_loss, LEAD_HOURS
+from .unified_observation_model import UnifiedObservationModel, unified_loss
 
 DEFAULT_CONFIG = {
     'mesh_level': 1,
@@ -44,26 +43,35 @@ DEFAULT_CONFIG = {
     'weight_decay': 0.01,
     'dropout': 0.0,
     'gradient_clip': 1.0,
-    'surface_weight': 0.5,
-    'profile_weight': 0.5,
+    'surface_weight': 1.0,
+    'profile_weight': 0.0,
     'batch_size': 4,
     'max_train_samples': None,
     'max_val_samples': None,
     'dem_path': 'data/dem/earth_relief_30s_p.nc',
     'dem_manifest': 'assets/dem/earth_relief_30s_p.json',
-    'horizon_hours': 240,
+    'allow_missing_dem': False,
+    'horizon_hours': 72,
     'lead_step_hours': 3,
-    'prediction_target': 'joint surface, terrain DEM, and vertical profile anomaly departure from official 30-year climatology',
+    'prediction_target': (
+        'surface-station dimensionless anomalies relative to train-only station '
+        'climatology; NCEP1 monthly fields are external context only'
+    ),
 }
 
 
 def load_climatology_array(climatology_path: Path) -> tuple[np.ndarray, np.ndarray, dict]:
-    """Load prepared 30-year official NetCDF climatology array [12, n_cells, 37, 5]."""
+    """Load fixed NOAA/NCEP monthly context and its explicit support mask."""
     npz_path = climatology_path / 'seasonal-climatology.npz' if climatology_path.is_dir() else climatology_path
     manifest_path = climatology_path / 'manifest.json' if climatology_path.is_dir() else climatology_path.with_name('manifest.json')
     with np.load(npz_path, allow_pickle=False) as data:
-        mean_3d = np.nan_to_num(data['mean'], nan=0.0).astype(np.float32)
-        support = data['support']
+        raw = np.asarray(data['mean'], dtype=np.float32)
+        support = np.asarray(data['support'], dtype=bool)
+    if raw.shape != support.shape or raw.ndim != 4 or raw.shape[0] != 12 or raw.shape[-1] != 5:
+        raise ValueError('Climatology mean/support must share shape [12, cells, levels, 5].')
+    if not np.isfinite(raw[support]).all():
+        raise ValueError('Supported climatology values must be finite.')
+    mean_3d = np.where(support, raw, 0.0).astype(np.float32)
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {'period': '1991-2020'}
     return mean_3d, support, manifest
 
@@ -132,7 +140,7 @@ def evaluate(
         amp_dtype = torch.bfloat16 if (device.type == 'cuda' and torch.cuda.is_bf16_supported()) else torch.float16
         with torch.cuda.amp.autocast(enabled=(device.type == 'cuda'), dtype=amp_dtype):
             forecast = model(bx_anom, bx_mask, month_idx=b_months, issue_hour=b_hours)
-            l = unified_loss(forecast, by_anom, by_mask)
+            l = unified_loss(forecast, by_anom, by_mask, surface_weight=1.0, profile_weight=0.0)
         losses.append(float(l.detach().cpu()))
 
     with torch.no_grad():
@@ -194,45 +202,65 @@ def train(
     if config:
         cfg.update(config)
 
+    if float(cfg.get('profile_weight', 0.0)) != 0.0:
+        raise ValueError(
+            'Legacy Unified has no profile supervision. Use joint_observation_training '
+            'for measured GHCNh+IGRA training.'
+        )
+    if float(cfg.get('surface_weight', 1.0)) <= 0.0:
+        raise ValueError('Legacy Unified requires a positive surface loss weight.')
+
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     dataset = ObservationDataset(dataset_path)
 
-    horizon_hours = int(cfg.get('horizon_hours', 240))
+    horizon_hours = int(cfg.get('horizon_hours', 72))
     lead_step = int(cfg.get('lead_step_hours', 3))
     if horizon_hours <= 0 or lead_step <= 0 or horizon_hours % lead_step:
         raise ValueError('Horizon must be positive and divisible by the lead step.')
     lead_hours = list(range(lead_step, horizon_hours + 1, lead_step))
     validate_forecast_windows(dataset.samples, lead_hours)
 
-    # 1. Load 30-year official climatology array and normalize to standard features
+    # NOAA/NCEP monthly 3-D context; it is not the station target baseline.
     clim_mean, clim_support, clim_meta = load_climatology_array(Path(climatology_dir))
     grid = build_grid(cfg['mesh_level'])
+    if clim_mean.shape[1] != grid.n_cells:
+        raise ValueError('Climatology grid does not match model grid.')
+    climatology_support_fraction = float(clim_support.mean())
 
-    # 2. Extract GMT Earth Relief 30s DEM (896 MB) topography
+    # Terrain is mandatory for a run that advertises DEM conditioning. Silent
+    # all-zero substitution is allowed only in explicitly requested synthetic/debug runs.
     dem_p = Path(cfg.get('dem_path', 'data/dem/earth_relief_30s_p.nc'))
     dem_m = Path(cfg.get('dem_manifest', 'assets/dem/earth_relief_30s_p.json'))
     if dem_p.exists() and dem_m.exists():
         terrain_elev, terrain_land, terrain_slope = extract_grid_terrain(dem_p, dem_m, grid)
-    else:
+        terrain_source = 'GMT Earth Relief 30s NetCDF (896 MB)'
+    elif cfg.get('allow_missing_dem'):
         terrain_elev = np.zeros(grid.n_cells, dtype=np.float32)
         terrain_land = np.zeros(grid.n_cells, dtype=np.float32)
         terrain_slope = np.zeros(grid.n_cells, dtype=np.float32)
+        terrain_source = 'explicit-debug-zero-terrain'
+    else:
+        raise FileNotFoundError(
+            'Verified DEM and manifest are required; set allow_missing_dem=true only for an explicit debug run.'
+        )
 
-    # Station elevation extraction from manifest
+    # Native station datasets do not guarantee instrument elevation. Missing
+    # metadata remains an explicit limitation rather than being described as measured height.
+    station_height_known = np.array([s.get('elevation_m') is not None for s in dataset.manifest['stations']], dtype=bool)
     station_elev = np.array(
-        [float(s.get('elevation_m') or 0.0) for s in dataset.manifest['stations']],
+        [float(s['elevation_m']) if s.get('elevation_m') is not None else 0.0 for s in dataset.manifest['stations']],
         dtype=np.float32,
     )
 
-    # Forecast horizon & lead hours (up to 10 days / 240 hours)
-
-    # Scales
     surface_scales = dataset.std
     profile_scales = np.array([15.0, 0.005, 10.0, 10.0, 50000.0], dtype=np.float32)
-    scaled_clim_mean = clim_mean / profile_scales[None, None, None, :]
+    scaled_clim_mean = np.where(
+        clim_support,
+        clim_mean / profile_scales[None, None, None, :],
+        0.0,
+    ).astype(np.float32)
 
-    # Fit station climatology baseline from 30-year official gridded NetCDF LTM
     n_stations = len(dataset.latlon)
     n_leads = len(lead_hours)
     station_clim_path = output / 'station_climatology.npz'
@@ -240,13 +268,14 @@ def train(
         station_climatology = StationClimatology.load(station_clim_path)
     else:
         all_timestamps = [START + timedelta(hours=h) for h in range(len(dataset.values))]
-        train_indices = set(dataset.subset('train'))
-        train_hours_mask = np.zeros(len(dataset.values), dtype=bool)
-        for idx in train_indices:
-            h = dataset.samples[idx]['hour']
-            train_hours_mask[max(0, h - 11):min(len(dataset.values), h + horizon_hours + 1)] = True
-
-        station_climatology = StationClimatology.fit(dataset.values, dataset.mask, all_timestamps, train_hours_mask)
+        # The baseline may use the full train period, but never validation/test.
+        train_hours_mask = np.array(
+            [START <= timestamp < TRAIN_END for timestamp in all_timestamps],
+            dtype=bool,
+        )
+        station_climatology = StationClimatology.fit(
+            dataset.values, dataset.mask, all_timestamps, train_hours_mask
+        )
         station_climatology.save(station_clim_path)
 
     with (output / 'training.lock').open('a') as lock:
@@ -334,12 +363,12 @@ def train(
                         forecast,
                         by_anom,
                         by_mask,
-                        surface_weight=cfg['surface_weight'],
-                        profile_weight=cfg['profile_weight'],
+                        surface_weight=1.0,
+                        profile_weight=0.0,
                     )
 
                 if not torch.isfinite(loss):
-                    raise FloatingPointError("Nonfinite unified anomaly loss.")
+                    raise FloatingPointError('Nonfinite unified surface anomaly loss.')
                 loss.backward()
 
                 for name, param in model.named_parameters():
@@ -414,7 +443,6 @@ def train(
             else:
                 stale += 1
 
-            # Save epoch checkpoint atomically
             temp_dir = output / f'.epoch-{epoch:04d}'
             temp_dir.mkdir(exist_ok=True)
             state = {
@@ -427,6 +455,7 @@ def train(
                 'best_epoch': best_epoch,
                 'config': cfg,
                 'climatology_period': clim_meta.get('period'),
+                'climatology_support_fraction': climatology_support_fraction,
                 'lead_hours': lead_hours,
             }
             torch.save(state, temp_dir / 'state.pt')
@@ -438,10 +467,12 @@ def train(
                 'learning_rate': current_lr,
                 'nonzero_gradients': gradients,
                 'prediction_target': cfg['prediction_target'],
-                'climatology_source': 'official-30year-netcdf-ltm-context; train-station-target-baseline',
+                'climatology_source': 'NCEP1-1991-2020-external-context; train-only-station-target-baseline',
+                'climatology_support_fraction': climatology_support_fraction,
                 'supervised_branches': ['surface'],
                 'unsupervised_branches': ['profile', 'satellite'],
-                'dem_source': 'GMT Earth Relief 30s NetCDF (896 MB)',
+                'terrain_source': terrain_source,
+                'station_height_known_fraction': float(station_height_known.mean()),
                 'horizon_hours': horizon_hours,
                 'scientific_acceptance': False,
             }
@@ -466,9 +497,13 @@ def train(
         completion = {
             'best_epoch': best_epoch,
             'best_loss': best_loss,
-            'status': 'unified_observation_training_completed',
-            'climatology_source': 'official-30year-netcdf-ltm-1991-2020',
-            'dem_source': 'GMT Earth Relief 30s NetCDF (896 MB)',
+            'status': 'legacy_unified_surface_control_completed',
+            'climatology_source': 'NCEP1-1991-2020-external-context; train-only-station-target-baseline',
+            'climatology_support_fraction': climatology_support_fraction,
+            'supervised_branches': ['surface'],
+            'unsupervised_branches': ['profile', 'satellite'],
+            'terrain_source': terrain_source,
+            'station_height_known_fraction': float(station_height_known.mean()),
             'horizon_hours': horizon_hours,
             'prediction_target': cfg['prediction_target'],
             'scientific_acceptance': False,

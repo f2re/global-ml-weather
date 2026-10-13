@@ -2,6 +2,8 @@
 
 Run on the compute node. Forecast windows read past inputs only; GRIB2 encodes
 all 37 standard pressure levels with independent masks and a field inventory.
+Mesh-8 checkpoints may not be rolled beyond the horizon that was explicitly
+qualified during training.
 """
 from __future__ import annotations
 
@@ -60,12 +62,15 @@ def timed_forecast(model, values, mask, profiles, issue, *, horizon_hours, devic
         raise ValueError('Warmups >= 0 and repeats >= 1 are required.')
     inputs, masks = normalized_history(model, values, mask, issue)
     inputs, masks = inputs.to(device), masks.to(device)
+
     def sync():
         if device.type == 'cuda':
             torch.cuda.synchronize(device)
+
     def forward():
         return model(profiles, issue, surface_inputs=inputs, surface_mask=masks,
                      horizon_hours=horizon_hours)
+
     with torch.inference_mode():
         for _ in range(warmups):
             forward()
@@ -77,10 +82,10 @@ def timed_forecast(model, values, mask, profiles, issue, *, horizon_hours, devic
         for _ in range(repeats):
             frames = None
             sync()
-            start = time.perf_counter()
+            started = time.perf_counter()
             frames = forward()
             sync()
-            seconds.append(time.perf_counter() - start)
+            seconds.append(time.perf_counter() - started)
     rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return frames, {
         'timing_scope': 'batch_one_model_only_all_requested_leads_both_heads_no_io',
@@ -88,6 +93,9 @@ def timed_forecast(model, values, mask, profiles, issue, *, horizon_hours, devic
         'median_seconds': float(np.median(seconds)),
         'p95_seconds': float(np.percentile(seconds, 95)),
         'parameters_total': sum(p.numel() for p in model.parameters()),
+        'mesh_level': model.grid.level, 'grid_cells': model.grid.n_cells,
+        'nominal_area_scale_km': model.grid.nominal_area_scale_km,
+        'grid_area_method': model.grid.area_method,
         'device': str(device), 'torch_version': str(torch.__version__),
         'python_version': platform.python_version(), 'precision': 'float32',
         'device_name': torch.cuda.get_device_name(device) if device.type == 'cuda' else platform.processor(),
@@ -126,7 +134,6 @@ def save_issue(dataset, model, state, checkpoint_hash, issue, destination, *,
         raise ValueError('Model must output every standard level and profile variable.')
     if mask.dtype != np.bool_ or not np.isfinite(prediction[mask]).all() or mask[..., 5].any():
         raise ValueError('Nonfinite issued profile or unsupported omega issuance.')
-    # Do not silently hide an unstable head by marking all its values missing.
     if not np.isfinite(prediction[..., :5]).all():
         raise FloatingPointError('Nonfinite joint physical prediction.')
     if static_fields is None:
@@ -163,6 +170,9 @@ def save_issue(dataset, model, state, checkpoint_hash, issue, destination, *,
             'surface_dimensions': ['lead', 'station', 'variable'],
             'pressure_pa': (np.asarray(PRESSURE_HPA) * 100).tolist(),
             'wind_basis': 'local_enu_vector', 'grid_fingerprint': model.grid.fingerprint,
+            'mesh_level': model.grid.level, 'grid_cells': model.grid.n_cells,
+            'nominal_area_scale_km': model.grid.nominal_area_scale_km,
+            'grid_area_method': model.grid.area_method,
             'checkpoint_sha256': checkpoint_hash, 'checkpoint_epoch': state['epoch'],
             'checkpoint_config': state['config'], 'identity': state['identity'],
             'normalization_sha256': state['identity'].get('norm_sha256'),
@@ -187,6 +197,7 @@ def save_issue(dataset, model, state, checkpoint_hash, issue, destination, *,
             'below_ground_mask_status': 'geometric_forecast_geopotential_above_verified_terrain; no_global_surface_pressure',
             'limitations': [
                 'Dense neural profile predictions do not imply dense observation support or verified accuracy at every level.',
+                'Nominal area scale is a geometry diagnostic, not a demonstrated meteorological resolution.',
                 'All 37 levels are encoded; omega is a continuity diagnostic with an imposed 1 hPa boundary, not a learned target.',
                 'Geometric issuance masking uses forecast geopotential and verified elevation; it does not replace target-pressure training masks.',
                 'Surface outputs remain station-native; sensor heights are unknown. GRIB2 exports supported MSLP only.',
@@ -203,7 +214,6 @@ def save_issue(dataset, model, state, checkpoint_hash, issue, destination, *,
         manifest['grib_inventory_sha256'] = sha256(stage / 'forecast.grib2.json')
         manifest['finished_utc'] = datetime.now(timezone.utc).isoformat()
         manifest['pipeline_seconds'] = time.perf_counter() - started
-        # Keep the metadata whose hash is bound by GRIB inventory unchanged.
         (stage / 'completion.json').write_text(json.dumps(manifest, indent=2, allow_nan=False) + '\n')
         if destination.exists() or destination.is_symlink():
             raise FileExistsError('Forecast issue output appeared during execution.')
@@ -216,12 +226,12 @@ def save_issue(dataset, model, state, checkpoint_hash, issue, destination, *,
 
 
 def forecast_batch(dataset, training, output, *, issues=None, split='validation', limit=3,
-                   horizon_hours=72, device='auto', warmups=1, repeats=3, threads=8,
+                   horizon_hours=None, device='auto', warmups=1, repeats=3, threads=8,
                    spacing=5., centre=MISSING_CENTRE, subcentre=0, source_revision=None,
                    static=None):
     from .joint_observation_training import load_frozen
-    if threads < 1 or horizon_hours < 3 or horizon_hours > 72 or horizon_hours % 3:
-        raise ValueError('Need positive threads and a 3-hour horizon within 3..72.')
+    if threads < 1:
+        raise ValueError('threads must be positive.')
     output = Path(output)
     if output.exists() or output.is_symlink() or any(parent.is_symlink() for parent in output.parents):
         raise FileExistsError('Choose a new batch output without symlink parents.')
@@ -230,6 +240,20 @@ def forecast_batch(dataset, training, output, *, issues=None, split='validation'
                             else 'cpu' if device == 'auto' else device)
     model, joint = load_frozen(dataset, training, device=selected)
     state, checkpoint_hash = model.frozen_metadata, model.frozen_checkpoint_sha256
+    qualified_horizon = int(state['config'].get('rollout_hours', 72))
+    if horizon_hours is None:
+        horizon_hours = qualified_horizon
+    if type(horizon_hours) is not int or horizon_hours < 3 or horizon_hours > 72 or horizon_hours % 3:
+        raise ValueError('Need a 3-hour horizon within 3..72.')
+    if horizon_hours > qualified_horizon:
+        raise ValueError('Requested inference horizon exceeds the checkpoint-qualified rollout.')
+    if model.grid.level == 8:
+        if horizon_hours != 3:
+            raise ValueError('Mesh-8 qualification checkpoint is limited to the reviewed 3-hour inference path.')
+        if selected.type != 'cuda':
+            raise ValueError('Mesh-8 end-to-end inference qualification requires CUDA.')
+        if limit > 2:
+            raise ValueError('Mesh-8 qualification limits one batch to at most two issues.')
     from .joint_static import load_static
     if static is None:
         raise ValueError('A verified prepared static artifact is required.')
@@ -242,12 +266,18 @@ def forecast_batch(dataset, training, output, *, issues=None, split='validation'
               'started_utc': datetime.now(timezone.utc).isoformat(),
               'checkpoint_sha256': checkpoint_hash, 'checkpoint_epoch': state['epoch'],
               'source_revision': source_revision, 'horizon_hours': horizon_hours,
+              'qualified_horizon_hours': qualified_horizon,
+              'mesh_level': model.grid.level, 'grid_cells': model.grid.n_cells,
+              'grid_fingerprint': model.grid.fingerprint,
+              'nominal_area_scale_km': model.grid.nominal_area_scale_km,
               'scientific_acceptance': False, 'issues_requested': [x.isoformat() for x in dates],
               'products': []}
+
     def save():
         temporary = output / '.batch.json.tmp'
         temporary.write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
         os.replace(temporary, output / 'batch.json')
+
     save()
     try:
         for issue in dates:
@@ -284,7 +314,7 @@ def main(argv=None):
     parser.add_argument('--issue', dest='issues', action='append')
     parser.add_argument('--split', choices=['train', 'validation', 'test'], default='validation')
     parser.add_argument('--limit', type=int, default=3)
-    parser.add_argument('--horizon-hours', type=int, default=72)
+    parser.add_argument('--horizon-hours', type=int)
     parser.add_argument('--device', choices=['auto', 'cpu', 'cuda:0'], default='auto')
     parser.add_argument('--warmups', type=int, default=1)
     parser.add_argument('--repeats', type=int, default=3)
