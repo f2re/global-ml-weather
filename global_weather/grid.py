@@ -20,6 +20,14 @@ from scipy.spatial import ConvexHull, SphericalVoronoi, cKDTree
 EARTH_RADIUS_M = 6_371_008.8
 MESH8_LEVEL = 8
 MESH8_CELLS = 655_362
+# Mesh8 is mathematically deterministic but sub-ULP differences in midpoint
+# normalisation were observed between NumPy/runtime builds. Hashing decimal
+# float bytes at 1e-12 therefore made the same geometry acquire a new identity.
+# Quantising unit-sphere coordinates to 1e-7 (~0.64 m at Earth radius) keeps
+# identity stable across harmless numerical drift while still detecting a
+# geometry displacement many orders below the ~28 km mean cell scale.
+MESH8_FINGERPRINT_QUANTIZATION = 10_000_000
+MESH8_FINGERPRINT_SCHEMA = b'mesh8-geometry-q1e-7-v1\0'
 # Preserve every mesh that the pre-mesh8 implementation admitted by default.
 EXACT_VORONOI_MAX_CELLS = 200_000
 DEFAULT_MAX_CELLS = 200_000
@@ -53,6 +61,22 @@ def latlon(xyz):
                                 np.arctan2(xyz[..., 1], xyz[..., 0])), axis=-1))
 
 
+def _mesh8_geometry_fingerprint(xyz, edges):
+    """Hash mesh8 ordering/connectivity with a runtime-stable geometry tolerance."""
+    xyz = np.asarray(xyz, dtype=np.float64)
+    edges = np.asarray(edges)
+    if xyz.ndim != 2 or xyz.shape[1] != 3 or edges.ndim != 2 or edges.shape[0] != 2:
+        raise ValueError('Invalid mesh geometry arrays for fingerprinting.')
+    if not np.isfinite(xyz).all():
+        raise ValueError('Mesh coordinates must be finite for fingerprinting.')
+    quantized = np.rint(xyz * MESH8_FINGERPRINT_QUANTIZATION).astype('<i8')
+    h = hashlib.sha256()
+    h.update(MESH8_FINGERPRINT_SCHEMA)
+    h.update(quantized.tobytes())
+    h.update(edges.astype('<i8', copy=False).tobytes())
+    return h.hexdigest()
+
+
 @dataclass
 class SphereGrid:
     level: int
@@ -80,6 +104,9 @@ class SphereGrid:
 
     @cached_property
     def fingerprint(self):
+        if self.level == MESH8_LEVEL:
+            return _mesh8_geometry_fingerprint(self.xyz, self.edges)
+        # Historical levels keep their exact old identity contract.
         h = hashlib.sha256()
         h.update(np.round(self.xyz, 12).astype('<f8').tobytes())
         h.update(self.edges.astype('<i8').tobytes())
