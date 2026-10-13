@@ -12,7 +12,14 @@ import time
 import numpy as np
 import torch
 
-from global_weather.grid import EARTH_RADIUS_M, build_mesh8_grid, grid_cell_count, nominal_area_scale_km
+from global_weather.grid import (
+    EARTH_RADIUS_M,
+    MESH8_FINGERPRINT_QUANTIZATION,
+    MESH8_FINGERPRINT_SCHEMA,
+    build_mesh8_grid,
+    grid_cell_count,
+    nominal_area_scale_km,
+)
 from global_weather.model import GraphOps
 
 
@@ -53,12 +60,15 @@ def run() -> dict:
         raise RuntimeError('Mesh-8 location operator failed.')
 
     return {
-        'schema': 'mesh8-geometry-smoke-1',
+        'schema': 'mesh8-geometry-smoke-2',
         'mesh_level': 8,
         'cells': grid.n_cells,
         'faces': int(len(grid.faces)),
         'directed_edges': int(grid.edges.shape[1]),
         'grid_fingerprint': grid.fingerprint,
+        'fingerprint_schema': MESH8_FINGERPRINT_SCHEMA.rstrip(b'\0').decode('ascii'),
+        'fingerprint_coordinate_quantization': MESH8_FINGERPRINT_QUANTIZATION,
+        'fingerprint_coordinate_tolerance_on_unit_sphere': 1.0/MESH8_FINGERPRINT_QUANTIZATION,
         'five_neighbour_cells': int(np.count_nonzero(degree == 5)),
         'six_neighbour_cells': int(np.count_nonzero(degree == 6)),
         'nominal_area_scale_km': grid.nominal_area_scale_km,
