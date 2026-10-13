@@ -27,7 +27,9 @@ from .observation_training import digest, save
 from .profile_hydrostatic_model import ARCHITECTURE as PROFILE_ARCHITECTURE
 from .profile_normalization import load_normalization
 
-CANONICAL_MESH8_FINGERPRINT = '992e223cc99417d5f12f8ed6d314579d4006a788ca9d935af1f5abc22b2b76b9'
+# Qualified after replacing the environment-sensitive 1e-12 float-byte hash
+# with mesh8-geometry-q1e-7-v1. Levels 0..7 keep their historical identities.
+CANONICAL_MESH8_FINGERPRINT = '64c3e32f792a42ad7d363635e5217cd3c845743a9b92487fdc226da5f1937aa9'
 MINIMUM_FREE_DISK_GIB = 64
 
 
@@ -148,7 +150,8 @@ def preflight(dataset_path, norm_path, climatology_path, static_path, config_pat
                    'physical_policy': config['physical_policy']},
         'mesh': {'level': grid.level, 'cells': grid.n_cells,
                  'fingerprint': grid.fingerprint, 'area_method': grid.area_method,
-                 'nominal_area_scale_km': grid.nominal_area_scale_km},
+                 'nominal_area_scale_km': grid.nominal_area_scale_km,
+                 'fingerprint_schema': 'mesh8-geometry-q1e-7-v1'},
         'dataset': {'path': str(dataset_path), 'fingerprint': joint.fingerprint,
                     'bundle_sha256': getattr(joint, 'bundle_hash', None),
                     'horizon_hours': joint.horizon_hours, 'input_hours': 12},
