@@ -20,7 +20,7 @@ import time
 import numpy as np
 import torch
 
-from .grid import build_grid, grid_cell_count, nominal_area_scale_km
+from .grid import build_grid, build_mesh8_grid, grid_cell_count, nominal_area_scale_km
 from .joint_observation_data import JointObservationDataset
 from .joint_observation_model import ARCHITECTURE, JointObservationModel
 from .observation_data import START, TRAIN_END
@@ -124,7 +124,8 @@ def _device(name='auto'):
 def _build(dataset, norms, config, station_climate, device, climate_path=None, static_path=None):
     # The joint model consumes only the finest grid. Building 8->0 pyramids here
     # wasted memory and made the 655k-cell qualification needlessly expensive.
-    grid = build_grid(config['mesh_level'])
+    # Mesh8 remains an explicit opt-in so historical callers keep the old guard.
+    grid = build_mesh8_grid() if config['mesh_level'] == 8 else build_grid(config['mesh_level'])
     climate = None
     if climate_path is not None:
         if config['mesh_level'] == 8:
