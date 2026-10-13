@@ -19,7 +19,7 @@ R10 теперь закрывает эти инженерные разрывы �
 - геопотенциал восстанавливается дискретной гидростатической проекцией на всех 37 изобарических уровнях;
 - `0 <= q < 1` обеспечивается параметризацией specific humidity;
 - приземная температура положительна;
-- точка росы не превышает температуру воздуха;
+- точка росы положительна и не превышает температуру воздуха: `0 < Td <= T`;
 - станционное давление и MSLP положительны;
 - `omega` не обучается на выдуманной цели, а диагностируется после прогноза из уравнения неразрывности в p-координатах.
 
@@ -52,12 +52,15 @@ Edge processing выполняется чанками, по умолчанию 3
 - hydrostatic residual: count, RMS и max absolute;
 - pressure-continuity residual: count, RMS и max absolute;
 - диапазон specific humidity и число нарушений физического диапазона;
+- station-native surface diagnostics для `T`, `Td`, `Ps`, `MSLP` и число domain violations;
 - area-integrated shared-flux closure на полностью поддержанных срезах;
 - common-support water-mass proxy;
 - common-support dry-static-energy proxy;
 - common-support kinetic-energy proxy.
 
-Последние три являются диагностическими интегралами в p-координатах на общей маске сроков и не считаются доказательством точного закона сохранения.
+Приземная физика не может быть «исправлена» маской выдачи. Если сохранённые station-native `T/Td/Ps/MSLP` нарушают физический домен, inference завершается ошибкой. Final verifier независимо открывает уже хэшированный `forecast.npz` и повторно проверяет `T>0`, `0<Td<=T`, `Ps>0`, `MSLP>0`, полную surface-mask и сроки `[0,3]`; корректного manifest недостаточно.
+
+Последние три интегральные величины являются диагностикой в p-координатах на общей маске сроков и не считаются доказательством точного закона сохранения.
 
 ## Финальные технические gates R10
 
@@ -77,6 +80,7 @@ R10 выполняется только последовательностью:
 - source revision, mesh fingerprint и physical-v2 architecture совпадают с preflight;
 - Q5 содержит ровно сроки 0 и +3 ч;
 - specific humidity domain violations равны нулю;
+- station-native `forecast.npz` удовлетворяет `T>0`, `0<Td<=T`, `Ps>0`, `MSLP>0` и не скрывает значения surface-mask;
 - `max |hydrostatic residual| <= 5 m2 s-2`;
 - `max |continuity residual| <= 1e-6 s-1`;
 - NPZ, GRIB2 и inventory проходят SHA256 verification.
