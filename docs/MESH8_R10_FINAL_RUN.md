@@ -2,6 +2,15 @@
 
 Этот runbook относится только к `joint-mesh8-qualification-r10`. Он проверяет техническую работоспособность physical-v2 на 655362 ячейках и сроке +3 ч. Он не выполняет 72-часовую научную приёмку.
 
+Каноническая identity mesh8 после повторной Q0-квалификации:
+
+- fingerprint: `64c3e32f792a42ad7d363635e5217cd3c845743a9b92487fdc226da5f1937aa9`;
+- schema: `mesh8-geometry-q1e-7-v1`;
+- координаты для identity квантуются до `1e-7` на единичной сфере, примерно 0,64 м на Земле;
+- прежний fingerprint `992e223c…` снят с эксплуатации: он зависел от суб-ULP различий NumPy/runtime, хотя топология и физическая геометрия сетки не менялись.
+
+Артефакты mesh8, созданные с прежним fingerprint, для R10 нужно перестроить или мигрировать отдельной проверяемой процедурой. Не подменяйте fingerprint вручную в manifest.
+
 ## 1. Требования к узлу
 
 Нужен Linux-узел с чистым checkout `main`, Python-окружением проекта, CUDA-сборкой PyTorch, одной доступной GPU с фактической памятью не меньше заявленного бюджета 22528 MiB и минимум 64 GiB свободного места в файловой системе каталога опыта.
@@ -35,16 +44,16 @@ export R10_SHA="$(git rev-parse HEAD)"
 export JOINT_DATA=/data/global-weather/joint-observations
 export PROFILE_NORM=/data/global-weather/profile-normalization.json
 export NCEP1_LTM=/data/global-weather/NCEP1-LTM-1991-2020
-export CLIMATE_MESH4=/data/global-weather/seasonal-climatology-mesh4
+export CLIMATE_MESH4=/data/global-weather/seasonal-climatology-mesh4-r10
 export DEM=/data/global-weather/earth_relief_30s_p.nc
 export DEM_MANIFEST=assets/dem/earth_relief_30s_p.json
 export LAND=/data/global-weather/natural-earth-land.geojson
 export LAND_SHA256=<64-hex-sha256>
-export STATIC_MESH8=/data/global-weather/joint-static-mesh8
+export STATIC_MESH8=/data/global-weather/joint-static-mesh8-r10
 export RUN_ROOT=/data/global-weather/runs/joint-mesh8-qualification-r10-${R10_SHA}
 ```
 
-Пути должны указывать на локальные immutable inputs. Не заменяйте их во время опыта.
+Пути должны указывать на локальные immutable inputs. Не заменяйте их во время опыта. Для нового R10 предпочтительны новые каталоги climate/static, чтобы исключить случайное использование manifests с retired mesh identity.
 
 ## 4. Q2 — подготовить климатический context
 
@@ -58,7 +67,7 @@ python -m global_weather.seasonal_climatology \
   --minimum-years 25
 ```
 
-Если каталог уже существует, используйте только ранее проверенный immutable artifact; не перезаписывайте его другим источником под тем же ID.
+Если каталог уже существует, используйте только ранее проверенный immutable artifact. При наличии старого mesh8 mapping/fingerprint создайте новый каталог, а не редактируйте manifest на месте.
 
 ## 5. Q3 — подготовить static terrain на mesh8
 
@@ -74,9 +83,9 @@ python -m global_weather.joint_static \
 
 Static artifact обязан быть привязан к canonical grid fingerprint:
 
-`992e223cc99417d5f12f8ed6d314579d4006a788ca9d935af1f5abc22b2b76b9`.
+`64c3e32f792a42ad7d363635e5217cd3c845743a9b92487fdc226da5f1937aa9`.
 
-Отрицательные высоты суши сохраняются; океан определяется независимым land polygon, а не знаком DEM.
+Fingerprint schema должна быть `mesh8-geometry-q1e-7-v1`. Отрицательные высоты суши сохраняются; океан определяется независимым land polygon, а не знаком DEM.
 
 ## 6. Отдельно выполнить preflight
 
@@ -97,7 +106,7 @@ python -m global_weather.mesh8_preflight \
 
 - `status = ready_for_q4_q5`;
 - `mesh.level = 8` и `mesh.cells = 655362`;
-- canonical grid fingerprint;
+- fingerprint `64c3e32f…f1937aa9` и schema `mesh8-geometry-q1e-7-v1`;
 - `joint_architecture = joint-measured-physical-v2`;
 - `profile_architecture = hydrostatic-primitive-conditioned-v2`;
 - hashes dataset/norm/climate/static;
