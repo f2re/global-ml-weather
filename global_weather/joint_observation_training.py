@@ -108,6 +108,8 @@ def _config(value):
             raise ValueError('Mesh-8 qualification requires explicit edge chunks <= 65536.')
         if policy.memory_budget_mib < 16384:
             raise ValueError('Mesh-8 qualification requires at least a declared 16 GiB activation budget.')
+        if grid_cell_count(8) != 655_362 or not 27.0 < nominal_area_scale_km(8) < 29.0:
+            raise RuntimeError('Mesh-8 geometry contract differs from the reviewed experiment.')
     result.update(surface_weight=float(surface_weight), physical_policy=policy.payload(),
                   rollout_hours=rollout_hours, edge_chunk_size=edge_chunk_size,
                   experiment_id=experiment_id, experiment_role=experiment_role,
@@ -125,8 +127,12 @@ def _build(dataset, norms, config, station_climate, device, climate_path=None, s
     grid = build_grid(config['mesh_level'])
     climate = None
     if climate_path is not None:
-        from .seasonal_climatology import SeasonalClimatology
-        climate = SeasonalClimatology(climate_path, grid=grid)
+        if config['mesh_level'] == 8:
+            from .mesh8_climatology import Mesh8SeasonalClimatology
+            climate = Mesh8SeasonalClimatology(climate_path, grid)
+        else:
+            from .seasonal_climatology import SeasonalClimatology
+            climate = SeasonalClimatology(climate_path, grid=grid)
     static = None
     if static_path is not None:
         from .joint_static import load_static
@@ -277,7 +283,8 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
                     'static_fingerprint': model.static_fingerprint,
                     'joint_source_sha256': {name: digest(Path(__file__).parent/name) for name in
                         ('grid.py', 'joint_observation_model.py', 'joint_observation_training.py', 'joint_observation_data.py',
-                         'profile_hydrostatic_model.py', 'profile_model_v2.py', 'profile_physics.py')}}
+                         'mesh8_climatology.py', 'profile_hydrostatic_model.py', 'profile_model_v2.py',
+                         'profile_physics.py', 'profile_seasonal_model.py')}}
         completed, best, best_epoch, stale = 0, float('inf'), None, 0
         best_ref = None
         trained = np.zeros((37, 5), dtype=bool)
