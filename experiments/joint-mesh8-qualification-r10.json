@@ -1,0 +1,105 @@
+{
+  "schema": "global-weather-experiment-1",
+  "experiment_id": "joint-mesh8-qualification-r10",
+  "contract_id": "GLOBAL-WEATHER-MESH8-R10",
+  "decision": "docs/decisions/0018-mesh8-end-to-end-qualification.md",
+  "config": "configs/joint_observation_training.json",
+  "historical_mesh2_config": "configs/joint_observation_training_mesh2_pilot.json",
+  "status": "geometry_qualified_cuda_runtime_pending",
+  "scientific_acceptance": false,
+  "satellite_supervision": false,
+  "mesh": {
+    "level": 8,
+    "cells": 655362,
+    "faces": 1310720,
+    "directed_edges": 3932160,
+    "five_neighbour_cells": 12,
+    "nominal_area_scale_km": 27.897963965175485,
+    "area_method": "one_third_spherical_triangle_control_volume",
+    "meteorological_resolution_claimed": false
+  },
+  "qualification_envelope": {
+    "rollout_hours": 3,
+    "hidden": 4,
+    "epochs": 1,
+    "edge_chunk_size": 32768,
+    "max_train_issues": 4,
+    "max_validation_issues": 2,
+    "max_test_issues": 2,
+    "max_records_per_window": 2000,
+    "declared_activation_budget_mib": 22528,
+    "cuda_required": true
+  },
+  "context": {
+    "profile_normalization": "fixed GraphCast physical affine normalization",
+    "surface_normalization": "train-only station climatology",
+    "seasonal_climatology_source": "NCEP1 1991-2020 monthly context",
+    "seasonal_context_mesh_level": 4,
+    "seasonal_context_mapping": "nearest climate-context cell centre onto mesh8",
+    "terrain": "verified DEM plus independent land polygon on mesh8"
+  },
+  "stages": {
+    "Q0_geometry_graph": {
+      "status": "passed",
+      "workflow": "mesh8-qualification",
+      "workflow_run_id": 38332731835,
+      "head_sha": "6b6163548a3c145c716ef7b31088ead146c5294b",
+      "artifact_id": 11783024621,
+      "geometry_seconds": 5.376558513999981,
+      "graph_exchange_seconds": 0.37312641200000485,
+      "peak_rss_bytes": 684527616,
+      "relative_area_closure_error": 6.126659548448028e-16,
+      "contract_tests": "6 passed"
+    },
+    "Q1_data_normalization": {
+      "status": "implemented_runtime_verification_pending",
+      "required": [
+        "joint dataset verify",
+        "72-hour split guard retained",
+        "GraphCast source hashes",
+        "train-only station climatology"
+      ]
+    },
+    "Q2_climate_context": {
+      "status": "implemented_artifact_build_pending",
+      "required_source_mesh_level": 4,
+      "target_mesh_level": 8
+    },
+    "Q3_static_terrain": {
+      "status": "implemented_artifact_build_pending",
+      "target_mesh_level": 8
+    },
+    "Q4_cuda_train_validation": {
+      "status": "pending_executor_run",
+      "required_outputs": [
+        "progress.json",
+        "epoch-0001/state.pt",
+        "epoch-0001/metrics.json",
+        "best.json",
+        "complete.json"
+      ]
+    },
+    "Q5_frozen_inference_physics_grib": {
+      "status": "pending_Q4",
+      "required_outputs": [
+        "forecast.npz",
+        "forecast.json",
+        "forecast.grib2",
+        "forecast.grib2.json",
+        "completion.json",
+        "batch.json"
+      ]
+    }
+  },
+  "promotion_to_72h": {
+    "allowed": false,
+    "requires_new_experiment": true,
+    "required_work": [
+      "successful Q4 and Q5",
+      "measured CUDA memory telemetry",
+      "streaming or checkpointed rollout",
+      "streaming export",
+      "new decision and experiment id"
+    ]
+  }
+}
