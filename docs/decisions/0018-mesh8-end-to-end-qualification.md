@@ -2,14 +2,13 @@
 
 Дата: 13 октября 2026 года.
 Идентификатор: `joint-mesh8-qualification-r10` / `GLOBAL-WEATHER-MESH8-R10`.
-Статус: **Q0 geometry/graph пройден; Q1–Q5 CUDA/runtime ещё не закрыты; научная приёмка запрещена**.
-Базовая ревизия регистрации: `97cb0ff0bfe00edede37d4bc8a937801a63ecff5`. Точная ревизия запуска сохраняется самим training identity и имеет приоритет над этой ссылкой.
+Статус: **Q0 geometry/graph пройден; Q1–Q5 runtime/CUDA ещё не закрыты; научная приёмка запрещена**.
 
 ## Цель
 
-Цель R10 — доказать, что глобальная joint-модель проходит полный технический тракт на `mesh_level=8`: построение сферической сетки, привязку реальных GHCNh/IGRA, климатический контекст, DEM, прямой и обратный проход, сохранение checkpoint, повторную загрузку, физическую постобработку и GRIB2.
+R10 должен доказать работоспособность полного технического тракта на `mesh_level=8`: сферическая сетка, реальные GHCNh/IGRA, климатический контекст, DEM, forward/backward, checkpoint, повторная загрузка, физическая постобработка и GRIB2.
 
-R10 не является испытанием качества 72-часового прогноза. Горизонт намеренно ограничен 3 часами, чтобы сначала измерить реальную память и время на сетке из 655362 ячеек. После R10 переход к 72 часам оформляется отдельным опытом.
+R10 не является испытанием 72-часового skill. Горизонт квалификации намеренно ограничен +3 ч. Переход к 72 ч допускается только новым экспериментом после измерения реальных VRAM/RSS и реализации потокового rollout/export.
 
 ## Геометрия
 
@@ -23,41 +22,29 @@ R10 не является испытанием качества 72-часово�
 | неориентированные рёбра | 1966080 |
 | направленные рёбра | 3932160 |
 | ячейки с 5 соседями | 12 |
-| остальные ячейки | 6 соседей |
-| `sqrt(mean cell area)` | 27,898 км |
+| ячейки с 6 соседями | 655350 |
+| `sqrt(mean cell area)` | 27,897963965 км |
+| canonical grid fingerprint | `992e223cc99417d5f12f8ed6d314579d4006a788ca9d935af1f5abc22b2b76b9` |
 
-Величина 27,898 км является только геометрическим масштабом средней площади. Она не означает доказанное метеорологическое разрешение 28 или 20 км. Реальный разрешаемый масштаб определяется отдельными спектральными и case-study испытаниями.
+27,898 км — геометрический масштаб средней площади, а не доказанное метеорологическое разрешение. Заявления «20 км» или «28 км skill» запрещены без отдельной спектральной и case-study верификации.
 
-Для малых сеток сохраняется прежний `SphericalVoronoi` и прежний порядок построения. Для больших сеток, включая level 8, полный Voronoi не материализуется. Площадь вершиной-центрированной ячейки считается как сумма одной трети площадей прилегающих сферических треугольников. Глобальная сумма обязана совпадать с `4*pi*R^2` в пределах `rtol=1e-9`.
+Сетки 0–7 сохраняют прежний порядок построения и `SphericalVoronoi`, чтобы не менять существующие fingerprints/checkpoints. Mesh8 строится только через явный `build_mesh8_grid()`: случайный `build_grid(8)` по-прежнему блокируется memory guard. Последний переход 7→8 векторизован. Полный Voronoi на 655362 центрах не материализуется; площадь вершиной-центрированной ячейки равна сумме одной трети площадей прилегающих сферических треугольников. Глобальная площадь обязана замыкаться к `4*pi*R^2`.
 
-## Фактический результат Q0
+## Фактический Q0
 
-Workflow `mesh8-qualification`, run `38332731835`, ревизия `6b6163548a3c145c716ef7b31088ead146c5294b`, успешно выполнил не уменьшенную тестовую сетку, а реальный level 8.
+Канонический workflow `mesh8-qualification`, run `38333408280`, ревизия `0c26d09ef97fe525411c5414ebc775ce4c229125`, выполнил реальный mesh8 и полный sparse neighbour exchange.
 
 | Диагностика | Результат |
 |---|---:|
 | contract tests | 6 passed |
-| ячейки | 655362 |
-| грани | 1310720 |
-| направленные рёбра | 3932160 |
-| ячейки с 5 соседями | 12 |
-| ячейки с 6 соседями | 655350 |
-| геометрический масштаб | 27,897963965 км |
-| относительная ошибка замыкания площади | `6,13e-16` |
-| построение geometry | 5,377 с |
-| полный sparse neighbour exchange | 0,373 с |
-| peak RSS процесса | 684527616 байт, около 653 MiB |
-| geometry artifact id | `11783024621` |
+| grid fingerprint | `992e223c…2b76b9` |
+| relative area closure error | `6,1267e-16` |
+| geometry build | 5,988 с |
+| full graph exchange | 0,385 с |
+| peak RSS | 737333248 байт, около 703 MiB |
+| artifact id | `11784180964` |
 
-Таким образом, топология, площадь, `locate()` и полный `GraphOps.neighbours()` подтверждены на 655362 ячейках в CPU CI. Это **не** подтверждает CUDA training и meteorological skill; соответствующие gates остаются открыты.
-
-## Почему климатология не хранится на mesh8
-
-NCEP1 1991–2020 имеет существенно более грубое исходное разрешение, чем mesh8. Предварительное хранение массива `12 x 655362 x 37 x 5` создало бы многогигабайтный артефакт без новой информации источника.
-
-В R10 климатический контекст готовится на `mesh_level=4`, после чего `Mesh8SeasonalClimatology` детерминированно сопоставляет каждой ячейке mesh8 ближайшую ячейку климатического контекста. Это относится только к внешнему месячному контексту. Состояние модели, динамика, рельеф, граф и выдаваемые поля остаются mesh8.
-
-Контекст level 4 выбран как вычислительно компактный технический эталон R10. Он не повышает пространственную информативность NCEP1 и не является наблюдением или целью обучения.
+Q0 подтверждает топологию, площади, `locate()` и `GraphOps.neighbours()` на всех 655362 ячейках. Он не подтверждает CUDA training или качество прогноза.
 
 ## Замороженная конфигурация R10
 
@@ -69,37 +56,29 @@ NCEP1 1991–2020 имеет существенно более грубое ис
 | `hidden` | 4 |
 | `rollout_hours` | 3 |
 | `epochs` | 1 |
-| train issues | не более 4 |
-| validation issues | не более 2 |
-| test issues | не более 2 |
-| profile scalars/window | не более 2000 |
+| train / validation / test issues | ≤4 / ≤2 / ≤2 |
+| profile scalars/window | ≤2000 |
 | `edge_chunk_size` | 32768 |
 | surface/profile loss | 0,5 / 0,5 |
 | declared activation budget | 22528 MiB |
+| CUDA required | yes |
 | `scientific_acceptance` | false |
 
-При float32 один скрытый state `[655362,37,4]` занимает около 370 MiB. Один полный профильный кадр `[655362,37,6]` занимает около 555 MiB. Два кадра для сроков 0 и +3 ч занимают около 1110 MiB без учёта масок, градиентов и служебных тензоров. Полный climate feature tensor `[655362,37,14]` занимает около 1295 MiB в float32. Эти оценки служат до CUDA-запуска только границей планирования; фактические `cuda_peak_allocated_bytes`, `cuda_peak_reserved_bytes` и RSS являются обязательным результатом R10.
+`HydrostaticFlowProfileModel` выполняет wind-conditioned exchange по edge chunks; тест подтверждает эквивалентность chunked и исторического one-shot результата на малой сетке. Полный mesh8 exchange не материализует тензор всех 3932160 рёбер × 37 уровней одновременно.
 
-## Этапы
+## Q1. Реальные данные и нормировка
 
-### Q0. Геометрия и граф — пройден
+Joint dataset остаётся хэшированным GHCNh+IGRA архивом с 12-часовой историей и исходным 72-часовым guard. R10 читает только цели +3 ч, но guard не ослабляется.
 
-Автоматический workflow `mesh8-qualification`:
+GraphCast-нормы пяти профильных величин фиксированы. Станционная климатология рассчитывается только по train. Validation/test не участвуют в fit. Перед каждой эпохой dataset, нормы, station climatology, climate и static artifacts перепроверяются по identity/hash.
 
-- построил настоящую сетку level 8;
-- проверил 655362 ячейки, 1310720 граней и 3932160 направленных рёбер;
-- проверил 12 пятисоседних ячеек;
-- проверил глобальный баланс площади;
-- выполнил полный sparse neighbour exchange на 655362 ячейках;
-- сохранил `outputs/mesh8/geometry.json` как artifact.
+Статус: код и fail-closed проверки реализованы; фактический runtime report на вычислительном узле ещё не создан.
 
-### Q1. Реальные данные и нормы — runtime verification pending
+## Q2. Климатический контекст
 
-Joint dataset остаётся тем же хэшированным GHCNh+IGRA архивом с 12-часовой историей и 72-часовой защитой split. R10 использует только первые +3 ч целей, но не ослабляет исходный 72-часовой guard.
+NCEP1 1991–2020 существенно грубее mesh8. Хранить заранее интерполированный массив `12×655362×37×5` нерационально: это многогигабайтный артефакт без новой информации источника.
 
-GraphCast-нормы пяти профильных величин не пересчитываются. Станционная климатология строится только по train-периоду. Никакие validation/test значения не участвуют в fit.
-
-### Q2. Климатический контекст level 4 — artifact build pending
+R10 требует подготовленный seasonal artifact на mesh level 4. `Mesh8SeasonalClimatology` детерминированно отображает его на mesh8 по ближайшему центру context-cell и включает source/target fingerprints в собственный fingerprint. Это внешний контекст, не наблюдение и не повышение разрешения NCEP1.
 
 ```bash
 python -m global_weather.seasonal_climatology \
@@ -109,9 +88,11 @@ python -m global_weather.seasonal_climatology \
   --minimum-years 25
 ```
 
-На этапе загрузки mesh8 модель обязана проверить исходный manifest, SHA256, level 4 и детерминированное соответствие target grid fingerprint.
+Статус: adapter реализован; реальный artifact build на data node pending.
 
-### Q3. Статические поля mesh8 — artifact build pending
+## Q3. Статические поля mesh8
+
+`joint_static` явно использует `build_mesh8_grid()` при `--mesh-level 8`. DEM выбирается для всех 655362 центров, а суша определяется независимым GeoJSON, поэтому отрицательная высота суши не превращается в океан.
 
 ```bash
 python -m global_weather.joint_static \
@@ -123,9 +104,9 @@ python -m global_weather.joint_static \
   --output DATA/joint-static-mesh8
 ```
 
-DEM выбирается для каждой из 655362 ячеек. Суша задаётся независимым полигональным источником, поэтому отрицательная высота суши не превращается в океан. Manifest обязан содержать mesh8 fingerprint.
+Статус: код реализован; real static artifact/hash на data node pending.
 
-### Q4. Один обучающий квалификационный проход — CUDA executor pending
+## Q4. CUDA train/validation qualification
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python -m global_weather.joint_observation_training \
@@ -137,18 +118,13 @@ CUDA_VISIBLE_DEVICES=0 python -m global_weather.joint_observation_training \
   --output outputs/joint-mesh8-qualification-r10
 ```
 
-Обязательные условия успеха:
+Условия успеха: фактический CUDA device; конечные loss/gradients; ненулевые gradients всех trainable tensors; реальные targets всех пяти профильных и шести native surface величин; peak VRAM ≤ заявленного бюджета; validation на +3 ч; атомарные checkpoint/complete; identity содержит commit, mesh fingerprint и все data/norm/static/climate hashes.
 
-- CUDA используется фактически;
-- все пять профильных и все шесть native surface величин имеют реальные цели;
-- все обучаемые ветви получают конечные ненулевые градиенты;
-- loss и gradients конечны;
-- peak VRAM не превышает объявленный бюджет;
-- validation выполняется на том же 3-часовом rollout;
-- checkpoint и `complete.json` записываются атомарно;
-- identity содержит commit, mesh8 fingerprint, grid area method, dataset/norm/static/climate hashes.
+Статус: **pending executor run**. В GitHub-конфигурации репозитория не обнаружен готовый self-hosted/GPU runner, поэтому CUDA-проход не помечается как выполненный без реального артефакта.
 
-### Q5. Frozen checkpoint, физика и GRIB2 — pending Q4
+## Q5. Frozen inference, физика и GRIB2
+
+Frozen inference ограничен горизонтом checkpoint. Для R10 mesh8 разрешено только +3 ч; попытка запросить больший горизонт завершается ошибкой.
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python -m global_weather.joint_observation_inference \
@@ -156,39 +132,31 @@ CUDA_VISIBLE_DEVICES=0 python -m global_weather.joint_observation_inference \
   --training outputs/joint-mesh8-qualification-r10 \
   --static DATA/joint-static-mesh8 \
   --output outputs/joint-mesh8-qualification-r10-inference \
-  --split validation \
-  --limit 1 \
-  --horizon-hours 3 \
-  --device cuda:0 \
-  --warmups 0 \
-  --repeats 1 \
+  --split validation --limit 1 --horizon-hours 3 \
+  --device cuda:0 --warmups 0 --repeats 1 \
   --spacing-degrees 0.5
 ```
 
-Inference не имеет права запросить горизонт больше `rollout_hours` checkpoint. Для квалификационного checkpoint mesh8 разрешён только +3 ч.
+Выход обязан пройти гидростатическую/геометрическую диагностику, continuity-диагностику omega, сохранение NPZ, GRIB2 inventory и SHA256. Регулярная GRIB-сетка — формат выдачи, не разрешение модели.
 
-Выход должен пройти гидростатическую проверку, геометрическую маску относительно проверенного DEM, диагностический расчёт omega из continuity, сохранение NPZ и GRIB2 с inventory и SHA256. Регулярная GRIB-сетка 0,5 градуса является только форматом квалификационной выдачи и не определяет разрешение модели.
+Статус: pending Q4.
 
 ## Критерии закрытия R10
 
-R10 получает статус `qualified` только если одновременно выполнены:
+R10 становится `qualified` только когда одновременно выполнены:
 
-1. CI geometry report успешен на полном level 8. **Выполнено.**
-2. Static и climatology artifacts имеют неизменные SHA256 и ожидаемые grid identities.
-3. Train и validation завершились без OOM/nonfinite.
-4. Ненулевые gradients подтверждены для всех trainable parameter tensors.
-5. Best checkpoint повторно загружается и совпадает по fixed buffers.
-6. 3-часовой frozen inference завершён на mesh8.
-7. Physical diagnostics и GRIB2 inventory созданы и проходят встроенные проверки.
-8. Фактические VRAM, RSS и времена записаны.
-9. `scientific_acceptance=false` сохранён во всех manifests.
+1. Q0 full mesh8 geometry/graph — **выполнено**.
+2. Q1 data/norm runtime verification.
+3. Q2 immutable climate artifact.
+4. Q3 immutable mesh8 static artifact.
+5. Q4 CUDA train + validation без OOM/nonfinite с записанной телеметрией.
+6. Reload best checkpoint с совпадением fixed buffers и fingerprints.
+7. Q5 frozen +3h inference, physical diagnostics, NPZ/GRIB2/inventory.
+8. `scientific_acceptance=false` во всех manifests.
 
-Провал любого пункта сохраняется как отрицательный результат R10. Запрещено уменьшать mesh level и при этом сохранять идентификатор R10.
-
-Машиночитаемое состояние gates хранится в `experiments/joint-mesh8-qualification-r10.json`.
+Машиночитаемое состояние gates: `experiments/joint-mesh8-qualification-r10.json`.
+Распределение ролей: `agents/MESH8_EXPERIMENT_CONTRACT.md`.
 
 ## Переход к 72 часам
 
-После успешного R10 создаётся новый опыт. Минимально требуется отдельно проверить streaming/checkpointed rollout, чтобы не удерживать в памяти 25 полных глобальных кадров, а также streaming export. Увеличение `hidden`, количества эпох и горизонта не выполняется автоматически.
-
-Распределение ответственности по ролям закреплено в `agents/MESH8_EXPERIMENT_CONTRACT.md`.
+После успешного R10 создаётся новый experiment ID и новое решение. Перед 72-часовым mesh8-run обязательны streaming/checkpointed rollout и streaming export, чтобы не удерживать одновременно 25 полных глобальных профильных кадров. `hidden`, epochs и horizon не повышаются автоматически.
