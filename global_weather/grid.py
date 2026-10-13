@@ -3,12 +3,12 @@
 This is NOT H3. The native hierarchy has 10*4**level+2 cells. Pooling groups
 are nearest-coarse-centre groups, not exact nested polygon intersections.
 
-Levels up to the reviewed small-grid range retain the historical construction
-order and exact :class:`scipy.spatial.SphericalVoronoi` areas so existing
-fingerprints/checkpoints do not change. High-resolution levels use vectorised
-refinement and vertex-centred one-third spherical-triangle control-volume
-areas. The latter close globally and are suitable for conservative weighting,
-but they are not exact Voronoi polygons and are labelled accordingly.
+Levels 0..7 retain the historical construction order and exact
+:class:`scipy.spatial.SphericalVoronoi` areas so existing fingerprints and
+checkpoints do not change. Mesh level 8 uses vectorised refinement and
+vertex-centred one-third spherical-triangle control-volume areas. The latter
+close globally and are suitable for conservative weighting, but they are not
+exact Voronoi polygons and are labelled accordingly.
 """
 from __future__ import annotations
 from dataclasses import dataclass
@@ -20,8 +20,8 @@ from scipy.spatial import ConvexHull, SphericalVoronoi, cKDTree
 EARTH_RADIUS_M = 6_371_008.8
 MESH8_LEVEL = 8
 MESH8_CELLS = 655_362
-# Keep exact Voronoi/polygon construction away from the 655k-cell experiment.
-EXACT_VORONOI_MAX_CELLS = 50_000
+# Preserve every mesh that the pre-mesh8 implementation admitted by default.
+EXACT_VORONOI_MAX_CELLS = 200_000
 # Level 8 is the supported high-resolution research ceiling by default.
 DEFAULT_MAX_CELLS = MESH8_CELLS
 
@@ -132,7 +132,7 @@ def _base_icosahedron():
 
 
 def _legacy_refine(xyz, faces, steps):
-    """Historical refinement order used by existing small-grid fingerprints."""
+    """Historical refinement order used by existing mesh 0..7 fingerprints."""
     for _ in range(steps):
         points = list(xyz)
         midpoints = {}
@@ -155,7 +155,7 @@ def _legacy_refine(xyz, faces, steps):
 
 
 def _vector_refine_once(xyz, faces):
-    """Memory-bounded deterministic refinement used only above the legacy range."""
+    """Memory-bounded deterministic refinement used only for mesh level 8."""
     f = len(faces)
     raw = np.concatenate((faces[:, [0, 1]], faces[:, [1, 2]], faces[:, [2, 0]])).astype(np.int64, copy=False)
     raw.sort(axis=1)
@@ -176,9 +176,9 @@ def _vector_refine_once(xyz, faces):
 
 def _topology(level):
     xyz, faces = _base_icosahedron()
-    # Preserve the historical order through level 6; level 8 is produced by
-    # only two vectorised refinements instead of millions of Python operations.
-    legacy_level = min(level, 6)
+    # The old implementation admitted levels through 7, so preserve their
+    # exact construction order. Only the final 7->8 refinement is vectorised.
+    legacy_level = min(level, 7)
     xyz, faces = _legacy_refine(xyz, faces, legacy_level)
     for _ in range(legacy_level, level):
         xyz, faces = _vector_refine_once(xyz, faces)
