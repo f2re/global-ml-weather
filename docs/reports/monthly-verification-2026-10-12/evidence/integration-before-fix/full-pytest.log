@@ -1,0 +1,54 @@
+........................................................................ [  7%]
+........................................................................ [ 15%]
+....................................F................................... [ 23%]
+........................................................................ [ 31%]
+........................................................................ [ 39%]
+........................................................................ [ 47%]
+........................................................................ [ 54%]
+........................................................................ [ 62%]
+........................................................................ [ 70%]
+........................................................................ [ 78%]
+........................................................................ [ 86%]
+....................................s................................... [ 94%]
+......................................................                   [100%]
+=================================== FAILURES ===================================
+___________________________ test_build_memory_guard ____________________________
+
+    def test_build_memory_guard():
+>       with pytest.raises(ValueError): build_grid(8)
+E       Failed: DID NOT RAISE ValueError
+
+tests/test_core.py:68: Failed
+=============================== warnings summary ===============================
+../global-ml-weather/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1
+  /home/user/global-ml-weather/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_adaptive.py::test_compressed_output_still_has_all_profiles[4]
+  /home/user/global-ml-weather-monthly-integrated-20261013/global_weather/model.py:34: UserWarning: Sparse invariant checks are implicitly disabled. Memory errors (e.g. SEGFAULT) will occur when operating on a sparse tensor which violates the invariants, but checks incur performance overhead. To silence this warning, explicitly opt in or out. See `torch.sparse.check_sparse_tensor_invariants.__doc__` for guidance.  (Triggered internally at /pytorch/aten/src/ATen/Context.cpp:760.)
+    adjacency = torch.sparse_coo_tensor(torch.tensor(np.stack([dst,src])),
+
+tests/test_adaptive.py::test_graphcast_import_is_level_aware_and_records_hashes
+  <frozen importlib._bootstrap>:241: RuntimeWarning: numpy.ndarray size changed, may indicate binary incompatibility. Expected 16 from C header, got 96 from PyObject
+
+tests/test_ecosystem.py: 18 warnings
+  /home/user/global-ml-weather/.venv/lib/python3.11/site-packages/rasterio/transform.py:178: PendingDeprecationWarning: Use `@` matmul instead of `*` mul operator for matrix multiplication
+    return Affine.translation(west, north) * Affine.scale(xsize, -ysize)
+
+tests/test_ecosystem.py: 11 warnings
+  /home/user/global-ml-weather-monthly-integrated-20261013/global_weather/connectors/raster_bridge.py:70: PendingDeprecationWarning: Use `@` matmul instead of `*` mul operator for matrix multiplication
+    xx, yy = ds.transform*(xx+.5, yy+.5)
+
+tests/test_observation_operator_admission.py::test_unsupported_omega_nan_does_not_poison_temperature_loss
+  /home/user/global-ml-weather-monthly-integrated-20261013/tests/test_observation_operator_admission.py:111: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+  Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+    assert float(loss) == pytest.approx(9.)
+
+tests/test_pipeline.py::test_arrays_reject_objects_and_duplicate_members
+  /usr/lib/python3.11/zipfile.py:1556: UserWarning: Duplicate name: 'x.npy'
+    return self._open_to_write(zinfo, force_zip64=force_zip64)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_core.py::test_build_memory_guard - Failed: DID NOT RAISE Va...
+1 failed, 916 passed, 1 skipped, 34 warnings in 152.63s (0:02:32)

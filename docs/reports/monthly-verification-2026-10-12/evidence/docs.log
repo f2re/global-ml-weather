@@ -2,7 +2,7 @@
   "profile": "RU-TECH-1",
   "status": "passed",
   "files_checked": 99,
-  "local_links_checked": 218,
+  "local_links_checked": 219,
   "issues": [],
   "source_sha256": {
     ".claude/agents/coordinator.md": "3b91bfa5c01012fd6bfefbc9c0bdd013632fcd4891757c0511f77f60c8f326d7",
@@ -70,7 +70,7 @@
     "docs/STATION_ANOMALY.md": "417af46ac5a6254efbd3b7ff24b26fef711aaea37ece85f5f7c25203aa9dde07",
     "docs/TERMS_RU.md": "5e5a0798a4a8351cd331559eedc2d5caa9b564cf42ff9d945ddfc83fe85a4c24",
     "docs/TRAINING.md": "3b0d61edb098f7d955b4e28e71a3d17486ea788adb9c1d4ed10ecef2aab30ffc",
-    "docs/UNIFIED_OBSERVATIONS.md": "7656131f7e498559e4cece1122652b657c633737cd1db9ab9da6f423109a9143",
+    "docs/UNIFIED_OBSERVATIONS.md": "39f84ef7983c783178c1874d375b331dd58b530bca149293ae6997ecb9e31e0a",
     "docs/WRITING_GUIDE_RU.md": "3ff326f72e75c9c26a15d502fc81422bdb19d1dfdabc7822a95799ecd85cc3e8",
     "docs/audits/2026-10-05-continuous-training-flow.md": "df8a80909f0a120e5548f9a9cf6f3ece41bfaa51ffa18d2c01d621cade3fa067",
     "docs/decisions/0005-observation-supervision.md": "903b8c317979d323c519fbde0f2d305c2a8ab3aedc888cb6418471d78c14ade7",
