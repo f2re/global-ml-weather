@@ -2,10 +2,10 @@
 
 The spherical profile processor enforces hydrostatic consistency and uses
 primitive-equation-conditioned learned exchange. The station-native readout is
-projected to basic physical domains: temperature and pressures are positive and
-dew point cannot exceed air temperature. Satellite parameters are deliberately
-absent from this experiment. Diagnostic omega and below-terrain issuance are
-computed only by the forecast-physics stage.
+projected to basic physical domains: temperature, dew point and pressures are
+positive and dew point cannot exceed air temperature. Satellite parameters are
+deliberately absent from this experiment. Diagnostic omega and below-terrain
+issuance are computed only by the forecast-physics stage.
 """
 from __future__ import annotations
 
@@ -78,9 +78,12 @@ class JointObservationModel(HydrostaticFlowProfileModel):
     def _physical_surface(raw):
         """Project six native station variables to their hard physical domains."""
         t = F.softplus(raw[..., 0])
-        # t - softplus(t-td_raw) is smooth, strictly <= t, and approaches
-        # td_raw when td_raw is already meteorologically below temperature.
-        td = t - F.softplus(t-raw[..., 1])
+        # First map the unconstrained dew-point candidate to Kelvin > 0, then
+        # smoothly cap it below T. For ordinary atmospheric Kelvin values both
+        # softplus operations are asymptotically identity, so realistic values
+        # are not compressed merely to satisfy the constraint.
+        td_candidate = F.softplus(raw[..., 1])
+        td = (t - F.softplus(t-td_candidate)).clamp_min(torch.finfo(raw.dtype).tiny)
         ps = F.softplus(raw[..., 4])
         mslp = F.softplus(raw[..., 5])
         return torch.stack((t, td, raw[..., 2], raw[..., 3], ps, mslp), -1)
