@@ -1,19 +1,23 @@
-"""Fresh joint measured model: station anomalies and actual-pressure soundings.
+"""Joint measured model with physically constrained profile and surface heads.
 
-The spherical hydrostatic profile processor is shared with a station-native
-anomaly readout. No satellite parameters exist in this experiment. Omega and
-terrain-dependent below-ground issuance remain unavailable.
+The spherical profile processor enforces hydrostatic consistency and uses
+primitive-equation-conditioned learned exchange. The station-native readout is
+projected to basic physical domains: temperature and pressures are positive and
+dew point cannot exceed air temperature. Satellite parameters are deliberately
+absent from this experiment. Diagnostic omega and below-terrain issuance are
+computed only by the forecast-physics stage.
 """
 from __future__ import annotations
 
 import numpy as np
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from .observation_model import NearestSphericalOperator
 from .profile_hydrostatic_model import HydrostaticFlowProfileModel
 
-ARCHITECTURE = 'joint-measured-hydrostatic-v1'
+ARCHITECTURE = 'joint-measured-physical-v2'
 
 
 class JointObservationModel(HydrostaticFlowProfileModel):
@@ -70,12 +74,28 @@ class JointObservationModel(HydrostaticFlowProfileModel):
             state = torch.where((count > 0)[:, None, None], updated, state)
         return state
 
+    @staticmethod
+    def _physical_surface(raw):
+        """Project six native station variables to their hard physical domains."""
+        t = F.softplus(raw[..., 0])
+        # t - softplus(t-td_raw) is smooth, strictly <= t, and approaches
+        # td_raw when td_raw is already meteorologically below temperature.
+        td = t - F.softplus(t-raw[..., 1])
+        ps = F.softplus(raw[..., 4])
+        mslp = F.softplus(raw[..., 5])
+        return torch.stack((t, td, raw[..., 2], raw[..., 3], ps, mslp), -1)
+
     def _decode(self, state, issue, lead):
         frame = super()._decode(state, issue, lead)
         cells = self.station_operator.cells
         context = torch.cat((state.mean(1)[cells], state[:, 0][cells], self.station_operator.station_xyz), -1)
-        frame.native_normalized = self.surface_head(context)
-        frame.native_physical = self.surface_monthly[frame.valid_time.month - 1] + frame.native_normalized * self.surface_scales
+        raw_normalized = self.surface_head(context)
+        baseline = self.surface_monthly[frame.valid_time.month - 1]
+        raw_physical = baseline + raw_normalized * self.surface_scales
+        frame.native_physical = self._physical_surface(raw_physical)
+        # Training remains in the same immutable station-anomaly coordinates,
+        # but the loss now sees the physically projected state.
+        frame.native_normalized = (frame.native_physical-baseline)/self.surface_scales
         frame.native_variable_mask = torch.isfinite(frame.native_physical)
         return frame
 
