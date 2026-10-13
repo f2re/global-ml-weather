@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -31,14 +32,16 @@ MINIMUM_FREE_DISK_GIB = 64
 
 
 def _path(path, *, directory=None):
-    value = Path(path).expanduser().resolve()
-    if value.is_symlink() or any(parent.is_symlink() for parent in value.parents):
-        raise ValueError('R10 paths and parents must not be symlinks.')
-    if directory is True and not value.is_dir():
-        raise ValueError('Required R10 directory is missing: '+str(value))
-    if directory is False and not value.is_file():
-        raise ValueError('Required R10 file is missing: '+str(value))
-    return value
+    """Return an absolute path only after rejecting every symlink component."""
+    candidate = Path(os.path.abspath(os.fspath(Path(path).expanduser())))
+    for component in (candidate, *candidate.parents):
+        if component.is_symlink():
+            raise ValueError('R10 paths and parents must not be symlinks: '+str(component))
+    if directory is True and not candidate.is_dir():
+        raise ValueError('Required R10 directory is missing: '+str(candidate))
+    if directory is False and not candidate.is_file():
+        raise ValueError('Required R10 file is missing: '+str(candidate))
+    return candidate
 
 
 def _git_identity(root, expected_sha):
@@ -79,8 +82,6 @@ def _cuda_identity(config, require_cuda=True):
 
 
 def _normalization(dataset, norm_path):
-    if norm_path.is_symlink():
-        raise ValueError('Normalization symlink is forbidden.')
     norms = load_normalization(json.loads(norm_path.read_text()))
     expected = {
         'dataset_manifest_sha256': dataset.profile.manifest_sha256,
@@ -124,10 +125,11 @@ def preflight(dataset_path, norm_path, climatology_path, static_path, config_pat
     climate.verify_sources()
     static = load_static(static_path, grid)
 
-    run_root = Path(run_root).expanduser().resolve()
-    if run_root.is_symlink() or any(parent.is_symlink() for parent in run_root.parents):
-        raise ValueError('Run root or one of its parents is a symlink.')
+    run_root = _path(run_root)
     run_root.mkdir(parents=True, exist_ok=True)
+    # Re-check the now-existing output after mkdir to close the common symlink
+    # substitution case between argument parsing and artifact creation.
+    run_root = _path(run_root, directory=True)
     free = int(shutil.disk_usage(run_root).free)
     minimum_free = int(minimum_free_disk_gib) * 1024**3
     if free < minimum_free:
@@ -162,8 +164,10 @@ def preflight(dataset_path, norm_path, climatology_path, static_path, config_pat
                     'free_disk_bytes': free, 'minimum_free_disk_bytes': minimum_free},
         'authorization': 'Q4 training then Q5 frozen inference only; no 72 h promotion and no scientific acceptance',
     }
-    report_path = Path(report_path).resolve() if report_path else run_root/'preflight.json'
+    report_path = _path(report_path) if report_path else run_root/'preflight.json'
     report_path.parent.mkdir(parents=True, exist_ok=True)
+    if report_path.exists() and report_path.is_symlink():
+        raise ValueError('Preflight report destination may not be a symlink.')
     save(report_path, report)
     return report
 
