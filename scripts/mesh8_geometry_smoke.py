@@ -58,6 +58,7 @@ def run() -> dict:
         'cells': grid.n_cells,
         'faces': int(len(grid.faces)),
         'directed_edges': int(grid.edges.shape[1]),
+        'grid_fingerprint': grid.fingerprint,
         'five_neighbour_cells': int(np.count_nonzero(degree == 5)),
         'six_neighbour_cells': int(np.count_nonzero(degree == 6)),
         'nominal_area_scale_km': grid.nominal_area_scale_km,
