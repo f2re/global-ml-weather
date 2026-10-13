@@ -22,8 +22,7 @@ MESH8_LEVEL = 8
 MESH8_CELLS = 655_362
 # Preserve every mesh that the pre-mesh8 implementation admitted by default.
 EXACT_VORONOI_MAX_CELLS = 200_000
-# Level 8 is the supported high-resolution research ceiling by default.
-DEFAULT_MAX_CELLS = MESH8_CELLS
+DEFAULT_MAX_CELLS = 200_000
 
 
 def grid_cell_count(level: int) -> int:
@@ -204,6 +203,7 @@ def _triangle_control_areas(xyz, faces):
 
 
 def build_grid(level=1, *, max_cells=DEFAULT_MAX_CELLS, exact_voronoi_max_cells=EXACT_VORONOI_MAX_CELLS):
+    """Build a historical grid; mesh8 requires the explicit helper below."""
     n = grid_cell_count(level)
     if type(max_cells) is not int or max_cells < 12 or n > max_cells:
         raise ValueError(f'{n} cells exceeds explicit build limit {max_cells}.')
@@ -238,6 +238,14 @@ def build_grid(level=1, *, max_cells=DEFAULT_MAX_CELLS, exact_voronoi_max_cells=
         raise RuntimeError('Spherical area closure failed.')
     return SphereGrid(level, xyz, faces, edges, areas, vertices, regions,
                       area_method=area_method, has_polygon_geometry=has_polygons)
+
+
+def build_mesh8_grid():
+    """Explicit opt-in to the 655362-cell R10 mesh8 geometry."""
+    grid = build_grid(MESH8_LEVEL, max_cells=MESH8_CELLS)
+    if grid.n_cells != MESH8_CELLS or grid.has_polygon_geometry:
+        raise RuntimeError('Mesh8 explicit construction contract differs.')
+    return grid
 
 
 def build_pyramid(level=1):
