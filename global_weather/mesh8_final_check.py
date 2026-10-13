@@ -10,6 +10,8 @@ import argparse
 import json
 from pathlib import Path
 
+import numpy as np
+
 from .joint_observation_model import ARCHITECTURE as JOINT_ARCHITECTURE
 from .joint_observation_training import STATUS as TRAINING_STATUS
 from .mesh8_preflight import CANONICAL_MESH8_FINGERPRINT, _path
@@ -31,6 +33,39 @@ def _same_sha(path, expected, label):
     if not isinstance(expected, str) or actual != expected:
         raise ValueError(label+' SHA256 differs from preserved manifest.')
     return actual
+
+
+def _surface_evidence(path, manifest):
+    """Independently verify physical station-native values in the hashed NPZ."""
+    path = _path(path, directory=False)
+    with np.load(path, allow_pickle=False) as archive:
+        required = {'surface', 'surface_issue_mask', 'lead_hours'}
+        if not required.issubset(archive.files):
+            raise ValueError('Forecast NPZ lacks station-native physical evidence.')
+        surface = archive['surface']
+        issue_mask = archive['surface_issue_mask']
+        leads = archive['lead_hours']
+    if (surface.ndim != 3 or surface.shape[0] != 2 or surface.shape[-1] != 6
+            or issue_mask.shape != surface.shape or issue_mask.dtype != np.bool_
+            or not issue_mask.all() or not np.array_equal(leads, np.array([0, 3], dtype=leads.dtype))
+            or not np.isfinite(surface).all()):
+        raise ValueError('Q5 station-native output geometry/mask/leads are invalid.')
+    violations = ((surface[..., 0] <= 0) | (surface[..., 1] <= 0)
+                  | (surface[..., 1] > surface[..., 0])
+                  | (surface[..., 4] <= 0) | (surface[..., 5] <= 0))
+    if np.any(violations):
+        raise ValueError('Q5 saved station-native output left the reviewed thermodynamic domain.')
+    declared = manifest.get('surface_physics', {})
+    if declared.get('domain_violations') != 0:
+        raise ValueError('Q5 surface-physics manifest does not confirm zero domain violations.')
+    return {
+        'temperature_min_k': float(surface[..., 0].min()),
+        'dewpoint_min_k': float(surface[..., 1].min()),
+        'dewpoint_minus_temperature_max_k': float((surface[..., 1]-surface[..., 0]).max()),
+        'surface_pressure_min_pa': float(surface[..., 4].min()),
+        'mean_sea_level_pressure_min_pa': float(surface[..., 5].min()),
+        'domain_violations': 0,
+    }
 
 
 def verify(run_root, expected_sha, output=None):
@@ -110,7 +145,9 @@ def verify(run_root, expected_sha, output=None):
         if (continuity.get('count', 0) <= 0 or continuity.get('max_abs_s-1') is None
                 or continuity['max_abs_s-1'] > CONTINUITY_MAX_ABS_S1):
             raise ValueError('Q5 pressure-continuity residual exceeds the technical R10 gate.')
-        npz_hash = _same_sha(issue/'forecast.npz', manifest.get('forecast_npz_sha256'), 'Forecast NPZ')
+        npz_path = issue/'forecast.npz'
+        npz_hash = _same_sha(npz_path, manifest.get('forecast_npz_sha256'), 'Forecast NPZ')
+        surface = _surface_evidence(npz_path, manifest)
         grib_hash = _same_sha(issue/'forecast.grib2', manifest.get('grib_sha256'), 'Forecast GRIB2')
         inventory_hash = _same_sha(issue/'forecast.grib2.json', manifest.get('grib_inventory_sha256'), 'GRIB inventory')
         products.append({'issue_time': manifest['issue_time'], 'directory': directory,
@@ -119,6 +156,7 @@ def verify(run_root, expected_sha, output=None):
                          'hydrostatic_max_abs_m2_s2': hydro['max_abs_m2_s2'],
                          'continuity_max_abs_s-1': continuity['max_abs_s-1'],
                          'humidity_domain_violations': 0,
+                         'surface_physics': surface,
                          'telemetry': manifest.get('telemetry')})
 
     report = {
