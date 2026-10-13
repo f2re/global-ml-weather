@@ -12,7 +12,7 @@ import time
 import numpy as np
 import torch
 
-from global_weather.grid import EARTH_RADIUS_M, build_grid, grid_cell_count, nominal_area_scale_km
+from global_weather.grid import EARTH_RADIUS_M, build_mesh8_grid, grid_cell_count, nominal_area_scale_km
 from global_weather.model import GraphOps
 
 
@@ -23,7 +23,7 @@ def peak_rss_bytes() -> int:
 
 def run() -> dict:
     started = time.perf_counter()
-    grid = build_grid(8)
+    grid = build_mesh8_grid()
     geometry_seconds = time.perf_counter() - started
     degree = np.bincount(grid.edges[0], minlength=grid.n_cells)
     expected_area = 4*np.pi*EARTH_RADIUS_M**2
