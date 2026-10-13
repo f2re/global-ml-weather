@@ -23,7 +23,10 @@ from .profile_physics import hydrostatic_projection, RD
 from .profile_seasonal_model import SeasonalProfileModel
 
 ARCHITECTURE = 'hydrostatic-primitive-conditioned-v2'
-STATUS = 'measured_hydrostatic_primitive_conditioned_profile_research_trained'
+# Keep the generic hydrostatic-flow completion status understood by historical
+# loaders. Checkpoint compatibility is determined by architecture/source
+# identity, not by inventing a new completion-status namespace.
+STATUS = 'measured_hydrostatic_flow_profile_research_trained'
 EARTH_ANGULAR_VELOCITY = 7.292115e-5
 CP_DRY = 1004.0
 KAPPA = RD / CP_DRY
@@ -79,6 +82,14 @@ class HydrostaticFlowProfileModel(PressureProfileModel):
         self.register_buffer('humidity_bias', ratio + torch.log(-torch.expm1(-ratio)))
 
     _climate_features = SeasonalProfileModel._climate_features
+
+    def load_state_dict(self, state_dict, strict=True, assign=False):
+        # The Coriolis field is derived only from Earth rotation and immutable
+        # grid latitude. A checkpoint may not silently replace it.
+        saved = state_dict.get('coriolis_f')
+        if saved is None or not torch.equal(saved.to(self.coriolis_f.device), self.coriolis_f):
+            raise ValueError('Checkpoint Coriolis buffer differs from physical grid constants.')
+        return super().load_state_dict(state_dict, strict=strict, assign=assign)
 
     def _initial_state(self, issue, pressure):
         state = super()._initial_state(issue, pressure)
