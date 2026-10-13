@@ -3,11 +3,48 @@
   "experiment_id": "joint-mesh8-qualification-r10",
   "contract_id": "GLOBAL-WEATHER-MESH8-R10",
   "decision": "docs/decisions/0018-mesh8-end-to-end-qualification.md",
+  "physical_completion_decision": "docs/decisions/0019-r10-physical-core-and-final-execution.md",
+  "runbook": "docs/MESH8_R10_FINAL_RUN.md",
   "config": "configs/joint_observation_training.json",
   "historical_mesh2_config": "configs/joint_observation_training_mesh2_pilot.json",
-  "status": "geometry_qualified_cuda_runtime_pending",
+  "status": "physical_implementation_complete_artifacts_and_cuda_execution_pending",
   "scientific_acceptance": false,
   "satellite_supervision": false,
+  "physical_architecture": {
+    "joint": "joint-measured-physical-v2",
+    "profile": "hydrostatic-primitive-conditioned-v2",
+    "hard_constraints": [
+      "discrete hydrostatic geopotential projection",
+      "0 <= specific humidity < 1",
+      "surface temperature > 0",
+      "surface dew point <= temperature",
+      "station surface pressure > 0",
+      "station mean sea-level pressure > 0"
+    ],
+    "dynamic_conditioning": [
+      "wind-directed graph exchange",
+      "geopotential-gradient acceleration",
+      "Coriolis acceleration",
+      "potential-temperature stability-gated vertical coupling"
+    ],
+    "diagnostics": [
+      "pressure-coordinate continuity omega with omega(100 Pa)=0",
+      "hydrostatic residual",
+      "continuity residual",
+      "specific-humidity domain audit",
+      "area-integrated shared-flux closure",
+      "common-support water mass proxy",
+      "common-support dry-static-energy proxy",
+      "common-support kinetic-energy proxy"
+    ],
+    "not_claimed": [
+      "finite-volume primitive-equation solver",
+      "exact total mass conservation",
+      "exact total energy conservation",
+      "CFL stability proof",
+      "meteorological 28 km resolving power"
+    ]
+  },
   "mesh": {
     "level": 8,
     "cells": 655362,
@@ -25,11 +62,13 @@
     "hidden": 4,
     "epochs": 1,
     "edge_chunk_size": 32768,
+    "physics_pressure_level_chunk": 4,
     "max_train_issues": 4,
     "max_validation_issues": 2,
     "max_test_issues": 2,
     "max_records_per_window": 2000,
     "declared_activation_budget_mib": 22528,
+    "minimum_free_disk_gib": 64,
     "cuda_required": true
   },
   "context": {
@@ -39,6 +78,15 @@
     "seasonal_context_mesh_level": 4,
     "seasonal_context_mapping": "nearest climate-context cell centre onto mesh8",
     "terrain": "verified DEM plus independent land polygon on mesh8"
+  },
+  "execution": {
+    "preflight": "python -m global_weather.mesh8_preflight",
+    "runner": "python scripts/mesh8-r10-runner.py",
+    "final_verifier": "python -m global_weather.mesh8_final_check",
+    "fixed_sequence": ["preflight", "Q4 training", "Q5 frozen inference", "final evidence gate"],
+    "source_revision_must_match": true,
+    "tracked_tree_must_be_clean": true,
+    "arbitrary_manifest_commands_allowed": false
   },
   "stages": {
     "Q0_geometry_graph": {
@@ -55,54 +103,70 @@
       "contract_tests": "6 passed"
     },
     "Q1_data_normalization": {
-      "status": "implemented_runtime_verification_pending",
+      "status": "implemented_preflight_runtime_verification_pending",
       "required": [
         "joint dataset verify",
         "72-hour split guard retained",
-        "GraphCast source hashes",
-        "train-only station climatology"
+        "GraphCast source identity and source hashes",
+        "train-only station climatology",
+        "exact source revision"
       ]
     },
     "Q2_climate_context": {
-      "status": "implemented_artifact_build_pending",
+      "status": "implemented_artifact_build_and_preflight_pending",
       "required_source_mesh_level": 4,
       "target_mesh_level": 8
     },
     "Q3_static_terrain": {
-      "status": "implemented_artifact_build_pending",
+      "status": "implemented_artifact_build_and_preflight_pending",
       "target_mesh_level": 8
     },
     "Q4_cuda_train_validation": {
-      "status": "pending_executor_run",
+      "status": "implementation_complete_pending_executor_run",
       "required_outputs": [
+        "preflight.json",
         "progress.json",
         "epoch-0001/state.pt",
         "epoch-0001/metrics.json",
         "best.json",
         "complete.json"
+      ],
+      "required_evidence": [
+        "all trainable branches have nonzero finite gradients",
+        "measured cuda_peak_allocated_bytes",
+        "measured cuda_peak_reserved_bytes"
       ]
     },
     "Q5_frozen_inference_physics_grib": {
-      "status": "pending_Q4",
+      "status": "implementation_complete_pending_Q4",
       "required_outputs": [
         "forecast.npz",
         "forecast.json",
         "forecast.grib2",
         "forecast.grib2.json",
         "completion.json",
-        "batch.json"
-      ]
+        "batch.json",
+        "final-verification.json",
+        "execution-evidence.json"
+      ],
+      "technical_gates": {
+        "specific_humidity_domain_violations": 0,
+        "hydrostatic_max_abs_m2_s2": 5.0,
+        "continuity_max_abs_s-1": 1e-6,
+        "qualified_horizon_hours": 3
+      }
     }
   },
   "promotion_to_72h": {
     "allowed": false,
     "requires_new_experiment": true,
     "required_work": [
-      "successful Q4 and Q5",
+      "successful R10 Q4 and Q5 final evidence gate",
       "measured CUDA memory telemetry",
-      "streaming or checkpointed rollout",
+      "streaming or checkpointed 72-hour rollout",
       "streaming export",
-      "new decision and experiment id"
+      "new decision and experiment id",
+      "independent meteorological skill verification"
     ]
   }
 }
