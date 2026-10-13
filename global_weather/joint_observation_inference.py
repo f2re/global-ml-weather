@@ -142,12 +142,25 @@ def save_issue(dataset, model, state, checkpoint_hash, issue, destination, *,
     prediction, mask, diagnostic_physics = apply_forecast_physics(
         prediction, mask, model.grid, static_fields['elevation_m'])
     surface = torch.stack([frame.native_physical for frame in frames]).detach().cpu().numpy()
-    if not np.isfinite(surface).all():
-        raise FloatingPointError('Nonfinite station-native physical prediction.')
-    surface_mask = np.isfinite(surface)
-    surface_mask[..., [0, 1, 4, 5]] &= surface[..., [0, 1, 4, 5]] > 0
     if surface.shape != (len(leads), len(dataset.surface.latlon), 6):
         raise ValueError('Surface prediction geometry or variable count differs.')
+    if not np.isfinite(surface).all():
+        raise FloatingPointError('Nonfinite station-native physical prediction.')
+    if (np.any(surface[..., 0] <= 0) or np.any(surface[..., 1] <= 0)
+            or np.any(surface[..., 1] > surface[..., 0])
+            or np.any(surface[..., 4] <= 0) or np.any(surface[..., 5] <= 0)):
+        raise FloatingPointError('Station-native prediction left the reviewed thermodynamic domain.')
+    # These are learned station-native products. An impossible value is an
+    # inference failure, not something the issuance mask is allowed to hide.
+    surface_mask = np.ones(surface.shape, dtype=bool)
+    surface_physics = {
+        'temperature_min_k': float(surface[..., 0].min()),
+        'dewpoint_min_k': float(surface[..., 1].min()),
+        'dewpoint_minus_temperature_max_k': float((surface[..., 1]-surface[..., 0]).max()),
+        'surface_pressure_min_pa': float(surface[..., 4].min()),
+        'mean_sea_level_pressure_min_pa': float(surface[..., 5].min()),
+        'domain_violations': 0,
+    }
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.joint-issue-', dir=destination.parent) as staging:
         stage = Path(staging) / 'product'
@@ -178,6 +191,7 @@ def save_issue(dataset, model, state, checkpoint_hash, issue, destination, *,
             'normalization_sha256': state['identity'].get('norm_sha256'),
             'profile_training_support': state.get('trained_variable_mask'),
             'diagnostic_physics': diagnostic_physics,
+            'surface_physics': surface_physics,
             'static_provenance': {key: value for key, value in static_fields.items()
                                   if key not in ('elevation_m', 'land_mask', 'slope', 'xyz')},
             'field_origins': {**{variable: 'learned_measured_joint_profile' for variable in PROFILE_VARIABLES[:5]},
