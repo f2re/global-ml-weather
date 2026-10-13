@@ -40,12 +40,28 @@ def test_joint_surface_and_profile_decoder_gradients_and_nan_mask():
     assert not frames[-1].profile_variable_mask[..., 5].any()
     assert torch.isnan(frames[-1].profiles[..., 5]).all()
     assert torch.isfinite(frames[-1].profiles[..., :5]).all()
+    surface = frames[-1].native_physical
+    assert (surface[..., 0] > 0).all()
+    assert (surface[..., 1] <= surface[..., 0]).all()
+    assert (surface[..., 4:] > 0).all()
+    reconstructed = net.surface_monthly[frames[-1].valid_time.month-1] + frames[-1].native_normalized*net.surface_scales
+    assert torch.allclose(reconstructed, surface)
     loss = frames[-1].native_normalized.square().mean() + (frames[-1].profiles[..., :5]/net.std).square().mean()
     loss.backward()
     for branch in (net.surface_encoder, net.surface_ingest, net.surface_head, net.head, net.dynamic, net.tendency):
         assert all(p.grad is not None and torch.isfinite(p.grad).all() for p in branch.parameters())
         assert sum(float(p.grad.abs().sum()) for p in branch.parameters()) > 0
     assert net._surface_history is None
+
+
+def test_surface_projection_corrects_unphysical_dewpoint_and_pressures_smoothly():
+    raw = torch.tensor([[250., 270., 3., -4., -100., -10.]], requires_grad=True)
+    physical = model()._physical_surface(raw)
+    assert physical[0, 0] > 0
+    assert physical[0, 1] <= physical[0, 0]
+    assert physical[0, 4] > 0 and physical[0, 5] > 0
+    physical.sum().backward()
+    assert torch.isfinite(raw.grad).all()
 
 
 def test_joint_history_rejects_admitted_nan():
@@ -93,4 +109,4 @@ def test_joint_profile_and_terrain_input_branches_are_active():
     for branch in (net.token, net.variable, net.ingest, net.terrain_encoder):
         assert all(p.grad is not None and torch.isfinite(p.grad).all() for p in branch.parameters())
         assert sum(float(p.grad.abs().sum()) for p in branch.parameters()) > 0
-    assert (net.terrain_elevation_m == -50.).all()  # preserve negative land elevation
+    assert (net.terrain_elevation_m == -50.).all()
