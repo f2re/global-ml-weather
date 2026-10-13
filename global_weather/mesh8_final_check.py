@@ -10,22 +10,23 @@ import argparse
 import json
 from pathlib import Path
 
+from .joint_observation_model import ARCHITECTURE as JOINT_ARCHITECTURE
 from .joint_observation_training import STATUS as TRAINING_STATUS
-from .mesh8_preflight import CANONICAL_MESH8_FINGERPRINT
+from .mesh8_preflight import CANONICAL_MESH8_FINGERPRINT, _path
 from .observation_training import digest, save
+from .profile_hydrostatic_model import ARCHITECTURE as PROFILE_ARCHITECTURE
 
 HYDROSTATIC_MAX_ABS_M2_S2 = 5.0
 CONTINUITY_MAX_ABS_S1 = 1e-6
 
 
 def _json(path):
-    path = Path(path)
-    if path.is_symlink() or not path.is_file():
-        raise ValueError('Required immutable R10 JSON is missing or a symlink: '+str(path))
+    path = _path(path, directory=False)
     return json.loads(path.read_text())
 
 
 def _same_sha(path, expected, label):
+    path = _path(path, directory=False)
     actual = digest(path)
     if not isinstance(expected, str) or actual != expected:
         raise ValueError(label+' SHA256 differs from preserved manifest.')
@@ -33,25 +34,34 @@ def _same_sha(path, expected, label):
 
 
 def verify(run_root, expected_sha, output=None):
-    root = Path(run_root).resolve()
-    if root.is_symlink() or not root.is_dir():
-        raise ValueError('R10 run root is missing or a symlink.')
+    root = _path(run_root, directory=True)
     preflight = _json(root/'preflight.json')
     if (preflight.get('status') != 'ready_for_q4_q5'
             or preflight.get('source_commit') != expected_sha
-            or preflight.get('mesh', {}).get('fingerprint') != CANONICAL_MESH8_FINGERPRINT):
-        raise ValueError('Preflight evidence does not authorise this source/mesh.')
+            or preflight.get('mesh', {}).get('fingerprint') != CANONICAL_MESH8_FINGERPRINT
+            or preflight.get('joint_architecture') != JOINT_ARCHITECTURE
+            or preflight.get('profile_architecture') != PROFILE_ARCHITECTURE):
+        raise ValueError('Preflight evidence does not authorise this source/mesh/physical architecture.')
 
-    training = root/'training'
+    training = _path(root/'training', directory=True)
     complete = _json(training/'complete.json')
     if (complete.get('status') != TRAINING_STATUS
             or complete.get('mesh_level') != 8 or complete.get('grid_cells') != 655362
             or complete.get('rollout_hours') != 3 or complete.get('scientific_acceptance') is not False):
         raise ValueError('Q4 completion does not match the frozen R10 training contract.')
     identity = complete.get('identity', {})
+    config = identity.get('config', {})
     if (identity.get('grid_fingerprint') != CANONICAL_MESH8_FINGERPRINT
-            or identity.get('experiment_id') != 'joint-mesh8-qualification-r10'):
-        raise ValueError('Q4 frozen identity differs from R10.')
+            or identity.get('experiment_id') != 'joint-mesh8-qualification-r10'
+            or identity.get('experiment_role') != 'mesh8_end_to_end_qualification'
+            or identity.get('architecture') != JOINT_ARCHITECTURE
+            or identity.get('rollout_hours') != 3
+            or config.get('mesh_level') != 8
+            or config.get('physical_policy', {}).get('architecture') != 'hydrostatic_flow'
+            or not isinstance(identity.get('joint_source_sha256'), dict)
+            or 'profile_hydrostatic_model.py' not in identity['joint_source_sha256']
+            or 'joint_observation_model.py' not in identity['joint_source_sha256']):
+        raise ValueError('Q4 frozen physical-v2 identity differs from R10.')
     best = _json(training/'best.json')
     if best.get('epoch') != complete.get('best_epoch'):
         raise ValueError('Published best checkpoint does not match complete.json.')
@@ -60,12 +70,13 @@ def verify(run_root, expected_sha, output=None):
     metrics = _json(training/best['directory']/'metrics.json')
     if (metrics.get('cuda_peak_allocated_bytes') is None
             or metrics.get('cuda_peak_reserved_bytes') is None
-            or metrics.get('mesh_level') != 8 or metrics.get('rollout_hours') != 3):
+            or metrics.get('mesh_level') != 8 or metrics.get('rollout_hours') != 3
+            or metrics.get('scientific_acceptance') is not False):
         raise ValueError('Q4 lacks measured CUDA telemetry for the mesh8 run.')
     if not metrics.get('nonzero_gradients') or not all(metrics['nonzero_gradients'].values()):
         raise ValueError('Q4 does not prove nonzero gradients through every trainable branch.')
 
-    forecast = root/'forecast'
+    forecast = _path(root/'forecast', directory=True)
     batch = _json(forecast/'batch.json')
     if (batch.get('status') != 'complete' or batch.get('source_revision') != expected_sha
             or batch.get('mesh_level') != 8 or batch.get('grid_fingerprint') != CANONICAL_MESH8_FINGERPRINT
@@ -75,7 +86,12 @@ def verify(run_root, expected_sha, output=None):
 
     products = []
     for product in batch['products']:
-        issue = forecast/product['directory']
+        directory = product.get('directory')
+        if not isinstance(directory, str) or not directory or '/' in directory or '\\' in directory or directory in ('.', '..'):
+            raise ValueError('Q5 product directory is not a single immutable child name.')
+        issue = _path(forecast/directory, directory=True)
+        if issue.parent != forecast:
+            raise ValueError('Q5 product escaped the forecast root.')
         manifest = _json(issue/'completion.json')
         if (manifest.get('source_revision') != expected_sha
                 or manifest.get('grid_fingerprint') != CANONICAL_MESH8_FINGERPRINT
@@ -97,7 +113,7 @@ def verify(run_root, expected_sha, output=None):
         npz_hash = _same_sha(issue/'forecast.npz', manifest.get('forecast_npz_sha256'), 'Forecast NPZ')
         grib_hash = _same_sha(issue/'forecast.grib2', manifest.get('grib_sha256'), 'Forecast GRIB2')
         inventory_hash = _same_sha(issue/'forecast.grib2.json', manifest.get('grib_inventory_sha256'), 'GRIB inventory')
-        products.append({'issue_time': manifest['issue_time'], 'directory': product['directory'],
+        products.append({'issue_time': manifest['issue_time'], 'directory': directory,
                          'forecast_npz_sha256': npz_hash, 'grib_sha256': grib_hash,
                          'grib_inventory_sha256': inventory_hash,
                          'hydrostatic_max_abs_m2_s2': hydro['max_abs_m2_s2'],
@@ -110,6 +126,8 @@ def verify(run_root, expected_sha, output=None):
         'status': 'r10_q4_q5_technically_qualified',
         'scientific_acceptance': False,
         'source_commit': expected_sha,
+        'joint_architecture': JOINT_ARCHITECTURE,
+        'profile_architecture': PROFILE_ARCHITECTURE,
         'mesh_level': 8, 'grid_cells': 655362,
         'grid_fingerprint': CANONICAL_MESH8_FINGERPRINT,
         'qualified_horizon_hours': 3,
@@ -120,7 +138,8 @@ def verify(run_root, expected_sha, output=None):
         'next_stage_authorized': False,
         'next_stage_requirement': 'new experiment identity for 72 h plus measured memory/streaming design and independent skill verification',
     }
-    destination = Path(output).resolve() if output else root/'final-verification.json'
+    destination = _path(output) if output else root/'final-verification.json'
+    destination.parent.mkdir(parents=True, exist_ok=True)
     save(destination, report)
     return report
 
