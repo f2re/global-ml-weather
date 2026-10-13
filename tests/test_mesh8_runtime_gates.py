@@ -7,8 +7,10 @@ from types import SimpleNamespace
 
 import pytest
 
+from global_weather.joint_observation_model import ARCHITECTURE as JOINT_ARCHITECTURE
 from global_weather.mesh8_final_check import verify
-from global_weather.mesh8_preflight import CANONICAL_MESH8_FINGERPRINT, _cuda_identity
+from global_weather.mesh8_preflight import CANONICAL_MESH8_FINGERPRINT, _cuda_identity, _path
+from global_weather.profile_hydrostatic_model import ARCHITECTURE as PROFILE_ARCHITECTURE
 
 
 def sha(path):
@@ -38,10 +40,21 @@ def test_cuda_preflight_rejects_device_below_declared_budget(monkeypatch):
         _cuda_identity({'physical_policy': {'memory_budget_mib': 22528}}, require_cuda=True)
 
 
+def test_r10_paths_reject_symlink_components(tmp_path):
+    real = tmp_path/'real'; real.mkdir()
+    link = tmp_path/'link'; link.symlink_to(real, target_is_directory=True)
+    with pytest.raises(ValueError, match='symlink'):
+        _path(link, directory=True)
+    with pytest.raises(ValueError, match='symlink'):
+        _path(link/'future-output')
+
+
 def test_final_gate_accepts_only_complete_hashed_q4_q5_evidence(tmp_path):
     revision = 'a'*40
     write(tmp_path/'preflight.json', {
         'status': 'ready_for_q4_q5', 'source_commit': revision,
+        'joint_architecture': JOINT_ARCHITECTURE,
+        'profile_architecture': PROFILE_ARCHITECTURE,
         'mesh': {'fingerprint': CANONICAL_MESH8_FINGERPRINT}})
     training = tmp_path/'training'; epoch = training/'epoch-0001'; epoch.mkdir(parents=True)
     (epoch/'state.pt').write_bytes(b'checkpoint')
@@ -50,11 +63,19 @@ def test_final_gate_accepts_only_complete_hashed_q4_q5_evidence(tmp_path):
     write(training/'complete.json', {
         'status': 'joint_measured_observation_research_trained', 'mesh_level': 8,
         'grid_cells': 655362, 'rollout_hours': 3, 'scientific_acceptance': False,
-        'best_epoch': 1, 'identity': {'grid_fingerprint': CANONICAL_MESH8_FINGERPRINT,
-                                     'experiment_id': 'joint-mesh8-qualification-r10'}})
+        'best_epoch': 1,
+        'identity': {
+            'grid_fingerprint': CANONICAL_MESH8_FINGERPRINT,
+            'experiment_id': 'joint-mesh8-qualification-r10',
+            'experiment_role': 'mesh8_end_to_end_qualification',
+            'architecture': JOINT_ARCHITECTURE,
+            'rollout_hours': 3,
+            'config': {'mesh_level': 8, 'physical_policy': {'architecture': 'hydrostatic_flow'}},
+            'joint_source_sha256': {'profile_hydrostatic_model.py': 'a'*64,
+                                    'joint_observation_model.py': 'b'*64}}})
     write(epoch/'metrics.json', {
         'cuda_peak_allocated_bytes': 1024, 'cuda_peak_reserved_bytes': 2048,
-        'mesh_level': 8, 'rollout_hours': 3,
+        'mesh_level': 8, 'rollout_hours': 3, 'scientific_acceptance': False,
         'nonzero_gradients': {'profile': True, 'surface': True}})
 
     forecast = tmp_path/'forecast'; issue = forecast/'20220101T000000Z'; issue.mkdir(parents=True)
@@ -81,6 +102,8 @@ def test_final_gate_accepts_only_complete_hashed_q4_q5_evidence(tmp_path):
     report = verify(tmp_path, revision)
     assert report['status'] == 'r10_q4_q5_technically_qualified'
     assert report['scientific_acceptance'] is False
+    assert report['joint_architecture'] == JOINT_ARCHITECTURE
+    assert report['profile_architecture'] == PROFILE_ARCHITECTURE
     assert report['next_stage_authorized'] is False
 
     manifest = json.loads((issue/'completion.json').read_text())
