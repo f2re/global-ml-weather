@@ -57,6 +57,9 @@ class HydrostaticFlowProfileModel(PressureProfileModel):
         basis = np.stack((np.column_stack((-np.sin(lon), np.cos(lon), np.zeros(len(lon)))),
                          np.column_stack((-np.sin(lat)*np.cos(lon), -np.sin(lat)*np.sin(lon), np.cos(lat)))), axis=1)
         self.register_buffer('enu_basis', torch.tensor(basis, dtype=torch.float32))
+        # None keeps the historical one-shot edge path. High-resolution
+        # experiments set an explicit positive chunk size through their config.
+        self.edge_chunk_size = None
         # q=std*softplus(z+inv_softplus(mean/std)) starts at the fixed mean and
         # has no hard dead zone. The physical normalization remains unchanged;
         # this POSITIVITY PARAMETERIZATION is explicitly a new architecture.
@@ -96,10 +99,22 @@ class HydrostaticFlowProfileModel(PressureProfileModel):
         # information. Never average ENU vectors as though their bases coincide.
         vectors = torch.einsum('nlv,nvd->nld', frame.profiles[..., 2:4], self.enu_basis)
         src, dst = self.edge_src, self.edge_dst
-        courant = (vectors[src]*self.edge_direction[:, None]).sum(-1)*10800/self.edge_length_m[:, None]
-        weights = torch.sigmoid(courant.clamp(-8, 8))
-        total = state.new_zeros(state.shape).index_add(0, dst, state[src]*weights[..., None])
-        denominator = state.new_zeros(state.shape[:2]).index_add(0, dst, weights)
+        edge_count = int(src.numel())
+        chunk = edge_count if self.edge_chunk_size is None else int(self.edge_chunk_size)
+        if chunk < 1:
+            raise ValueError('edge_chunk_size must be a positive integer or None.')
+        total = state.new_zeros(state.shape)
+        denominator = state.new_zeros(state.shape[:2])
+        for start in range(0, edge_count, chunk):
+            stop = min(start + chunk, edge_count)
+            source = src[start:stop]
+            target = dst[start:stop]
+            direction = self.edge_direction[start:stop]
+            length = self.edge_length_m[start:stop]
+            courant = (vectors[source]*direction[:, None]).sum(-1)*10800/length[:, None]
+            weights = torch.sigmoid(courant.clamp(-8, 8))
+            total = total.index_add(0, target, state[source]*weights[..., None])
+            denominator = denominator.index_add(0, target, weights)
         return total/denominator.clamp_min(torch.finfo(state.dtype).tiny)[..., None]
 
     def _advance_state(self, state, pressure, issue, lead):
