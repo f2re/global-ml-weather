@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from global_weather.joint_observation_model import ARCHITECTURE as JOINT_ARCHITECTURE
@@ -49,6 +50,16 @@ def test_r10_paths_reject_symlink_components(tmp_path):
         _path(link/'future-output')
 
 
+def _physical_surface_npz(path, *, bad=False):
+    surface = np.array([[[280., 275., 3., -4., 100000., 101000.]],
+                        [[281., 276., 4., -3., 100100., 101100.]]], dtype=np.float32)
+    if bad:
+        surface[1, 0, 1] = 290.
+    np.savez_compressed(path, surface=surface,
+                        surface_issue_mask=np.ones(surface.shape, dtype=bool),
+                        lead_hours=np.array([0, 3], dtype=np.int32))
+
+
 def test_final_gate_accepts_only_complete_hashed_q4_q5_evidence(tmp_path):
     revision = 'a'*40
     write(tmp_path/'preflight.json', {
@@ -79,7 +90,7 @@ def test_final_gate_accepts_only_complete_hashed_q4_q5_evidence(tmp_path):
         'nonzero_gradients': {'profile': True, 'surface': True}})
 
     forecast = tmp_path/'forecast'; issue = forecast/'20220101T000000Z'; issue.mkdir(parents=True)
-    (issue/'forecast.npz').write_bytes(b'npz')
+    _physical_surface_npz(issue/'forecast.npz')
     (issue/'forecast.grib2').write_bytes(b'grib')
     (issue/'forecast.grib2.json').write_bytes(b'inventory')
     write(issue/'completion.json', {
@@ -93,6 +104,7 @@ def test_final_gate_accepts_only_complete_hashed_q4_q5_evidence(tmp_path):
             'specific_humidity': {'physical_domain_violations': 0},
             'hydrostatic_residual': {'count': 10, 'max_abs_m2_s2': .2},
             'continuity_residual': {'count': 10, 'max_abs_s-1': 1e-10}},
+        'surface_physics': {'domain_violations': 0},
         'telemetry': {'device': 'cuda:0'}})
     write(forecast/'batch.json', {
         'status': 'complete', 'source_revision': revision, 'mesh_level': 8,
@@ -104,6 +116,7 @@ def test_final_gate_accepts_only_complete_hashed_q4_q5_evidence(tmp_path):
     assert report['scientific_acceptance'] is False
     assert report['joint_architecture'] == JOINT_ARCHITECTURE
     assert report['profile_architecture'] == PROFILE_ARCHITECTURE
+    assert report['products'][0]['surface_physics']['domain_violations'] == 0
     assert report['next_stage_authorized'] is False
 
     manifest = json.loads((issue/'completion.json').read_text())
@@ -111,3 +124,47 @@ def test_final_gate_accepts_only_complete_hashed_q4_q5_evidence(tmp_path):
     write(issue/'completion.json', manifest)
     with pytest.raises(ValueError, match='humidity'):
         verify(tmp_path, revision, tmp_path/'another.json')
+
+
+def test_final_gate_rejects_surface_npz_that_violates_dewpoint_bound(tmp_path):
+    revision = 'b'*40
+    # Build the accepted fixture through the main test, then mutate only the
+    # hashed station-native payload while keeping all manifest physics claims.
+    write(tmp_path/'preflight.json', {
+        'status': 'ready_for_q4_q5', 'source_commit': revision,
+        'joint_architecture': JOINT_ARCHITECTURE,
+        'profile_architecture': PROFILE_ARCHITECTURE,
+        'mesh': {'fingerprint': CANONICAL_MESH8_FINGERPRINT}})
+    training = tmp_path/'training'; epoch = training/'epoch-0001'; epoch.mkdir(parents=True)
+    (epoch/'state.pt').write_bytes(b'checkpoint')
+    write(training/'best.json', {'directory': 'epoch-0001', 'epoch': 1, 'sha256': sha(epoch/'state.pt')})
+    write(training/'complete.json', {
+        'status': 'joint_measured_observation_research_trained', 'mesh_level': 8,
+        'grid_cells': 655362, 'rollout_hours': 3, 'scientific_acceptance': False, 'best_epoch': 1,
+        'identity': {'grid_fingerprint': CANONICAL_MESH8_FINGERPRINT,
+                     'experiment_id': 'joint-mesh8-qualification-r10',
+                     'experiment_role': 'mesh8_end_to_end_qualification',
+                     'architecture': JOINT_ARCHITECTURE, 'rollout_hours': 3,
+                     'config': {'mesh_level': 8, 'physical_policy': {'architecture': 'hydrostatic_flow'}},
+                     'joint_source_sha256': {'profile_hydrostatic_model.py': 'a'*64,
+                                             'joint_observation_model.py': 'b'*64}}})
+    write(epoch/'metrics.json', {'cuda_peak_allocated_bytes': 1, 'cuda_peak_reserved_bytes': 2,
+                                 'mesh_level': 8, 'rollout_hours': 3, 'scientific_acceptance': False,
+                                 'nonzero_gradients': {'all': True}})
+    forecast = tmp_path/'forecast'; issue = forecast/'20220101T000000Z'; issue.mkdir(parents=True)
+    _physical_surface_npz(issue/'forecast.npz', bad=True)
+    (issue/'forecast.grib2').write_bytes(b'grib'); (issue/'forecast.grib2.json').write_bytes(b'inventory')
+    write(issue/'completion.json', {
+        'issue_time': '2022-01-01T00:00:00+00:00', 'source_revision': revision,
+        'grid_fingerprint': CANONICAL_MESH8_FINGERPRINT, 'lead_hours': [0, 3],
+        'scientific_acceptance': False, 'forecast_npz_sha256': sha(issue/'forecast.npz'),
+        'grib_sha256': sha(issue/'forecast.grib2'), 'grib_inventory_sha256': sha(issue/'forecast.grib2.json'),
+        'diagnostic_physics': {'specific_humidity': {'physical_domain_violations': 0},
+                               'hydrostatic_residual': {'count': 1, 'max_abs_m2_s2': 0},
+                               'continuity_residual': {'count': 1, 'max_abs_s-1': 0}},
+        'surface_physics': {'domain_violations': 0}})
+    write(forecast/'batch.json', {'status': 'complete', 'source_revision': revision, 'mesh_level': 8,
+                                  'grid_fingerprint': CANONICAL_MESH8_FINGERPRINT, 'horizon_hours': 3,
+                                  'scientific_acceptance': False, 'products': [{'directory': issue.name}]})
+    with pytest.raises(ValueError, match='station-native'):
+        verify(tmp_path, revision)
