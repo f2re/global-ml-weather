@@ -42,6 +42,7 @@ def test_joint_surface_and_profile_decoder_gradients_and_nan_mask():
     assert torch.isfinite(frames[-1].profiles[..., :5]).all()
     surface = frames[-1].native_physical
     assert (surface[..., 0] > 0).all()
+    assert (surface[..., 1] > 0).all()
     assert (surface[..., 1] <= surface[..., 0]).all()
     assert (surface[..., 4:] > 0).all()
     reconstructed = net.surface_monthly[frames[-1].valid_time.month-1] + frames[-1].native_normalized*net.surface_scales
@@ -55,11 +56,13 @@ def test_joint_surface_and_profile_decoder_gradients_and_nan_mask():
 
 
 def test_surface_projection_corrects_unphysical_dewpoint_and_pressures_smoothly():
-    raw = torch.tensor([[250., 270., 3., -4., -100., -10.]], requires_grad=True)
+    raw = torch.tensor([[250., 270., 3., -4., -100., -10.],
+                        [250., -1000., 3., -4., -100., -10.]], requires_grad=True)
     physical = model()._physical_surface(raw)
-    assert physical[0, 0] > 0
-    assert physical[0, 1] <= physical[0, 0]
-    assert physical[0, 4] > 0 and physical[0, 5] > 0
+    assert (physical[:, 0] > 0).all()
+    assert (physical[:, 1] > 0).all()
+    assert (physical[:, 1] <= physical[:, 0]).all()
+    assert (physical[:, 4] > 0).all() and (physical[:, 5] > 0).all()
     physical.sum().backward()
     assert torch.isfinite(raw.grad).all()
 
