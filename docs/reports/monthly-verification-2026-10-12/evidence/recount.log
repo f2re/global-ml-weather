@@ -1,0 +1,24 @@
+{"schema": "joint-verification-recount-1", "status": "passed", "verification_manifest_sha256": "80337cd0e165a79cf05237c15f42928c2c687cf15cd0eb6cfa7f5f3a44eba778", "verified_issues": 30, "recounted_scalar_pairs": 7144022, "scientific_acceptance": false}
+	Command being timed: "/home/user/global-ml-weather/.venv/bin/python -m global_weather.joint_verification_recount --verification /home/user/global-ml-weather-monthly-20261012/outputs/september-2022/verification --output outputs/recount.json"
+	User time (seconds): 86.81
+	System time (seconds): 0.84
+	Percent of CPU this job got: 100%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:27.42
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 704868
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 613026
+	Voluntary context switches: 147
+	Involuntary context switches: 460
+	Swaps: 0
+	File system inputs: 648
+	File system outputs: 16
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

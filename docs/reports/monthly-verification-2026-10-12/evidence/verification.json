@@ -1,0 +1,910 @@
+{
+  "schema": "joint-monthly-verification-1",
+  "stage": "verify",
+  "status": "complete",
+  "month": "2022-09",
+  "forecast_month_sha256": "93e18e7834522382f30c414280ee7d296fe2a9f00aad3257324db06451b47f6b",
+  "checkpoint_sha256": "5aedf87c304ead44b745f04c06b1e7c88d2f9924337d6a109b4eb28ce654d22f",
+  "forecast_manifest_sha256": "93e18e7834522382f30c414280ee7d296fe2a9f00aad3257324db06451b47f6b",
+  "forecast_manifest_path": "/home/user/global-ml-weather-monthly-20261012/outputs/september-2022/forecasts/month.json",
+  "identity": {
+    "dataset_sha256": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+    "source_sha256": "2e4af1a87192b0bb5bac5b17c6f5ba8f03a967c550b70b952bd74cc92a99f3da",
+    "commit": "4fc48a3151ccaf0e02c2d20fd1a0ac71825c501f",
+    "config": {
+      "mesh_level": 2,
+      "hidden": 32,
+      "epochs": 12,
+      "patience": 4,
+      "threads": 8,
+      "seed": 43,
+      "learning_rate": 0.0001,
+      "weight_decay": 0.01,
+      "gradient_clip": 1.0,
+      "max_train_issues": 48,
+      "max_validation_issues": 12,
+      "max_test_issues": 12,
+      "max_records_per_window": 2000,
+      "surface_weight": 0.5,
+      "physical_policy": {
+        "schema": "profile-physical-policy-1",
+        "architecture": "hydrostatic_flow",
+        "huber_delta": 2.5,
+        "humidity_qc": true,
+        "maximum_water_relative_humidity": 2.0,
+        "humidity_min_pressure_pa": 30000.0,
+        "variable_weights": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "memory_budget_mib": 16384
+      }
+    },
+    "device": "cuda",
+    "python": "3.11.2",
+    "torch": "2.11.0+cu128",
+    "numpy": "2.4.6",
+    "cuda": "12.8",
+    "hardware": "NVIDIA GeForce RTX 4090",
+    "cuda_visible_devices": "0",
+    "cublas_workspace_config": ":4096:8",
+    "deterministic": true,
+    "tf32": false,
+    "architecture": "joint-measured-hydrostatic-v1",
+    "joint_dataset_path": "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/dataset",
+    "joint_fingerprint": {
+      "surface_dataset_sha256": "83a02c9280df8c15945b1a89d1ac43e78cb8d83c766e563334e2c6966dd52ac4",
+      "profile_dataset_sha256": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+      "surface_hourly_sha256": "8b10238ab3439c30c1b1b5e6b94557e5fee4e914feee815ef2a17e66b03ec3d4",
+      "surface_norm_sha256": "059e350997e8e552f702bcbb7e5149143fab29745b50c98d29de724cf27f8962",
+      "profile_database_sha256": "d5e7178810fb261f427c43443c1f8f0cca2e4b328636147bf35ce6d06b7668b3",
+      "horizon_hours": 72,
+      "issue_stride_hours": 24
+    },
+    "norm_path": "/home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json",
+    "norm_sha256": "4a2a84b832d2df6db9eee9e44b9187035d84cdc22a09bfa703d42d7af6a3b97a",
+    "station_climatology_path": "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/training/station_climatology.npz",
+    "station_climatology_sha256": "c5aa54f6f47a86b6dd23a9763da08620cb3fe10cf310a9b11ca9ac72c4c107e5",
+    "climatology_path": "/home/user/global-ml-weather/outputs/climatology-level-2",
+    "climatology_sha256": "d10f58b9887e08f3ffd84ade95efaba8e71190825133e4e391c04acb8ed84497",
+    "static_path": "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/static",
+    "static_fingerprint": "25e3a21b71adf518bf9f0f106bc3d9d3500956e928fec52145758f2cc3c0d566",
+    "joint_source_sha256": {
+      "joint_observation_model.py": "ee16691e133fed86528468bae1fe0b50cf3cd4de8c61352cad30827ab0df2d81",
+      "joint_observation_training.py": "52e7254259d03131b3b3d95362456ade1f2b595c9d30d66809b00e7dbcca3997",
+      "joint_observation_data.py": "0e1f9d2c7303414c863af49e95989ba0b3cb0818159d03dc183d1b7577d0c08f",
+      "profile_hydrostatic_model.py": "0eb28ba8e2443ec4e11e0abf12321b89220c81b3d3cc26e5cb6581ee8b3d67ee",
+      "profile_model_v2.py": "5de9fae31ce182f220c5181d099752ed3c86cce8e469003e60dd54bbdb475872",
+      "profile_physics.py": "6fd756697a81e78611389b8e0c6e066098f0b7580200a210e1c390a780d09890"
+    }
+  },
+  "dataset_fingerprint": {
+    "surface_dataset_sha256": "83a02c9280df8c15945b1a89d1ac43e78cb8d83c766e563334e2c6966dd52ac4",
+    "profile_dataset_sha256": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+    "surface_hourly_sha256": "8b10238ab3439c30c1b1b5e6b94557e5fee4e914feee815ef2a17e66b03ec3d4",
+    "surface_norm_sha256": "059e350997e8e552f702bcbb7e5149143fab29745b50c98d29de724cf27f8962",
+    "profile_database_sha256": "d5e7178810fb261f427c43443c1f8f0cca2e4b328636147bf35ce6d06b7668b3",
+    "horizon_hours": 72,
+    "issue_stride_hours": 24
+  },
+  "static_sha256": "25e3a21b71adf518bf9f0f106bc3d9d3500956e928fec52145758f2cc3c0d566",
+  "evaluation_qc_policy": {
+    "schema": "profile-physical-policy-1",
+    "architecture": "hydrostatic_flow",
+    "huber_delta": 2.5,
+    "humidity_qc": true,
+    "maximum_water_relative_humidity": 2.0,
+    "humidity_min_pressure_pa": 0.0,
+    "variable_weights": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "memory_budget_mib": 16384
+  },
+  "neighbours": 3,
+  "verification_source_sha256": "f253eefec1e3d37470c9454711024ad87a3cdb7fa26880aec76dfde84c2a96c3",
+  "execution_argv": [
+    "/home/user/global-ml-weather-monthly-20261012/global_weather/joint_monthly_verification.py",
+    "--stage",
+    "all",
+    "--config",
+    "configs/joint_monthly_verification.json",
+    "--dataset",
+    "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/dataset",
+    "--training",
+    "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/training",
+    "--static",
+    "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/static",
+    "--output",
+    "outputs/september-2022",
+    "--source-revision",
+    "df9639cb1d0bb3a1607b9016a43860a20dfa4039"
+  ],
+  "execution_working_directory": "/home/user/global-ml-weather-monthly-20261012",
+  "target_record_limit": null,
+  "started_utc": "2026-10-12T19:27:32.605669+00:00",
+  "days": [
+    {
+      "issue_time": "2022-09-01T06:00:00+00:00",
+      "inventory": "20220901T060000Z.jsonl",
+      "inventory_sha256": "1449a2900485096bd6a27c9c518d81d79b3fc3ed312f33842ef015b3b13082a1",
+      "counts": {
+        "profile_before_qc": 21996,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 21996,
+        "profile_accepted": 21730,
+        "native_attempted": 213094,
+        "native_accepted": 213094
+      },
+      "pairs": "20220901T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "d14511aae3b2a65eedd91600fc9cf982e2079148a8faead6b77a31d7099eea87",
+      "rejections": "20220901T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "7e0f755488f13c7cdaf41c357f740ce53ce0c6fed69f25bc2356b4789c81322e",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 266
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4465
+      }
+    },
+    {
+      "issue_time": "2022-09-02T06:00:00+00:00",
+      "inventory": "20220902T060000Z.jsonl",
+      "inventory_sha256": "81fd0fc1321d9adb96b398642b175965358b366d94c31f3f46df08cacd15714a",
+      "counts": {
+        "profile_before_qc": 21186,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 21186,
+        "profile_accepted": 20928,
+        "native_attempted": 209830,
+        "native_accepted": 209830
+      },
+      "pairs": "20220902T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "2b196a35bfd69b988b1009341d2716429720a279c927ec2981952ea341e00035",
+      "rejections": "20220902T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "0d52f50daf6a43cea1576679ba298c0086972a7c2bdaa25fbe09b50e01eed4c2",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 258
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4307
+      }
+    },
+    {
+      "issue_time": "2022-09-03T06:00:00+00:00",
+      "inventory": "20220903T060000Z.jsonl",
+      "inventory_sha256": "c459fdaa5d67ede9b1f58e613c4fb4b6cc97503b2578a85c68291ffb27249fc1",
+      "counts": {
+        "profile_before_qc": 20870,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 20870,
+        "profile_accepted": 20634,
+        "native_attempted": 210210,
+        "native_accepted": 210210
+      },
+      "pairs": "20220903T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "121d67f999762837992e7efab05946439b56f449381a11045f0960dc65802367",
+      "rejections": "20220903T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "17a84b74452c0e58acc17104bfc1455c7753ae95a8aa4f91abc92df97a641883",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 236
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4311
+      }
+    },
+    {
+      "issue_time": "2022-09-04T06:00:00+00:00",
+      "inventory": "20220904T060000Z.jsonl",
+      "inventory_sha256": "8bf00b06e3386764bbed6774d701663eaa9ca02fec08455de989e9a605648521",
+      "counts": {
+        "profile_before_qc": 20724,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 20724,
+        "profile_accepted": 20490,
+        "native_attempted": 210512,
+        "native_accepted": 210512
+      },
+      "pairs": "20220904T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "5bb608779089ef72a311df65be0b41c1bf055dae4685c9f42ac7c95e85f00e3a",
+      "rejections": "20220904T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "068ea7b5f85851f15a93f69ea627debf6e9ce8bf08eeb95c4df39f9f9387425e",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 234
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4280
+      }
+    },
+    {
+      "issue_time": "2022-09-05T06:00:00+00:00",
+      "inventory": "20220905T060000Z.jsonl",
+      "inventory_sha256": "145e9a50a33aaada899dde274ede711a5caf4867a7adf861a1eeeec95d22d5f3",
+      "counts": {
+        "profile_before_qc": 22534,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 22534,
+        "profile_accepted": 22274,
+        "native_attempted": 211010,
+        "native_accepted": 211010
+      },
+      "pairs": "20220905T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "a368531b3af530b76a2347bc4dfaf7d090c1311ace86f0b2eee0bbe51a8caa71",
+      "rejections": "20220905T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "a68f8cb98999ccd4e70da882cdad2985fbf8987e34185b6340520af7617109f1",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 260
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4661
+      }
+    },
+    {
+      "issue_time": "2022-09-06T06:00:00+00:00",
+      "inventory": "20220906T060000Z.jsonl",
+      "inventory_sha256": "e3dd96eab01f6503d5f21fa9e7219ed5f897a5f066ccebd607a4492667403587",
+      "counts": {
+        "profile_before_qc": 23891,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 23891,
+        "profile_accepted": 23605,
+        "native_attempted": 210409,
+        "native_accepted": 210409
+      },
+      "pairs": "20220906T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "e8cfd622a97d6aace43023e712040d64c21ff2aff308b76e997b4d5f67149bf4",
+      "rejections": "20220906T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "9fa05e5fad89d3d5face6664849594482df804f96a82ac951f43a4a588409a9c",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 286
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4890
+      }
+    },
+    {
+      "issue_time": "2022-09-07T06:00:00+00:00",
+      "inventory": "20220907T060000Z.jsonl",
+      "inventory_sha256": "6f3f86d4853b220366f1c65203afb393eab61e9fac822e00d09f0ceb964e9f40",
+      "counts": {
+        "profile_before_qc": 26274,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 26274,
+        "profile_accepted": 25968,
+        "native_attempted": 211452,
+        "native_accepted": 211452
+      },
+      "pairs": "20220907T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "2c714cd353f60a1a52bfd2a92385736a0d3bb634428ad8d66f9e0bbc0cc58c74",
+      "rejections": "20220907T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "329c563986e699852acc61bc6a16cd902730ad59947415698d0cc7acb1948612",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 306
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5453
+      }
+    },
+    {
+      "issue_time": "2022-09-08T06:00:00+00:00",
+      "inventory": "20220908T060000Z.jsonl",
+      "inventory_sha256": "10303fa85eea8b8feb1bf0a353ce099779aaccb6cc6b2d96e1c00d4454eaaf1b",
+      "counts": {
+        "profile_before_qc": 25050,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 25050,
+        "profile_accepted": 24753,
+        "native_attempted": 208069,
+        "native_accepted": 208069
+      },
+      "pairs": "20220908T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "2c2ff72a43c1d00f1371915cb1a17455657cfd69aaf6a38d26579f9e2b218164",
+      "rejections": "20220908T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "618c5f8645630b0c8d753b2177aecafbe4d494fd51c812ef0c4a4a87b72d5afc",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 297
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5151
+      }
+    },
+    {
+      "issue_time": "2022-09-09T06:00:00+00:00",
+      "inventory": "20220909T060000Z.jsonl",
+      "inventory_sha256": "6e15a218bba78d43af0c74e256029579d4612422986a3768323358c35d7f7e61",
+      "counts": {
+        "profile_before_qc": 24598,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 24598,
+        "profile_accepted": 24316,
+        "native_attempted": 208548,
+        "native_accepted": 208548
+      },
+      "pairs": "20220909T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "97b3e58cf96cf61f56f821becb36125b990142eaebaf98665726c120bec124bf",
+      "rejections": "20220909T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "90e333731e441365cf8561e7fe4a8be477078d43846765d71a5a8af1607aeca6",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 282
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5036
+      }
+    },
+    {
+      "issue_time": "2022-09-10T06:00:00+00:00",
+      "inventory": "20220910T060000Z.jsonl",
+      "inventory_sha256": "d0aada7c7492884ed6556a37a659f17e1d336104f4584e941e9628a493da31d9",
+      "counts": {
+        "profile_before_qc": 23227,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 23227,
+        "profile_accepted": 22949,
+        "native_attempted": 208661,
+        "native_accepted": 208661
+      },
+      "pairs": "20220910T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "ed7f33994318ff1bb435f48753fc0311765b94f3bf3ed9a9a8e0d75560932b2b",
+      "rejections": "20220910T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "62a916ec65b762618e22211744230e8d2a5cf0f6c893bc82143c43a3b3b08b3e",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 278
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4629
+      }
+    },
+    {
+      "issue_time": "2022-09-11T06:00:00+00:00",
+      "inventory": "20220911T060000Z.jsonl",
+      "inventory_sha256": "baa9298746ceccfb5718f363c64a05820d71da16a1a83dd58e6be383878e76dd",
+      "counts": {
+        "profile_before_qc": 24362,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 24362,
+        "profile_accepted": 24073,
+        "native_attempted": 215543,
+        "native_accepted": 215543
+      },
+      "pairs": "20220911T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "f3e23cc9a0020d0a01296691e90c9f3c4eba098e50abdaff02cd1554a45c1f2e",
+      "rejections": "20220911T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "8641fc67ea5ff79fbd7f14a32288d0085426f6f930796ac42be1bac88995b301",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 289
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4923
+      }
+    },
+    {
+      "issue_time": "2022-09-12T06:00:00+00:00",
+      "inventory": "20220912T060000Z.jsonl",
+      "inventory_sha256": "2b972ea8031abaa1efdbb0bdcd716780800e6004d0fdd4c8da8520ff27e9df79",
+      "counts": {
+        "profile_before_qc": 24592,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 24592,
+        "profile_accepted": 24293,
+        "native_attempted": 216533,
+        "native_accepted": 216533
+      },
+      "pairs": "20220912T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "51f90fe05b562d33a785d9490d919e1af8cf9e2ecc76690163a8ecea913db38d",
+      "rejections": "20220912T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "9966c01560e2ddd437b9644d7d0bc27bc83d4a70b69383d401d025172af0eb65",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 299
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4938
+      }
+    },
+    {
+      "issue_time": "2022-09-13T06:00:00+00:00",
+      "inventory": "20220913T060000Z.jsonl",
+      "inventory_sha256": "c825552e27a4af17d67e5d9c102165a30bbcda80056af2f59bae578fcea3fd64",
+      "counts": {
+        "profile_before_qc": 24906,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 24906,
+        "profile_accepted": 24604,
+        "native_attempted": 216415,
+        "native_accepted": 216415
+      },
+      "pairs": "20220913T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "c70c1ef72d7dbea43de007556c09449e0bc7b03402dd983f97e02cfea4cf858a",
+      "rejections": "20220913T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "e38ff76ea27440e23f8c9e2558ac8dbfa14d1c526d8d37a16acc8377033e066a",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 302
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5085
+      }
+    },
+    {
+      "issue_time": "2022-09-14T06:00:00+00:00",
+      "inventory": "20220914T060000Z.jsonl",
+      "inventory_sha256": "00bfc0c6a2794be723dec02b505d072ba9cd310176ad2b1594bad1cadc36b024",
+      "counts": {
+        "profile_before_qc": 25078,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 25078,
+        "profile_accepted": 24775,
+        "native_attempted": 215145,
+        "native_accepted": 215145
+      },
+      "pairs": "20220914T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "5c2951e9f85190244bdb9701d47ad4d78318c7c427d604ebe74c7ea52c0c8fe5",
+      "rejections": "20220914T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "f13433eb043bbfbfc0e8528b6dfe69a66c4c48e09c30b48ef7a2e5f2f5840bee",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 303
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5073
+      }
+    },
+    {
+      "issue_time": "2022-09-15T06:00:00+00:00",
+      "inventory": "20220915T060000Z.jsonl",
+      "inventory_sha256": "1c9c10496e124cfa579c0a72dcc314e9c52502f9c625b0d92c0fa05c2c118458",
+      "counts": {
+        "profile_before_qc": 24486,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 24486,
+        "profile_accepted": 24164,
+        "native_attempted": 215528,
+        "native_accepted": 215528
+      },
+      "pairs": "20220915T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "c78f8dcc414900461eaaca0dadf9f1e423b7067b08dace5c68dcd601fb9f4a34",
+      "rejections": "20220915T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "5145a7b66a48bd470d3a30cbee5bf3a12b939c3d2f2b0d782a877499bcc04a62",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 322
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4954
+      }
+    },
+    {
+      "issue_time": "2022-09-16T06:00:00+00:00",
+      "inventory": "20220916T060000Z.jsonl",
+      "inventory_sha256": "7927c7d69e1a50fcc55ac721930a22394a144f4ffe3dcbf8689e9f7d9a73de5d",
+      "counts": {
+        "profile_before_qc": 24150,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 24150,
+        "profile_accepted": 23820,
+        "native_attempted": 216504,
+        "native_accepted": 216504
+      },
+      "pairs": "20220916T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "bb8801a6183b3317ae84e1770b3bc4f7043c12df5c17b5d4aced2d60b7c10d21",
+      "rejections": "20220916T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "0aac8daa4623561a8b79df2e6c4359372020b6c2d9f6394443aa968e341ef00b",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 330
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4779
+      }
+    },
+    {
+      "issue_time": "2022-09-17T06:00:00+00:00",
+      "inventory": "20220917T060000Z.jsonl",
+      "inventory_sha256": "55fe21f1024224a113f5526e3d0128680337af761c9d5db4f715dca47174fdbe",
+      "counts": {
+        "profile_before_qc": 23570,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 23570,
+        "profile_accepted": 23253,
+        "native_attempted": 216920,
+        "native_accepted": 216920
+      },
+      "pairs": "20220917T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "3c3375a78bb44b7071ab9a0396feef21e0a6e51789db04595bba0c5710156392",
+      "rejections": "20220917T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "e32b4c1053f36ee87c9f49ba576f63943f76dcb014243b4db073cf751bfb1ae9",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 317
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4671
+      }
+    },
+    {
+      "issue_time": "2022-09-18T06:00:00+00:00",
+      "inventory": "20220918T060000Z.jsonl",
+      "inventory_sha256": "2cbfbd95132f35bfa5aa871d71b4456102f02af4d1d478af8e4817636915ea73",
+      "counts": {
+        "profile_before_qc": 25100,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 25100,
+        "profile_accepted": 24782,
+        "native_attempted": 218186,
+        "native_accepted": 218186
+      },
+      "pairs": "20220918T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "c0bce607263ac12fba89b359f6d8974f2e1236793fbec57e225892eea24b8b72",
+      "rejections": "20220918T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "18c1589ce43b234898d55506482c408e14ac99e5d52bb29d2520f142410992f8",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 318
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5025
+      }
+    },
+    {
+      "issue_time": "2022-09-19T06:00:00+00:00",
+      "inventory": "20220919T060000Z.jsonl",
+      "inventory_sha256": "85980b79d3dafda429e569525b6f75691dc068b30a73a36bef2b022f45f05fcc",
+      "counts": {
+        "profile_before_qc": 25753,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 25753,
+        "profile_accepted": 25427,
+        "native_attempted": 219061,
+        "native_accepted": 219061
+      },
+      "pairs": "20220919T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "0dc4363f0ee5ebf08d196ef7dbb9357844db465353dc9101745c7ecd045cd8ab",
+      "rejections": "20220919T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "10989c9ecdd6beb703acdaf3c3bd806f247499aa7dbbf3a8a89af8806f8fa408",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 326
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5201
+      }
+    },
+    {
+      "issue_time": "2022-09-20T06:00:00+00:00",
+      "inventory": "20220920T060000Z.jsonl",
+      "inventory_sha256": "987cea612552b36d1323caaa3199693c345688b07fec473c490fd1ece264ebad",
+      "counts": {
+        "profile_before_qc": 25853,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 25853,
+        "profile_accepted": 25530,
+        "native_attempted": 220658,
+        "native_accepted": 220658
+      },
+      "pairs": "20220920T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "cd16b86346d5215e1d5df9bc9bebd73ac29a5806b36755a435c568608b2fec20",
+      "rejections": "20220920T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "dc23726c0ddf5b3d2a699c0e8f2f260311652e291835502489fc449c833c154d",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 323
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5254
+      }
+    },
+    {
+      "issue_time": "2022-09-21T06:00:00+00:00",
+      "inventory": "20220921T060000Z.jsonl",
+      "inventory_sha256": "db214f46ba5540893fb596c0667841e3b3d65f6082a192bc67e2ca82bb6d39ff",
+      "counts": {
+        "profile_before_qc": 25377,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 25377,
+        "profile_accepted": 25064,
+        "native_attempted": 219695,
+        "native_accepted": 219695
+      },
+      "pairs": "20220921T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "02dfb31e014b2a6949dbed632ab68e9cedefd64d80514554f0ecd12cb4456bcf",
+      "rejections": "20220921T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "0859d40868a718588582c7565a8b3ff1f5c6d848e16511546866962d9d8fce0a",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 313
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5167
+      }
+    },
+    {
+      "issue_time": "2022-09-22T06:00:00+00:00",
+      "inventory": "20220922T060000Z.jsonl",
+      "inventory_sha256": "a4647eb78c16b71a443f3315217cdf444927c5061b0d2b1bce010d9e4d3788a5",
+      "counts": {
+        "profile_before_qc": 25901,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 25901,
+        "profile_accepted": 25620,
+        "native_attempted": 217274,
+        "native_accepted": 217274
+      },
+      "pairs": "20220922T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "43cd0fd89a9b8fbbb0ac2545f0fa23b0f78f11c511b67bacf9dbf605b1a9f5aa",
+      "rejections": "20220922T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "32b34587b3f5cb96396cf8c7b7189bbb7f0996398bb3a275e585a8226fe73178",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 281
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5344
+      }
+    },
+    {
+      "issue_time": "2022-09-23T06:00:00+00:00",
+      "inventory": "20220923T060000Z.jsonl",
+      "inventory_sha256": "6c28ea026086488d9d45ec953a134f4047565d4ee8422983e3e0e5f648847261",
+      "counts": {
+        "profile_before_qc": 25574,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 25574,
+        "profile_accepted": 25300,
+        "native_attempted": 214758,
+        "native_accepted": 214758
+      },
+      "pairs": "20220923T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "de90823fdb0c566045b0689f251d19cd67bd9f01ae78dc4560ca35b9c9cf8c2b",
+      "rejections": "20220923T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "3777ac18e96deef0872077757e574ea4832fac774ce25819a86c67b5caddcfd4",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 274
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5290
+      }
+    },
+    {
+      "issue_time": "2022-09-24T06:00:00+00:00",
+      "inventory": "20220924T060000Z.jsonl",
+      "inventory_sha256": "4c2c8255eb4faa54c5ad0e70fd059382f25e5e06a576509798315ff3f7fb4920",
+      "counts": {
+        "profile_before_qc": 25873,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 25873,
+        "profile_accepted": 25620,
+        "native_attempted": 214558,
+        "native_accepted": 214558
+      },
+      "pairs": "20220924T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "a4e71a0f54ccdebc38159b366ffde3102badc47d93b5998d4a824ac01c853468",
+      "rejections": "20220924T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "66161df6344891fce49896e55062849b649a00ce2d8e685aa0118da148b557ac",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 253
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5358
+      }
+    },
+    {
+      "issue_time": "2022-09-25T06:00:00+00:00",
+      "inventory": "20220925T060000Z.jsonl",
+      "inventory_sha256": "25111e5a2c9da70b1c433c8c19e1f4643b4c8dd3072ed473e438044a1f7a6d5c",
+      "counts": {
+        "profile_before_qc": 25766,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 25766,
+        "profile_accepted": 25523,
+        "native_attempted": 215090,
+        "native_accepted": 215090
+      },
+      "pairs": "20220925T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "1e1c5f71162e14ed697f0c24d7dadd64adbb8e5b715acff03e90f711ebf2e328",
+      "rejections": "20220925T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "f2ab22ca725ed63b4de1eaeb21ccbc4ac3bc6de30b0e0ef4d35688faae12dfcd",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 243
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5212
+      }
+    },
+    {
+      "issue_time": "2022-09-26T06:00:00+00:00",
+      "inventory": "20220926T060000Z.jsonl",
+      "inventory_sha256": "5be4f47e077dedbdac181caecaaa4b421ffeb9952a4c14cd15a4fc176c666c31",
+      "counts": {
+        "profile_before_qc": 26716,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 26716,
+        "profile_accepted": 26449,
+        "native_attempted": 216654,
+        "native_accepted": 216654
+      },
+      "pairs": "20220926T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "904a92104d2919bcd44037a75e19fbf3bc27382444b03df3c9681b2b1464b407",
+      "rejections": "20220926T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "bf826e2e6e8345ead4f65047a84bc130133c5e2596dc8ee1cb7c79a64509add1",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 267
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5306
+      }
+    },
+    {
+      "issue_time": "2022-09-27T06:00:00+00:00",
+      "inventory": "20220927T060000Z.jsonl",
+      "inventory_sha256": "491a2e91b4a0d4b2167ed56f5e72cb82326b661e124334a8bac4f1066b984889",
+      "counts": {
+        "profile_before_qc": 26651,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 26651,
+        "profile_accepted": 26364,
+        "native_attempted": 216518,
+        "native_accepted": 216518
+      },
+      "pairs": "20220927T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "458b04c0f3b3bf0ac542bf1cf888f604da5ab7eb194933e76ea5c787779e67e6",
+      "rejections": "20220927T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "bb6e111340591ee57de2a38444a633d1fba84fca63a771e3a5866e446dd460f9",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 287
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5292
+      }
+    },
+    {
+      "issue_time": "2022-09-28T06:00:00+00:00",
+      "inventory": "20220928T060000Z.jsonl",
+      "inventory_sha256": "23275e1177b9b50f45248bf44086ea8621bd2cba53f0c221683a73810c00258d",
+      "counts": {
+        "profile_before_qc": 26351,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 26351,
+        "profile_accepted": 26042,
+        "native_attempted": 214353,
+        "native_accepted": 214353
+      },
+      "pairs": "20220928T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "dccaf252c9d3c14c687e43afaaece8a8ddce5357da8f6b96b6df67025bf0892d",
+      "rejections": "20220928T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "344eb7549b0c4b4c615316ed9da83cdc810ae6480007e38d39963fda82f7e3c2",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 309
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5211
+      }
+    },
+    {
+      "issue_time": "2022-09-29T06:00:00+00:00",
+      "inventory": "20220929T060000Z.jsonl",
+      "inventory_sha256": "cfe3d3724ed0f3d49a2ded17b54756a039f1f4207d80b17e3e36902886598193",
+      "counts": {
+        "profile_before_qc": 25934,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 25934,
+        "profile_accepted": 25653,
+        "native_attempted": 209653,
+        "native_accepted": 209653
+      },
+      "pairs": "20220929T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "1e93803921e24d24d735b111dad788c2d8ca56eae2faa4466593fda5d034461d",
+      "rejections": "20220929T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "9628e304374a4318c1c7c35d71225a4141b32a2199bb639cfe4c69da640b30b9",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 281
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 5138
+      }
+    },
+    {
+      "issue_time": "2022-09-30T06:00:00+00:00",
+      "inventory": "20220930T060000Z.jsonl",
+      "inventory_sha256": "0026fec310f598846bbd392df4c68a8babad72d2b80b77baf6f16696f948c66b",
+      "counts": {
+        "profile_before_qc": 24830,
+        "profile_qc_excluded": 0,
+        "profile_attempted": 24830,
+        "profile_accepted": 24572,
+        "native_attempted": 204606,
+        "native_accepted": 204606
+      },
+      "pairs": "20220930T060000Z.pairs.jsonl.gz",
+      "pairs_sha256": "3baa44529429fb31757afdd3b704e6039b17807ccb65b2570478d57e97bb9f86",
+      "rejections": "20220930T060000Z.rejections.jsonl.gz",
+      "rejections_sha256": "e61b28f21b0141677fac6e735dff6aad18abfb720287641cf29f0f9aa321ec46",
+      "rejected": {
+        "profile_outside_norm_or_forecast_support": 258
+      },
+      "humidity_qc_reasons": {
+        "humidity_paired_check_passed": 4873
+      }
+    }
+  ],
+  "pressure_bin_definition": "nearest log-pressure standard bin; prediction evaluated at actual measured pressure",
+  "lead_bin_definition": "(previous 3-hour lead, reported upper lead]; +0 has no future targets",
+  "target_mask": "admitted measurement support and model fixed norm support; no predicted terrain/pressure screen",
+  "metric_weighting": "each admitted scalar equally weighted; reused targets across issues are dependent",
+  "profile_climatology": "official NOAA monthly physical masked context via observation operator; not GraphCast means",
+  "surface_climatology": "fixed train station monthly means; controls exclude station-month-variable fallback entries without measured train support",
+  "persistence": "last available measurement in identical frozen model input; exact profile location/pressure/variable",
+  "diagnostic_only": true,
+  "scientific_acceptance": false,
+  "config": {
+    "schema": "joint-monthly-verification-1",
+    "policy": "docs/decisions/0018-monthly-forecast-verification.md",
+    "month": "2022-09",
+    "issue_hour": 6,
+    "issue_stride_hours": 24,
+    "expected_issue_count": 30,
+    "horizon_hours": 72,
+    "lead_step_hours": 3,
+    "checkpoint_epoch": 12,
+    "checkpoint_sha256": "5aedf87c304ead44b745f04c06b1e7c88d2f9924337d6a109b4eb28ce654d22f",
+    "input_profile_limit": 2000,
+    "profile_target_limit": null,
+    "humidity_min_pressure_pa": 0.0,
+    "humidity_training_min_pressure_pa": 30000.0,
+    "humidity_qc": true,
+    "unsupported_training_label": "unsupported_training",
+    "verification_fields": "physical_prediction_before_geometric_product_mask",
+    "profile_variables": [
+      "temperature",
+      "specific_humidity",
+      "u",
+      "v",
+      "geopotential",
+      "omega"
+    ],
+    "native_variables": [
+      "station_temperature",
+      "station_dew_point",
+      "station_eastward_wind",
+      "station_northward_wind",
+      "station_pressure",
+      "station_mean_sea_level_pressure"
+    ],
+    "profile_pressure_bin_count": 37,
+    "pressure_grouping": "nearest_log_pressure_bin_label; score_at_actual_observation_pressure",
+    "time_grouping": "reported_lead_bin_label; score_at_actual_observation_time",
+    "controls": [
+      "available_past_measurement_persistence",
+      "masked_fixed_climatology"
+    ],
+    "metrics": [
+      "mae",
+      "rmse",
+      "bias",
+      "count"
+    ],
+    "empty_metrics": null,
+    "omega_observation_status": "no_observed_target",
+    "stages": [
+      "freeze",
+      "forecast",
+      "verify",
+      "aggregate",
+      "acceptance_report"
+    ],
+    "diagnostic_only": true,
+    "allow_training": false,
+    "allow_downloads": false,
+    "maximum_elapsed_seconds": 3600,
+    "maximum_new_artifact_bytes": 3000000000,
+    "device": "auto",
+    "spacing_degrees": 5.0,
+    "configuration_sha256": "088bc218d61ed36e14d9186268cfe0070a73d305ba3e17120ddded6a6b5197b5"
+  },
+  "config_sha256": "088bc218d61ed36e14d9186268cfe0070a73d305ba3e17120ddded6a6b5197b5",
+  "metric_definitions": {
+    "error": "prediction-observation",
+    "mae": "sum(abs(error))/count",
+    "rmse": "sqrt(sum(error^2)/count)",
+    "bias": "sum(error)/count",
+    "skill_rmse": "1-RMSE_paired_model/RMSE_control; null with empty pairs or zero control RMSE"
+  },
+  "native_target_scope": "all admitted raw scalars at frozen station inventory; indexed GHCNh station/time IDs",
+  "aggregate_sha256": "8bbef4c508694426f05a8928b24e407bbe77d49107681edb4b70951df0fc41ed",
+  "accumulators_sha256": "ac67e578d05ff8853386d636c7931ea16d776092bd957d25b6dc96066b991dea",
+  "finished_utc": "2026-10-12T19:46:13.098209+00:00"
+}

@@ -1,0 +1,321 @@
+{
+  "schema": "joint-training-audit-1",
+  "status": "complete",
+  "source_identity": {
+    "dataset_sha256": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+    "source_sha256": "2e4af1a87192b0bb5bac5b17c6f5ba8f03a967c550b70b952bd74cc92a99f3da",
+    "commit": "4fc48a3151ccaf0e02c2d20fd1a0ac71825c501f",
+    "config": {
+      "mesh_level": 2,
+      "hidden": 32,
+      "epochs": 12,
+      "patience": 4,
+      "threads": 8,
+      "seed": 43,
+      "learning_rate": 0.0001,
+      "weight_decay": 0.01,
+      "gradient_clip": 1.0,
+      "max_train_issues": 48,
+      "max_validation_issues": 12,
+      "max_test_issues": 12,
+      "max_records_per_window": 2000,
+      "surface_weight": 0.5,
+      "physical_policy": {
+        "schema": "profile-physical-policy-1",
+        "architecture": "hydrostatic_flow",
+        "huber_delta": 2.5,
+        "humidity_qc": true,
+        "maximum_water_relative_humidity": 2.0,
+        "humidity_min_pressure_pa": 30000.0,
+        "variable_weights": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ],
+        "memory_budget_mib": 16384
+      }
+    },
+    "device": "cuda",
+    "python": "3.11.2",
+    "torch": "2.11.0+cu128",
+    "numpy": "2.4.6",
+    "cuda": "12.8",
+    "hardware": "NVIDIA GeForce RTX 4090",
+    "cuda_visible_devices": "0",
+    "cublas_workspace_config": ":4096:8",
+    "deterministic": true,
+    "tf32": false,
+    "architecture": "joint-measured-hydrostatic-v1",
+    "joint_dataset_path": "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/dataset",
+    "joint_fingerprint": {
+      "surface_dataset_sha256": "83a02c9280df8c15945b1a89d1ac43e78cb8d83c766e563334e2c6966dd52ac4",
+      "profile_dataset_sha256": "34132f6542a8b4c4eadb354057d211abdf4a1cad8d5f836ecad8226d2ef0323e",
+      "surface_hourly_sha256": "8b10238ab3439c30c1b1b5e6b94557e5fee4e914feee815ef2a17e66b03ec3d4",
+      "surface_norm_sha256": "059e350997e8e552f702bcbb7e5149143fab29745b50c98d29de724cf27f8962",
+      "profile_database_sha256": "d5e7178810fb261f427c43443c1f8f0cca2e4b328636147bf35ce6d06b7668b3",
+      "horizon_hours": 72,
+      "issue_stride_hours": 24
+    },
+    "norm_path": "/home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json",
+    "norm_sha256": "4a2a84b832d2df6db9eee9e44b9187035d84cdc22a09bfa703d42d7af6a3b97a",
+    "station_climatology_path": "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/training/station_climatology.npz",
+    "station_climatology_sha256": "c5aa54f6f47a86b6dd23a9763da08620cb3fe10cf310a9b11ca9ac72c4c107e5",
+    "climatology_path": "/home/user/global-ml-weather/outputs/climatology-level-2",
+    "climatology_sha256": "d10f58b9887e08f3ffd84ade95efaba8e71190825133e4e391c04acb8ed84497",
+    "static_path": "/home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/static",
+    "static_fingerprint": "25e3a21b71adf518bf9f0f106bc3d9d3500956e928fec52145758f2cc3c0d566",
+    "joint_source_sha256": {
+      "joint_observation_model.py": "ee16691e133fed86528468bae1fe0b50cf3cd4de8c61352cad30827ab0df2d81",
+      "joint_observation_training.py": "52e7254259d03131b3b3d95362456ade1f2b595c9d30d66809b00e7dbcca3997",
+      "joint_observation_data.py": "0e1f9d2c7303414c863af49e95989ba0b3cb0818159d03dc183d1b7577d0c08f",
+      "profile_hydrostatic_model.py": "0eb28ba8e2443ec4e11e0abf12321b89220c81b3d3cc26e5cb6581ee8b3d67ee",
+      "profile_model_v2.py": "5de9fae31ce182f220c5181d099752ed3c86cce8e469003e60dd54bbdb475872",
+      "profile_physics.py": "6fd756697a81e78611389b8e0c6e066098f0b7580200a210e1c390a780d09890"
+    }
+  },
+  "training_artifact_sha256": {
+    "complete.json": "84a599becbc86bb3e18754797f611947c2384a56b67f6c40da599dbf1b2dc950",
+    "latest.json": "e46336b848b41a1a137906120e0a1275d385981f40954398ba6878ea38102c9d",
+    "best.json": "e46336b848b41a1a137906120e0a1275d385981f40954398ba6878ea38102c9d"
+  },
+  "epoch_artifact_sha256": {
+    "1": {
+      "metrics_sha256": "6c5b9a20137d20c046fd5059719416ff376ff65e93acdc994605208a0b57a72b",
+      "state_sha256": "da28ea3ef8fad8f1cefd59891773410b5ebf0e416da17eb8f22c26f8091fd183"
+    },
+    "2": {
+      "metrics_sha256": "29deb21c86890aecbf2270911a761e3164ea341e9f7391b249833547cf667f83",
+      "state_sha256": "0504b3bc1a6dfceeb84f81c7586e9f91eb94103b91dd217562faa64dd91a46df"
+    },
+    "3": {
+      "metrics_sha256": "d18a018f522d71dd50c6be2a83b8a6b6b83350ab9162eb67c98acb2477553e2e",
+      "state_sha256": "53930f584bc46b7f00815a357f97c0dd0048d9c64aa1881adbd799ccc8a80bba"
+    },
+    "4": {
+      "metrics_sha256": "c174bbd99deb10c393b1e2ce147b8769ac6d7b96efd7063c31bb2146df74200e",
+      "state_sha256": "57a6cb89925dbeb71715581fc051a6d4753344833cd7b42792cc640afe3518e5"
+    },
+    "5": {
+      "metrics_sha256": "4b2edde83f0da1e6b516d6f3ab5608807ea7982006470b845aa13def54ba66d1",
+      "state_sha256": "8bd236c6cfc6a457ce8aae91564917c0100b97e592256d3a81362858b9aa477c"
+    },
+    "6": {
+      "metrics_sha256": "52d839d0dc2304e36c73519c3990c7863b61ffa2a2bd05b489e92c46351a6103",
+      "state_sha256": "0a0b5f4f722709ec517142a70a5d51eaba8fbdd8fd53a984323fff9012a4029f"
+    },
+    "7": {
+      "metrics_sha256": "c66450ea103745650d888e6ddbcabf85a988427c4bcf285d60e0282857a74c1a",
+      "state_sha256": "cf16c0e987a1438696225a622d13cd8318af36cd2294748f2b55eba5345c419c"
+    },
+    "8": {
+      "metrics_sha256": "0090e634662e78000767a49dd9f388e95d17076022aa9761ea744c96aec3aaf7",
+      "state_sha256": "a82f189d70ac35dad71b4bb7354c6f07157cf2a4ac2783bdf902861936442a84"
+    },
+    "9": {
+      "metrics_sha256": "32ba67c55feff6220baf3ae3df6295b58b79a79c68bb13d1b3a6c7170587917f",
+      "state_sha256": "713443f1ac0434e86f65f337f42a2a958ab173e9602b004a09a9e54d81bb7763"
+    },
+    "10": {
+      "metrics_sha256": "01fd87449ff6a558486a19d79b5431a6463e28e77d04296040a9857a6f8b9881",
+      "state_sha256": "74f19f04355befbcc81476ab6bce35319acb8eb18a981cfc650afd1afd3b116c"
+    },
+    "11": {
+      "metrics_sha256": "ab09b97e78e2f9a1adc164013295125a4a6383baafd6a80dcfa84fd662f2e567",
+      "state_sha256": "65f147688165337c109badab7383382d485de2e1d98d0130cbe45c2dbe1dc070"
+    },
+    "12": {
+      "metrics_sha256": "3acbb873a77aaeb7f7935b56cdafa34a9976cfe0729909bce489c243816f0d6c",
+      "state_sha256": "5aedf87c304ead44b745f04c06b1e7c88d2f9924337d6a109b4eb28ce654d22f"
+    }
+  },
+  "configured_epochs": 12,
+  "completed_epochs": 12,
+  "best_epoch": 12,
+  "best_is_last": true,
+  "stop_reason": "epoch_budget",
+  "stale_epochs": 0,
+  "strictly_decreasing_validation": true,
+  "last_epoch_improved": true,
+  "convergence_not_established": true,
+  "convergence_evidence": "best_is_last_and_still_improving",
+  "validation_history": [
+    {
+      "epoch": 1,
+      "joint": 0.2885978749642769,
+      "profile": 0.40569598724444705,
+      "surface": 0.17149976268410683
+    },
+    {
+      "epoch": 2,
+      "joint": 0.28491273025671643,
+      "profile": 0.399507778386275,
+      "surface": 0.17031768212715784
+    },
+    {
+      "epoch": 3,
+      "joint": 0.2739259439210097,
+      "profile": 0.377934068441391,
+      "surface": 0.16991781940062842
+    },
+    {
+      "epoch": 4,
+      "joint": 0.25851005129516125,
+      "profile": 0.34740983694791794,
+      "surface": 0.16961026564240456
+    },
+    {
+      "epoch": 5,
+      "joint": 0.24343992521365485,
+      "profile": 0.31770089517037076,
+      "surface": 0.16917895525693893
+    },
+    {
+      "epoch": 6,
+      "joint": 0.23303499196966487,
+      "profile": 0.29772067070007324,
+      "surface": 0.16834931323925653
+    },
+    {
+      "epoch": 7,
+      "joint": 0.22644736493627232,
+      "profile": 0.2854839414358139,
+      "surface": 0.1674107884367307
+    },
+    {
+      "epoch": 8,
+      "joint": 0.21940883062779903,
+      "profile": 0.2724958894153436,
+      "surface": 0.16632177184025446
+    },
+    {
+      "epoch": 9,
+      "joint": 0.21356940021117526,
+      "profile": 0.26185502608617145,
+      "surface": 0.1652837743361791
+    },
+    {
+      "epoch": 10,
+      "joint": 0.20891971948246163,
+      "profile": 0.2533523812890053,
+      "surface": 0.16448705767591795
+    },
+    {
+      "epoch": 11,
+      "joint": 0.2046778816729784,
+      "profile": 0.24548908695578575,
+      "surface": 0.16386667639017105
+    },
+    {
+      "epoch": 12,
+      "joint": 0.20305656331280866,
+      "profile": 0.2425887162486712,
+      "surface": 0.16352441037694612
+    }
+  ],
+  "partial_epochs_ignored": [],
+  "normalized_loss_is_weather_accuracy": false,
+  "scientific_acceptance": false,
+  "readiness": {
+    "all_reported_parameter_gradients_nonzero": true,
+    "all_profile_variables_have_targets_each_epoch": true,
+    "all_native_variables_have_targets_each_epoch": true,
+    "all_levels_trained": false,
+    "weather_acceptance": "blocked",
+    "blockers": [
+      "independent_scientific_acceptance_not_established",
+      "normalized_training_losses_are_not_physical_weather_metrics",
+      "monthly_observation_verification_missing_or_unverified"
+    ]
+  },
+  "stage_inventory": {
+    "training": {
+      "status": "complete",
+      "epochs": 12
+    },
+    "forecast_format": {
+      "status": "not_provided_in_this_audit"
+    },
+    "monthly_observation_verification": {
+      "status": "missing",
+      "observation_comparison_completed": false,
+      "weather_skill_accepted": false
+    }
+  },
+  "reference_configuration": {
+    "sha256": "ed1c004d1cf7de614c0d0b26121b7843bc6d259d17d1e9996c60680ce58d21a0",
+    "comparison": {
+      "epochs": {
+        "reference": 500,
+        "actual": 12,
+        "equal": false
+      },
+      "gradient_clip": {
+        "reference": 1.0,
+        "actual": 1.0,
+        "equal": true
+      },
+      "hidden": {
+        "reference": 128,
+        "actual": 32,
+        "equal": false
+      },
+      "learning_rate": {
+        "reference": 0.0005,
+        "actual": 0.0001,
+        "equal": false
+      },
+      "mesh_level": {
+        "reference": 2,
+        "actual": 2,
+        "equal": true
+      },
+      "patience": {
+        "reference": 150,
+        "actual": 4,
+        "equal": false
+      },
+      "seed": {
+        "reference": 42,
+        "actual": 43,
+        "equal": false
+      },
+      "surface_weight": {
+        "reference": 0.5,
+        "actual": 0.5,
+        "equal": true
+      },
+      "threads": {
+        "reference": 8,
+        "actual": 8,
+        "equal": true
+      },
+      "weight_decay": {
+        "reference": 0.01,
+        "actual": 0.01,
+        "equal": true
+      }
+    },
+    "unsupported_reference_keys": [
+      "batch_size",
+      "climatology_period",
+      "climatology_schema",
+      "dem_manifest",
+      "dem_path",
+      "dropout",
+      "horizon_hours",
+      "lead_step_hours",
+      "max_train_samples",
+      "max_val_samples",
+      "min_lr",
+      "policy",
+      "prediction_target",
+      "profile_weight",
+      "scheduler",
+      "schema"
+    ],
+    "reference_tuning_inherited": false,
+    "interpretation": "different architecture; equality of individual settings does not establish inherited tuning"
+  }
+}

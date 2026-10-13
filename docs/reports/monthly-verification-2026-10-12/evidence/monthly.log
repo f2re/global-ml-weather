@@ -1,0 +1,26 @@
+/home/user/global-ml-weather/.venv/lib/python3.11/site-packages/torch/_utils.py:358: UserWarning: Sparse invariant checks are implicitly disabled. Memory errors (e.g. SEGFAULT) will occur when operating on a sparse tensor which violates the invariants, but checks incur performance overhead. To silence this warning, explicitly opt in or out. See `torch.sparse.check_sparse_tensor_invariants.__doc__` for guidance.  (Triggered internally at /pytorch/aten/src/ATen/Context.cpp:760.)
+  result = torch.sparse_coo_tensor(
+{"schema": "joint-monthly-verification-1", "status": "complete", "month": "2022-09", "verified_issues": 30, "checkpoint_sha256": "5aedf87c304ead44b745f04c06b1e7c88d2f9924337d6a109b4eb28ce654d22f"}
+	Command being timed: "/home/user/global-ml-weather/.venv/bin/python -m global_weather.joint_monthly_verification --stage all --config configs/joint_monthly_verification.json --dataset /home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/dataset --training /home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/training --static /home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/static --output outputs/september-2022 --source-revision df9639cb1d0bb3a1607b9016a43860a20dfa4039"
+	User time (seconds): 2696.62
+	System time (seconds): 128.63
+	Percent of CPU this job got: 154%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 30:24.18
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 2741788
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 16
+	Minor (reclaiming a frame) page faults: 4435588
+	Voluntary context switches: 58175
+	Involuntary context switches: 7826
+	Swaps: 0
+	File system inputs: 385224
+	File system outputs: 4299336
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
