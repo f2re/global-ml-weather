@@ -1,0 +1,23 @@
+{
+  "schema": "satellite-channel-admission-1",
+  "description": "Physical admission of satellite channels for R11. Empty until a channel passes the documented admission; an empty list keeps satellite_supervision false.",
+  "minimum_train_count": 1000,
+  "channels": [],
+  "example": {
+    "channel": "<instrument>/<platform>:<channel number as written by the token store>",
+    "quantity": "brightness_temperature",
+    "units": "K",
+    "central_frequency_ghz": "<GHz for microwave, or central_wavenumber_cm-1 for infrared>",
+    "passport_sha256": "<SHA256 of the radiometric passport recorded by the token store>",
+    "noise_equivalent_dt_k": "<NEdT from the passport>",
+    "observation_error_k": "<not below NEdT; calibrated by Desroziers diagnostics>",
+    "roles": ["input", "target"],
+    "clear_sky_screened": true,
+    "weighting_function": {
+      "pressure_hpa": "<exactly the 37 model levels, 1000 to 1 hPa>",
+      "weights": "<37 non-negative clear-sky nadir weights from a named radiative-transfer run>",
+      "surface_weight": "<at most 0.1 for a target channel>",
+      "source": "<model, version, atmosphere and geometry of the weighting-function computation>"
+    }
+  }
+}

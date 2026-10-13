@@ -5,7 +5,8 @@ learned as an unobserved target. Meshes with exact Voronoi polygons use their
 true dual edges. Mesh8 has no materialised Voronoi polygons, so it uses the
 same vertex-centred barycentric control-volume family as its stored cell areas:
 each shared boundary joins the two adjacent spherical-triangle centroids via
-the primal-edge midpoint. Fluxes are shared with exactly opposite signs.
+the primal-edge midpoint, and its flux uses that bent boundary's area vector.
+Fluxes are shared with exactly opposite signs.
 
 The imposed upper boundary is omega(100 Pa)=0. No lower mass correction is
 invented because global surface-pressure tendency is not available in this
@@ -54,18 +55,30 @@ def _barycentric_edge_geometry(grid):
     pairs = raw[first]
     centres = _triangle_centres(grid)
     left_face, right_face = centres[face_ids[first]], centres[face_ids[second]]
-    midpoint = grid.xyz[pairs[:, 0]] + grid.xyz[pairs[:, 1]]
+    xyz = np.asarray(grid.xyz, dtype=np.float64)
+    midpoint = xyz[pairs[:, 0]] + xyz[pairs[:, 1]]
     midpoint /= np.linalg.norm(midpoint, axis=1, keepdims=True)
-    normal = grid.xyz[pairs[:, 1]] - grid.xyz[pairs[:, 0]]
-    normal /= np.linalg.norm(normal, axis=1, keepdims=True)
-    length = EARTH_RADIUS_M * (
-        np.arccos(np.clip(np.einsum('ij,ij->i', left_face, midpoint), -1, 1))
-        + np.arccos(np.clip(np.einsum('ij,ij->i', midpoint, right_face), -1, 1)))
+    # The shared boundary is bent: centroid -> edge midpoint -> centroid. Neither
+    # arc is perpendicular to the primal edge, so the flux uses the boundary's
+    # area vector sum_s n_s L_s (outward from the left cell), not the primal-edge
+    # direction times the arc length. The latter does not converge: its relative
+    # potential-flow divergence error grows from 21 % on mesh2 to 91 % on mesh5.
+    towards_right = xyz[pairs[:, 1]] - xyz[pairs[:, 0]]
+    area_vector = np.zeros_like(midpoint)
+    for start, stop in ((left_face, midpoint), (midpoint, right_face)):
+        arc_normal = np.cross(start, stop)
+        arc_normal /= np.linalg.norm(arc_normal, axis=1, keepdims=True)
+        arc_normal *= np.sign(np.einsum('ij,ij->i', arc_normal, towards_right))[:, None]
+        arc_length = EARTH_RADIUS_M * np.arccos(np.clip(np.einsum('ij,ij->i', start, stop), -1, 1))
+        area_vector += arc_normal * arc_length[:, None]
+    area_vector -= np.einsum('ij,ij->i', area_vector, midpoint)[:, None] * midpoint
+    length = np.linalg.norm(area_vector, axis=1)
+    normal = area_vector / length[:, None]
     if (len(pairs) * 2 != grid.edges.shape[1] or not np.isfinite(length).all()
-            or np.any(length <= 0)):
+            or np.any(length <= 0) or not np.isfinite(normal).all()):
         raise ValueError('Invalid barycentric dual-edge geometry.')
     return (pairs, midpoint.astype(np.float32), normal.astype(np.float32),
-            length.astype(np.float32), 'spherical_barycentric_triangle_control_volume')
+            length.astype(np.float32), 'spherical_barycentric_triangle_control_volume_area_vector')
 
 
 def _edge_geometry(grid):

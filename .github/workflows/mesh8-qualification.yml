@@ -16,6 +16,7 @@ on:
       - 'configs/joint_observation_training.json'
       - 'configs/joint_observation_training_mesh2_pilot.json'
       - 'scripts/mesh8_geometry_smoke.py'
+      - 'scripts/mesh8_omega_smoke.py'
       - 'scripts/mesh8-r10-runner.py'
       - 'tests/test_mesh8_experiment_contract.py'
       - 'tests/test_mesh8_runtime_gates.py'
@@ -38,6 +39,7 @@ on:
       - 'global_weather/mesh8_final_check.py'
       - 'configs/joint_observation_training.json'
       - 'scripts/mesh8_geometry_smoke.py'
+      - 'scripts/mesh8_omega_smoke.py'
       - 'scripts/mesh8-r10-runner.py'
       - 'tests/test_mesh8_experiment_contract.py'
       - 'tests/test_mesh8_runtime_gates.py'
@@ -69,8 +71,11 @@ jobs:
           tests/test_joint_observation_model.py
           tests/test_profile_physical_r9.py -q
       - run: python scripts/mesh8_geometry_smoke.py --output outputs/mesh8/geometry.json
+      - run: python scripts/mesh8_omega_smoke.py --output outputs/mesh8/omega.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: mesh8-geometry-qualification
-          path: outputs/mesh8/geometry.json
+          path: |
+            outputs/mesh8/geometry.json
+            outputs/mesh8/omega.json

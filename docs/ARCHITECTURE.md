@@ -13,6 +13,10 @@
 `AdaptiveWeatherModel` — сжатая вертикаль и физически обусловленные направленные сообщения.
 `MultimodalWeatherModel` добавляет пространственно-временные спутниковые ветви и локальное внимание к разреженным наблюдениям.
 
+Новый основной контур — `PhysicalAssimilationModel` в `global_weather/assimilation`, [R11](PHYSICAL_ASSIMILATION.md).
+Он использует multimesh уровней 0–5, физическое состояние с гидростатикой от поверхности и сохранением сухой массы.
+Он усваивает измерения всех платформ по [решению 0020](decisions/0020-physical-assimilation-r11.md).
+
 Для реальных совместных GHCNh + IGRA опытов используется отдельный `JointObservationModel` с `HydrostaticFlowProfileModel`. Он сохраняет фактические давления и времена аэрологии, физическую профильную нормировку и гидростатически согласованный decoder. Текущий high-resolution контур этого варианта — `joint-mesh8-qualification-r10`.
 
 ```text

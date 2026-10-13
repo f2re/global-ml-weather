@@ -1,0 +1,420 @@
+{
+  "schema": "observation-errors-1",
+  "basis": "Initial combined instrument and representativeness errors for a ~240 km latent mesh. They are configuration, not measurements; recalibrate per platform, variable and layer with Desroziers et al. (2005) diagnostics from saved departures before any operational claim.",
+  "platforms": {
+    "surface_station": {
+      "station_temperature": {
+        "sigma": 2.0
+      },
+      "station_dew_point": {
+        "sigma": 2.5
+      },
+      "station_eastward_wind": {
+        "sigma": 2.5
+      },
+      "station_northward_wind": {
+        "sigma": 2.5
+      },
+      "station_pressure": {
+        "sigma": 100.0
+      },
+      "station_mean_sea_level_pressure": {
+        "sigma": 120.0
+      }
+    },
+    "ship": {
+      "station_temperature": {
+        "sigma": 2.0
+      },
+      "station_dew_point": {
+        "sigma": 2.5
+      },
+      "station_eastward_wind": {
+        "sigma": 3.0
+      },
+      "station_northward_wind": {
+        "sigma": 3.0
+      },
+      "station_pressure": {
+        "sigma": 150.0
+      },
+      "station_mean_sea_level_pressure": {
+        "sigma": 150.0
+      }
+    },
+    "buoy": {
+      "station_temperature": {
+        "sigma": 2.0
+      },
+      "station_dew_point": {
+        "sigma": 2.5
+      },
+      "station_eastward_wind": {
+        "sigma": 3.0
+      },
+      "station_northward_wind": {
+        "sigma": 3.0
+      },
+      "station_pressure": {
+        "sigma": 150.0
+      },
+      "station_mean_sea_level_pressure": {
+        "sigma": 150.0
+      }
+    },
+    "scatterometer": {
+      "station_eastward_wind": {
+        "sigma": 2.0
+      },
+      "station_northward_wind": {
+        "sigma": 2.0
+      }
+    },
+    "radiosonde": {
+      "temperature": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          1.2,
+          0.9,
+          1.2,
+          1.5,
+          2.0,
+          3.0
+        ]
+      },
+      "specific_humidity": {
+        "relative": 0.15,
+        "floor": 2e-06
+      },
+      "u": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          2.0,
+          2.5,
+          3.0,
+          3.0,
+          3.5,
+          5.0
+        ]
+      },
+      "v": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          2.0,
+          2.5,
+          3.0,
+          3.0,
+          3.5,
+          5.0
+        ]
+      },
+      "geopotential": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          80,
+          120,
+          200,
+          300,
+          500,
+          1000
+        ]
+      }
+    },
+    "dropsonde": {
+      "temperature": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          1.2,
+          0.9,
+          1.2,
+          1.5,
+          2.0,
+          3.0
+        ]
+      },
+      "specific_humidity": {
+        "relative": 0.15,
+        "floor": 2e-06
+      },
+      "u": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          2.0,
+          2.5,
+          3.0,
+          3.0,
+          3.5,
+          5.0
+        ]
+      },
+      "v": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          2.0,
+          2.5,
+          3.0,
+          3.0,
+          3.5,
+          5.0
+        ]
+      },
+      "geopotential": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          80,
+          120,
+          200,
+          300,
+          500,
+          1000
+        ]
+      }
+    },
+    "pilot_balloon": {
+      "u": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          2.0,
+          2.5,
+          3.0,
+          3.0,
+          3.5,
+          5.0
+        ]
+      },
+      "v": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          2.0,
+          2.5,
+          3.0,
+          3.0,
+          3.5,
+          5.0
+        ]
+      }
+    },
+    "wind_profiler": {
+      "u": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          2.5,
+          3.0,
+          3.5,
+          3.5,
+          4.0,
+          5.0
+        ]
+      },
+      "v": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          2.5,
+          3.0,
+          3.5,
+          3.5,
+          4.0,
+          5.0
+        ]
+      }
+    },
+    "aircraft": {
+      "temperature": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          1.0,
+          1.0,
+          1.0,
+          1.5,
+          2.0,
+          3.0
+        ]
+      },
+      "specific_humidity": {
+        "relative": 0.2,
+        "floor": 5e-06
+      },
+      "u": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          2.5,
+          2.5,
+          3.0,
+          3.5,
+          4.0,
+          5.0
+        ]
+      },
+      "v": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          2.5,
+          2.5,
+          3.0,
+          3.5,
+          4.0,
+          5.0
+        ]
+      }
+    },
+    "satellite_amv": {
+      "u": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          4.0,
+          4.5,
+          5.0,
+          5.0,
+          6.0,
+          7.0
+        ]
+      },
+      "v": {
+        "pressure_hpa": [
+          1000,
+          500,
+          250,
+          50,
+          10,
+          1
+        ],
+        "sigma": [
+          4.0,
+          4.5,
+          5.0,
+          5.0,
+          6.0,
+          7.0
+        ]
+      }
+    },
+    "gnss_ro": {
+      "refractivity": {
+        "relative": 0.01,
+        "floor": 0.05
+      }
+    },
+    "satellite_radiance": {
+      "brightness_temperature": {
+        "from_record": true
+      }
+    },
+    "satellite_product": {
+      "satellite_product": {
+        "from_record": true
+      }
+    }
+  }
+}
