@@ -20,13 +20,13 @@
 6. frozen reload, physical-v2 diagnostics и GRIB2;
 7. независимый final evidence gate с SHA256 и фактической CUDA telemetry.
 
-Q0 пройден на полной сетке. Канонический fingerprint mesh8: `992e223cc99417d5f12f8ed6d314579d4006a788ca9d935af1f5abc22b2b76b9`. Full graph smoke подтвердил 655362 ячейки, 3932160 направленных рёбер и глобальное замыкание площади.
+Q0 повторно пройден на полной сетке после стабилизации identity. Канонический fingerprint mesh8: `64c3e32f792a42ad7d363635e5217cd3c845743a9b92487fdc226da5f1937aa9`, schema `mesh8-geometry-q1e-7-v1`. Full graph smoke подтвердил 655362 ячейки, 3932160 направленных рёбер и глобальное замыкание площади. Старый `992e223c…` fingerprint снят: он менялся от суб-ULP различий runtime при неизменной топологии; уровни 0–7 сохраняют прежний identity contract.
 
 Реализация physical-v2 завершена. Профильный processor использует жёсткую гидростатическую проекцию, ограниченный specific humidity, wind-directed exchange с conditioning по градиенту геопотенциала и Кориолису, а вертикальная связь зависит от устойчивости по потенциальной температуре. Joint surface head ограничивает `T>0`, `Td<=T`, `Ps>0` и `MSLP>0`. Mesh8 `omega` вычисляется memory-bounded finite-volume continuity operator без полного Voronoi; дополнительно выдаются hydrostatic/continuity residuals и диагностические интегралы воды и энергии.
 
 Эти свойства не превращают сеть в явный решатель примитивных уравнений: точное сохранение полной массы/энергии и CFL-устойчивость не заявляются.
 
-Q1–Q3 имеют реализованные fail-closed пути и preflight, но их реальные data artifacts ещё должны быть построены и проверены на вычислительном узле. Q4 и Q5 программно готовы: фиксированный runner выполняет `preflight → one-epoch CUDA qualification → frozen +3h inference → physics/GRIB2 → final evidence gate`. Фактический CUDA запуск ещё не выполнен, поэтому `scientific_acceptance=false` и переход к 72 часам запрещён.
+Q1–Q3 имеют реализованные fail-closed пути и preflight, но их реальные data artifacts ещё должны быть построены и проверены на вычислительном узле. Climate/static artifacts, созданные для retired mesh8 fingerprint, необходимо перестроить либо мигрировать отдельной проверяемой процедурой. Q4 и Q5 программно готовы: фиксированный runner выполняет `preflight → one-epoch CUDA qualification → frozen +3h inference → physics/GRIB2 → final evidence gate`. Фактический CUDA запуск ещё не выполнен, поэтому `scientific_acceptance=false` и переход к 72 часам запрещён.
 
 После успешного R10 создаётся новый experiment ID для mesh8 72h. До него обязательны фактическая VRAM/RSS telemetry, streaming/checkpointed rollout, streaming export и независимая skill verification; нельзя автоматически поднимать `hidden`, epochs или horizon.
 
@@ -46,7 +46,7 @@ Joint GHCNh + IGRA уже используется в реальном проф�
 
 После инженерной квалификации mesh8:
 
-1. построить и зафиксировать реальные Q2 climate и Q3 static artifacts;
+1. построить и зафиксировать реальные Q2 climate и Q3 static artifacts под canonical stable fingerprint;
 2. выполнить preflight на exact clean SHA и CUDA-узле;
 3. выполнить R10 Q4→Q5 фиксированным runner и сохранить final-verification;
 4. по фактической VRAM/RSS разработать streaming 72h rollout/export;
