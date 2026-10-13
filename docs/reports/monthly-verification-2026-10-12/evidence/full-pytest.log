@@ -6,18 +6,18 @@
 ........................................................................ [ 48%]
 ........................................................................ [ 56%]
 ........................................................................ [ 64%]
-........................................................................ [ 73%]
-........................................................................ [ 81%]
-........................................................................ [ 89%]
-.....s.................................................................. [ 97%]
-.......................                                                  [100%]
+........................................................................ [ 72%]
+........................................................................ [ 80%]
+........................................................................ [ 88%]
+.............s.......................................................... [ 96%]
+...............................                                          [100%]
 =============================== warnings summary ===============================
 ../global-ml-weather/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1
   /home/user/global-ml-weather/.venv/lib/python3.11/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
     from starlette.testclient import TestClient as TestClient  # noqa
 
 tests/test_adaptive.py::test_compressed_output_still_has_all_profiles[4]
-  /home/user/global-ml-weather-monthly-20261012/global_weather/model.py:34: UserWarning: Sparse invariant checks are implicitly disabled. Memory errors (e.g. SEGFAULT) will occur when operating on a sparse tensor which violates the invariants, but checks incur performance overhead. To silence this warning, explicitly opt in or out. See `torch.sparse.check_sparse_tensor_invariants.__doc__` for guidance.  (Triggered internally at /pytorch/aten/src/ATen/Context.cpp:760.)
+  /home/user/global-ml-weather-monthly-report-20261012/global_weather/model.py:34: UserWarning: Sparse invariant checks are implicitly disabled. Memory errors (e.g. SEGFAULT) will occur when operating on a sparse tensor which violates the invariants, but checks incur performance overhead. To silence this warning, explicitly opt in or out. See `torch.sparse.check_sparse_tensor_invariants.__doc__` for guidance.  (Triggered internally at /pytorch/aten/src/ATen/Context.cpp:760.)
     adjacency = torch.sparse_coo_tensor(torch.tensor(np.stack([dst,src])),
 
 tests/test_adaptive.py::test_graphcast_import_is_level_aware_and_records_hashes
@@ -28,11 +28,11 @@ tests/test_ecosystem.py: 18 warnings
     return Affine.translation(west, north) * Affine.scale(xsize, -ysize)
 
 tests/test_ecosystem.py: 11 warnings
-  /home/user/global-ml-weather-monthly-20261012/global_weather/connectors/raster_bridge.py:70: PendingDeprecationWarning: Use `@` matmul instead of `*` mul operator for matrix multiplication
+  /home/user/global-ml-weather-monthly-report-20261012/global_weather/connectors/raster_bridge.py:70: PendingDeprecationWarning: Use `@` matmul instead of `*` mul operator for matrix multiplication
     xx, yy = ds.transform*(xx+.5, yy+.5)
 
 tests/test_observation_operator_admission.py::test_unsupported_omega_nan_does_not_poison_temperature_loss
-  /home/user/global-ml-weather-monthly-20261012/tests/test_observation_operator_admission.py:111: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+  /home/user/global-ml-weather-monthly-report-20261012/tests/test_observation_operator_admission.py:111: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
   Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
     assert float(loss) == pytest.approx(9.)
 
@@ -41,4 +41,4 @@ tests/test_pipeline.py::test_arrays_reject_objects_and_duplicate_members
     return self._open_to_write(zinfo, force_zip64=force_zip64)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-886 passed, 1 skipped, 34 warnings in 139.23s (0:02:19)
+894 passed, 1 skipped, 34 warnings in 141.64s (0:02:21)

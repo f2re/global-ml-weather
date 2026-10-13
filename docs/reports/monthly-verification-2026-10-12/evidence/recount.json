@@ -1,0 +1,8 @@
+{
+  "schema": "joint-verification-recount-1",
+  "status": "passed",
+  "verification_manifest_sha256": "80337cd0e165a79cf05237c15f42928c2c687cf15cd0eb6cfa7f5f3a44eba778",
+  "verified_issues": 30,
+  "recounted_scalar_pairs": 7144022,
+  "scientific_acceptance": false
+}

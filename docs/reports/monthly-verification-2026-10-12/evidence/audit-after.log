@@ -1,0 +1,1 @@
+{"schema": "joint-training-audit-1", "stop_reason": "epoch_budget", "weather_acceptance": "blocked", "output": "outputs/training-audit-after.json"}
