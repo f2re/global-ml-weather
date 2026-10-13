@@ -7,12 +7,21 @@ on:
       - 'global_weather/profile_seasonal_model.py'
       - 'global_weather/mesh8_climatology.py'
       - 'global_weather/joint_static.py'
+      - 'global_weather/joint_observation_model.py'
       - 'global_weather/joint_observation_training.py'
       - 'global_weather/joint_observation_inference.py'
+      - 'global_weather/joint_forecast_physics.py'
+      - 'global_weather/mesh8_preflight.py'
+      - 'global_weather/mesh8_final_check.py'
       - 'configs/joint_observation_training.json'
       - 'configs/joint_observation_training_mesh2_pilot.json'
       - 'scripts/mesh8_geometry_smoke.py'
+      - 'scripts/mesh8-r10-runner.py'
       - 'tests/test_mesh8_experiment_contract.py'
+      - 'tests/test_mesh8_runtime_gates.py'
+      - 'tests/test_joint_forecast_physics.py'
+      - 'tests/test_joint_observation_model.py'
+      - 'tests/test_profile_physical_r9.py'
       - '.github/workflows/mesh8-qualification.yml'
   pull_request:
     paths:
@@ -21,11 +30,20 @@ on:
       - 'global_weather/profile_seasonal_model.py'
       - 'global_weather/mesh8_climatology.py'
       - 'global_weather/joint_static.py'
+      - 'global_weather/joint_observation_model.py'
       - 'global_weather/joint_observation_training.py'
       - 'global_weather/joint_observation_inference.py'
+      - 'global_weather/joint_forecast_physics.py'
+      - 'global_weather/mesh8_preflight.py'
+      - 'global_weather/mesh8_final_check.py'
       - 'configs/joint_observation_training.json'
       - 'scripts/mesh8_geometry_smoke.py'
+      - 'scripts/mesh8-r10-runner.py'
       - 'tests/test_mesh8_experiment_contract.py'
+      - 'tests/test_mesh8_runtime_gates.py'
+      - 'tests/test_joint_forecast_physics.py'
+      - 'tests/test_joint_observation_model.py'
+      - 'tests/test_profile_physical_r9.py'
   workflow_dispatch:
 permissions:
   contents: read
@@ -41,8 +59,15 @@ jobs:
         with:
           python-version: '3.11'
       - run: python -m pip install 'torch>=2.2,<3' --index-url https://download.pytorch.org/whl/cpu
-      - run: python -m pip install -e '.[test,data]'
-      - run: python -m pytest tests/test_mesh8_experiment_contract.py -q
+      - run: python -m pip install -e '.[test,data,grib]'
+      - name: Physical and R10 contracts
+        run: >-
+          python -m pytest
+          tests/test_mesh8_experiment_contract.py
+          tests/test_mesh8_runtime_gates.py
+          tests/test_joint_forecast_physics.py
+          tests/test_joint_observation_model.py
+          tests/test_profile_physical_r9.py -q
       - run: python scripts/mesh8_geometry_smoke.py --output outputs/mesh8/geometry.json
       - uses: actions/upload-artifact@v4
         if: always()
