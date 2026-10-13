@@ -71,6 +71,11 @@ def decode_issue(ec, path, issue, spacing):
             try:
                 if get(handle, 'edition') != 2 or get(handle, 'discipline') != 0:
                     raise ValueError('GRIB edition or discipline differs.')
+                for key, required in (('centre', 65535), ('subCentre', 0), ('tablesVersion', 4),
+                                      ('localTablesVersion', 0), ('productionStatusOfProcessedData', 2),
+                                      ('typeOfGeneratingProcess', 2), ('typeOfSecondFixedSurface', 255)):
+                    if get(handle, key) != required:
+                        raise ValueError('GRIB research provenance key differs: '+key)
                 if get(handle, 'productDefinitionTemplateNumber') != 0 or get(handle, 'indicatorOfUnitOfTimeRange') != 1:
                     raise ValueError('GRIB must use instantaneous forecast template and hours.')
                 reference = datetime(*(get(handle, key) for key in ('year','month','day','hour','minute','second')), tzinfo=timezone.utc)
@@ -107,7 +112,7 @@ def decode_issue(ec, path, issue, spacing):
                         raise ValueError('GRIB grid geometry differs.')
                 if any(get(handle, key) != 0 for key in ('iScansNegatively','jScansPositively','jPointsAreConsecutive','alternativeRowScanning','uvRelativeToGrid')):
                     raise ValueError('GRIB scan direction or wind basis differs.')
-                if get(handle, 'bitmapPresent') != 1:
+                if get(handle, 'bitmapPresent') != 1 or get(handle, 'bitMapIndicator') != 0:
                     raise ValueError('Explicit independent GRIB bitmap is required.')
                 bitmap = np.asarray(ec.codes_get_array(handle, 'bitmap'))
                 values = np.asarray(ec.codes_get_values(handle))
@@ -154,22 +159,37 @@ def check_month(forecasts, output):
         path = local_file(root/directory/'product'/'forecast.grib2')
         if digest(path) != descriptor.get('grib_sha256'):
             raise ValueError('Forecast GRIB SHA256 differs from descriptor.')
-        bound.append((path, descriptor['grib_sha256'], issue_path, digest(issue_path)))
+        inventory_path = local_file(path.with_suffix('.grib2.json'))
+        completion_path = local_file(path.parent/'completion.json')
+        forecast_path = local_file(path.parent/'forecast.json')
+        inventory_hash, completion_hash, forecast_hash = map(digest, (inventory_path, completion_path, forecast_path))
+        inventory = json.loads(inventory_path.read_text())
+        completion = json.loads(completion_path.read_text())
+        if (inventory.get('grib_sha256') != descriptor['grib_sha256']
+                or completion.get('grib_sha256') != descriptor['grib_sha256']
+                or completion.get('grib_inventory_sha256') != inventory_hash
+                or inventory.get('forecast_metadata_sha256') != forecast_hash):
+            raise ValueError('GRIB grid inventory provenance SHA256 binding differs.')
+        spacing = inventory['grid']['spacing_degrees']
+        bound.append((path, descriptor['grib_sha256'], issue_path, digest(issue_path), spacing,
+                      ((inventory_path, inventory_hash), (completion_path, completion_hash), (forecast_path, forecast_hash))))
     # Import only after the full-month and provenance gates have succeeded.
     import eccodes as ec
-    spacing = (manifest.get('config') or {}).get('spacing_degrees', 5.)
     started = datetime.now(timezone.utc).isoformat()
     days = []
-    for issue, (path, expected_hash, descriptor_path, descriptor_hash) in zip(dates, bound):
+    for issue, (path, expected_hash, descriptor_path, descriptor_hash, spacing, metadata_files) in zip(dates, bound):
         result = decode_issue(ec, path, issue, spacing)
-        if digest(path) != expected_hash or digest(descriptor_path) != descriptor_hash:
+        if (digest(path) != expected_hash or digest(descriptor_path) != descriptor_hash
+                or any(digest(metadata_path) != metadata_hash for metadata_path, metadata_hash in metadata_files)):
             raise ValueError('GRIB or issue descriptor changed during decoding.')
-        result.update(grib_sha256=expected_hash, descriptor_sha256=descriptor_hash)
+        result.update(grib_sha256=expected_hash, descriptor_sha256=descriptor_hash,
+                      product_metadata_sha256={metadata_path.name: metadata_hash for metadata_path, metadata_hash in metadata_files})
         days.append(result)
     if digest(manifest_path) != manifest_hash:
         raise ValueError('Monthly manifest changed during decoding.')
-    for path, expected_hash, descriptor_path, descriptor_hash in bound:
-        if digest(path) != expected_hash or digest(descriptor_path) != descriptor_hash:
+    for path, expected_hash, descriptor_path, descriptor_hash, spacing, metadata_files in bound:
+        if (digest(path) != expected_hash or digest(descriptor_path) != descriptor_hash
+                or any(digest(metadata_path) != metadata_hash for metadata_path, metadata_hash in metadata_files)):
             raise ValueError('Monthly artifact changed before report publication.')
     report = {'schema': 'joint-monthly-independent-grib-check-1', 'status': 'complete',
               'month': manifest['month'], 'forecast_manifest_sha256': manifest_hash,

@@ -153,6 +153,11 @@ python -m global_weather.joint_training_audit --training TRAINING \
   --reference-config configs/unified_observation_training.json \
   --verification NEW_OUTPUT/verification/verification.json \
   --output NEW_OUTPUT/training-audit.json
+python -m global_weather.joint_monthly_report \
+  --verification NEW_OUTPUT/verification --recount NEW_OUTPUT/recount.json \
+  --output NEW_OUTPUT/report --plots
+python -m global_weather.joint_monthly_grib_check \
+  --forecasts NEW_OUTPUT/forecasts --output NEW_OUTPUT/grib-check.json
 ```
 
 Более длинное обучение — самостоятельное предложение после проверки.

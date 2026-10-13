@@ -18,17 +18,23 @@ def monthly_fixture(tmp_path, monkeypatch):
     grib.write_bytes(b'synthetic fixture; decoder mocked')
     issue = datetime(2022, 9, 1, 6, tzinfo=timezone.utc)
     descriptor = {'directory': '20220901T060000Z', 'issue_time': issue.isoformat(), 'grib_sha256': check.digest(grib)}
+    (product/'forecast.json').write_text(json.dumps({'issue_time': issue.isoformat()}))
+    inventory = {'grid': {'spacing_degrees': 90}, 'grib_sha256': descriptor['grib_sha256'],
+                 'forecast_metadata_sha256': check.digest(product/'forecast.json')}
+    (product/'forecast.grib2.json').write_text(json.dumps(inventory))
+    (product/'completion.json').write_text(json.dumps({'grib_sha256': descriptor['grib_sha256'],
+        'grib_inventory_sha256': check.digest(product/'forecast.grib2.json')}))
     (product.parent/'issue.json').write_text(json.dumps(descriptor))
     manifest = {'schema': 'joint-monthly-verification-1', 'stage': 'forecast', 'status': 'complete',
                 'future_targets_read': False, 'horizon_hours': 72, 'lead_hours': list(check.LEADS),
                 'month': '2022-09', 'issue_hour': 6, 'products': [descriptor],
-                'config': {'spacing_degrees': 90}}
+                'config': {'spacing_degrees': 5}}
     (root/'month.json').write_text(json.dumps(manifest))
     monkeypatch.setattr(check, 'expected_dates', lambda month, hour: [issue])
     return root, grib, manifest
 
 
-def fake_decoder(monkeypatch, *, duplicate=False, nonfinite=False):
+def fake_decoder(monkeypatch, *, duplicate=False, nonfinite=False, corrupt_key=None):
     messages = []
     for category, number in check.FIELDS:
         for pressure in check.PRESSURES:
@@ -43,6 +49,9 @@ def fake_decoder(monkeypatch, *, duplicate=False, nonfinite=False):
         from datetime import timedelta
         valid = datetime(2022, 9, 1, 6) + timedelta(hours=lead)
         keys = {'edition': 2, 'discipline': 0, 'productDefinitionTemplateNumber': 0,
+                'centre': 65535, 'subCentre': 0, 'tablesVersion': 4, 'localTablesVersion': 0,
+                'productionStatusOfProcessedData': 2, 'typeOfGeneratingProcess': 2,
+                'typeOfSecondFixedSurface': 255, 'bitMapIndicator': 0,
                 'indicatorOfUnitOfTimeRange': 1, 'year': 2022, 'month': 9, 'day': 1,
                 'hour': 6, 'minute': 0, 'second': 0, 'significanceOfReferenceTime': 1,
                 'forecastTime': lead, 'validityDate': int(valid.strftime('%Y%m%d')),
@@ -56,6 +65,8 @@ def fake_decoder(monkeypatch, *, duplicate=False, nonfinite=False):
                 'jDirectionIncrementInDegrees': 90., 'bitmapPresent': 1, 'numberOfMissing': 1,
                 'units': 'Pa' if surface == 101 else check.FIELDS[(category, number)][1]}
         keys.update({name: 0 for name in ('iScansNegatively','jScansPositively','jPointsAreConsecutive','alternativeRowScanning','uvRelativeToGrid')})
+        if corrupt_key:
+            keys[corrupt_key] = 254 if corrupt_key == 'bitMapIndicator' else 98
         return keys[key]
     def values(handle):
         # Missing values can be NaN; only bitmap-supported values must be finite.
@@ -79,6 +90,7 @@ def test_complete_inventory_and_bitmap_supported_values(tmp_path, monkeypatch):
     assert result['checked_issues'] == 1
     assert result['days'][0]['fields']['temperature'] == {'messages': 925, 'valid_points': 6475, 'missing_points': 925}
     assert result['days'][0]['fields']['mslp']['messages'] == 25
+    assert result['days'][0]['Ni'] == 4  # Bound per-product spacing overrides stale monthly API defaults.
     assert result['weather_accuracy_verified'] is False
     with pytest.raises(FileExistsError):
         check.check_month(root, tmp_path/'check.json')
@@ -98,6 +110,26 @@ def test_tampered_sha_and_incomplete_month_rejected_before_decode(tmp_path, monk
     with pytest.raises(ValueError, match='complete causal'):
         check.check_month(root, tmp_path/'bad.json')
     assert not (tmp_path/'bad.json').exists()
+
+
+@pytest.mark.parametrize('key', ['centre', 'subCentre', 'tablesVersion', 'localTablesVersion',
+    'productionStatusOfProcessedData', 'typeOfGeneratingProcess', 'typeOfSecondFixedSurface', 'bitMapIndicator'])
+def test_research_provenance_and_bitmap_reuse_corruption(tmp_path, monkeypatch, key):
+    root, _, _ = monthly_fixture(tmp_path, monkeypatch)
+    fake_decoder(monkeypatch, corrupt_key=key)
+    with pytest.raises(ValueError, match='provenance key|independent GRIB bitmap'):
+        check.check_month(root, tmp_path/'bad.json')
+    assert not (tmp_path/'bad.json').exists()
+
+
+def test_product_grid_inventory_hash_tampering(tmp_path, monkeypatch):
+    root, grib, _ = monthly_fixture(tmp_path, monkeypatch)
+    path = grib.with_suffix('.grib2.json')
+    inventory = json.loads(path.read_text())
+    inventory['grid']['spacing_degrees'] = 10
+    path.write_text(json.dumps(inventory))
+    with pytest.raises(ValueError, match='inventory provenance SHA256'):
+        check.check_month(root, tmp_path/'bad.json')
 
 
 @pytest.mark.parametrize('failure', ['duplicate', 'nonfinite'])
