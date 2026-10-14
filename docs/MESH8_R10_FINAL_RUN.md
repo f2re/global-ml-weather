@@ -32,9 +32,14 @@ git rev-parse HEAD
 
 ```bash
 export R10_SHA="$(git rev-parse HEAD)"
+export PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}"
 ```
 
 После этого не меняйте tracked-файлы до завершения опыта. Preflight и runner сравнивают фактический HEAD с `R10_SHA`.
+
+Путь текущего checkout должен стоять первым: общее окружение Python может
+содержать editable-установку другой рабочей копии. Runner закрепляет этот
+порядок для дочерних команд и сохраняет фактический путь импорта в evidence.
 
 ## 3. Указать неизменяемые входы
 

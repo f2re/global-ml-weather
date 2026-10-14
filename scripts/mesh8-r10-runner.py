@@ -23,6 +23,14 @@ import time
 MINIMUM_FREE_BYTES = 64 * 1024**3
 
 
+def execution_environment(root):
+    """Keep every child on this checkout, including direct script commands."""
+    env = dict(os.environ, CUDA_VISIBLE_DEVICES='0', OMP_NUM_THREADS='8')
+    inherited = env.get('PYTHONPATH', '')
+    env['PYTHONPATH'] = str(root) + (os.pathsep + inherited if inherited else '')
+    return env
+
+
 def now():
     return datetime.now(timezone.utc)
 
@@ -148,9 +156,17 @@ def main(argv=None):
     final = [python, '-m', 'global_weather.mesh8_final_check', '--run-root', str(run_root),
              '--expected-sha', actual_sha]
     commands = [('preflight', preflight), ('training', training), ('inference', inference), ('final-check', final)]
-    env = dict(os.environ, CUDA_VISIBLE_DEVICES='0', OMP_NUM_THREADS='8')
+    env = execution_environment(root)
 
     try:
+        package_path = Path(subprocess.check_output(
+            [python, '-c', 'import global_weather; print(global_weather.__file__)'],
+            cwd=root, env=env, text=True).strip()).resolve()
+        if not package_path.is_relative_to(root):
+            raise RuntimeError('R10 child imports another checkout: '+str(package_path))
+        evidence['imports'] = {'package_path': str(package_path),
+                               'pythonpath': env['PYTHONPATH']}
+        save(evidence_path, evidence)
         for name, command in commands:
             if name == 'training' and (run_root/'training/complete.json').is_file():
                 evidence['steps'].append({'name': name, 'status': 'resume_existing_complete',
