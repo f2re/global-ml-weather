@@ -1,0 +1,82 @@
+{
+  "schema": "physical-assimilation-config-1",
+  "experiment_id": "physical-assimilation-r11-smoke",
+  "allow_synthetic": false,
+  "mesh_level": 5,
+  "multimesh": true,
+  "hidden": 64,
+  "message_dim": 32,
+  "processor_layers": 4,
+  "analysis_layers": 4,
+  "encoder_neighbours": 7,
+  "noise_dim": 4,
+  "conserve_dry_mass": true,
+  "checkpoint_steps": true,
+  "precision": "fp32",
+  "seed": 2026,
+  "threads": 8,
+  "deterministic": true,
+  "issue_stride_hours": 6,
+  "input_hours": 12,
+  "horizon_hours": 72,
+  "optimizer": {
+    "betas": [
+      0.9,
+      0.95
+    ],
+    "weight_decay": 0.1,
+    "gradient_clip": 1.0,
+    "eps": 1e-08
+  },
+  "stages": [
+    {
+      "name": "smoke 6 h",
+      "rollout_hours": 6,
+      "epochs": 2,
+      "issues_per_epoch": 16,
+      "issues_per_step": 4,
+      "peak_lr": 0.0003,
+      "min_lr": 3e-05,
+      "warmup_steps": 2,
+      "schedule": "cosine",
+      "ensemble_members": 1,
+      "patience": 2,
+      "cycling": false
+    },
+    {
+      "name": "smoke 72 h CRPS",
+      "rollout_hours": 72,
+      "epochs": 1,
+      "issues_per_epoch": 4,
+      "issues_per_step": 2,
+      "peak_lr": 3e-05,
+      "min_lr": 3e-06,
+      "warmup_steps": 0,
+      "schedule": "cosine",
+      "ensemble_members": 2,
+      "patience": 1,
+      "cycling": true
+    }
+  ],
+  "data": {
+    "max_input_tokens_per_source": 150000,
+    "max_target_tokens_per_source": 200000,
+    "input_dropout": 0.2,
+    "holdout_fraction": 0.15,
+    "analysis_window_hours": 1.5,
+    "analysis_weight": 0.5,
+    "family_weights": {
+      "surface": 1.0,
+      "upper_air": 1.0,
+      "limb": 1.0,
+      "radiance": 1.0,
+      "product": 1.0
+    },
+    "satellite_supervision": false,
+    "validation_issues": 8,
+    "sonde_drift": true
+  },
+  "huber_delta": 3.0,
+  "observation_errors": "configs/observation_errors_r11.json",
+  "satellite_admission": "configs/satellite_channels_r11.json"
+}

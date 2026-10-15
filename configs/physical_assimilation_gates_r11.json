@@ -1,0 +1,14 @@
+{
+  "schema": "physical-assimilation-gates-1",
+  "experiment_id": "physical-assimilation-r11",
+  "pinned": "2026-10-13, before any R11 training run",
+  "gate_0": {"selftest_checks": 8},
+  "gate_1": {"min_reach_km": 1620},
+  "gate_2": {"baselines": ["persistence", "climatology"], "min_skill": 0.0, "confidence": 0.95,
+             "bootstrap": 2000, "block_issues": 12, "min_count": 1000},
+  "gate_3": {"max_relative_dry_mass_drift": 1e-06},
+  "gate_4": {"leads_hours": [24, 48, 72], "baselines": ["persistence", "climatology"], "min_skill": 0.0,
+             "confidence": 0.95, "bootstrap": 2000, "block_issues": 12, "min_count": 1000},
+  "gate_5": {"pressure_hpa": [500, 250], "l_max": 40, "l_low": 15, "l_high": 40,
+             "min_divergent_fraction_ratio": 0.5, "min_band_energy_ratio": 0.5}
+}

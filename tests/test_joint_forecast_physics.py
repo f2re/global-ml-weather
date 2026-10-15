@@ -45,6 +45,26 @@ def test_triangle_control_volume_flux_works_without_voronoi_polygons():
     np.testing.assert_allclose(closure, 0, atol=2e-7)
 
 
+def _potential_flow_error(grid):
+    """chi = R V0 sin(lat): u = 0, v = V0 cos(lat), div = -2 V0 sin(lat) / R; area-weighted relative L2."""
+    latitude = np.deg2rad(latlon(grid.xyz)[:, 0])
+    v = (10. * np.cos(latitude))[:, None]
+    divergence, mask = spherical_wind_divergence(np.zeros_like(v), v, np.ones_like(v, bool), grid)
+    exact = (-20. * np.sin(latitude) / EARTH_RADIUS_M)[:, None]
+    assert mask.all()
+    return float(np.sqrt(np.sum(grid.areas_m2[:, None] * (divergence - exact) ** 2)
+                         / np.sum(grid.areas_m2[:, None] * exact ** 2)))
+
+
+@pytest.mark.parametrize('polygons', [True, False])
+def test_potential_flow_divergence_converges_on_both_control_volumes(polygons):
+    """Mesh8 uses the polygon-free path; a bent dual boundary needs its area vector."""
+    errors = [_potential_flow_error(build_grid(level) if polygons else build_grid(level, exact_voronoi_max_cells=12))
+              for level in (2, 3, 4)]
+    assert errors[-1] < 4e-3
+    assert errors[0] / errors[1] > 2.5 and errors[1] / errors[2] > 2.5
+
+
 def test_solid_body_rotation_divergence_small_relative_to_rotation_rate():
     grid = build_grid(2)
     rotation_rate = 7.292115e-5

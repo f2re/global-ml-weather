@@ -23,6 +23,7 @@ jobs:
       - run: python -m pytest -q
       - run: global-weather train-smoke --optimizer-steps 2 --horizon-hours 72 --output outputs/ci
       - run: python -m global_weather.adaptive_cli --output outputs/adaptive-ci
+      - run: python -m global_weather.assimilation selftest --output outputs/r11-selftest
       - run: python -m compileall -q global_weather
   browser:
     runs-on: ubuntu-latest

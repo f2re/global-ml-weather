@@ -1,0 +1,125 @@
+{
+  "schema": "global-weather-experiment-1",
+  "experiment_id": "physical-assimilation-r11",
+  "contract_id": "GLOBAL-WEATHER-R11",
+  "decision": "docs/decisions/0020-physical-assimilation-r11.md",
+  "guide": "docs/PHYSICAL_ASSIMILATION.md",
+  "audit": "docs/audits/2026-10-13-physical-consistency.md",
+  "config": "configs/physical_assimilation_r11.json",
+  "smoke_config": "configs/physical_assimilation_smoke.json",
+  "observation_errors": "configs/observation_errors_r11.json",
+  "status": "implemented_program_checks_passed_real_training_pending",
+  "scientific_acceptance": false,
+  "satellite_supervision": false,
+  "era5_role": "separate_frozen_verification_only",
+  "latent_mesh": {
+    "level": 5,
+    "nodes": 10242,
+    "multimesh_levels": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "directed_edges": 81900,
+    "mean_node_spacing_km": 240.6,
+    "min_one_step_reach_km_8_layers": 17843,
+    "required_reach_km": 1620
+  },
+  "model": {
+    "architecture": "physical-assimilation-multimesh-v2",
+    "parameters": 8237730,
+    "hidden": 256,
+    "processor_layers": 8,
+    "analysis_layers": 8,
+    "state_channels": 191,
+    "step_hours": 3,
+    "horizon_hours": 72,
+    "input_hours": 12
+  },
+  "physics": {
+    "geopotential": "hydrostatic from surface geopotential g*z_s",
+    "dry_air_mass": "uniform surface-pressure corrector",
+    "humidity": "q = RH q_s(T,p), RH <= 1.05",
+    "wind": "Cartesian tangent vector",
+    "omega": "continuity with kinematic surface boundary",
+    "satellite_operator": "fixed clear-sky weighting function on T and T_s plus learned bias on air-mass and thickness predictors (admitted channels only)"
+  },
+  "program_checks": {
+    "selftest": "8 of 8 properties passed on synthetic analytic data",
+    "dry_mass_relative_drift_72h": 3.7e-08,
+    "hydrostatic_residual_max_m2_s2": 0.064,
+    "one_step_influence_km": 20013,
+    "grib2_round_trip": "all messages decoded; mask mismatches 0; max |T error| 1.5e-8 K on synthetic run"
+  },
+  "cpu_probe": {
+    "mesh_level": 5,
+    "rollout_hours": 6,
+    "input_tokens": 41317,
+    "targets": 33102,
+    "forward_seconds": 14.8,
+    "backward_seconds": 43.3,
+    "peak_rss_bytes": 5673400000,
+    "device": "2 CPU cores, synthetic data"
+  },
+  "stages": {
+    "R0_program": {
+      "status": "passed_locally",
+      "command": "python -m global_weather.assimilation selftest --output outputs/r11-selftest"
+    },
+    "R1_static_mesh5": {
+      "status": "pending_node",
+      "required": [
+        "area-mean DEM static on mesh 5",
+        "independent land polygons"
+      ]
+    },
+    "R2_smoke_real": {
+      "status": "pending_node",
+      "config": "configs/physical_assimilation_smoke.json"
+    },
+    "R3_train": {
+      "status": "pending_node",
+      "config": "configs/physical_assimilation_r11.json",
+      "measure": [
+        "CUDA peak memory via the profile command",
+        "seconds per epoch"
+      ]
+    },
+    "R4_validation": {
+      "status": "pending",
+      "command": "python -m global_weather.assimilation gates --split validation",
+      "gates": [
+        "0 self-test",
+        "1 reach >= 1620 km",
+        "2 withheld analysis beats persistence and train climatology (95 % bootstrap)",
+        "3 dry-mass drift <= 1e-6",
+        "4 +24/+48/+72 h beat persistence and train climatology (95 % bootstrap)",
+        "5 divergent energy share and l=15-40 energy >= 0.5 of own analysis"
+      ]
+    },
+    "R5_test_once": {
+      "status": "pending",
+      "rule": "frozen weights; test split read once",
+      "command": "python -m global_weather.assimilation gates --split test"
+    },
+    "R4b_error_calibration": {
+      "status": "pending",
+      "command": "python -m global_weather.assimilation calibrate-errors",
+      "rule": "train split only; new table changes the experiment identity"
+    },
+    "R6_products": {
+      "status": "pending",
+      "command": "python -m global_weather.assimilation export-grib --check"
+    }
+  },
+  "gates": "configs/physical_assimilation_gates_r11.json",
+  "satellite_admission": "configs/satellite_channels_r11.json",
+  "observations": {
+    "sonde_drift": "trajectory from the sounding winds, ETIME or height/5 m/s; drift.MODEL sonde-drift-laroche-sarrazin-2013-v1",
+    "satellite_channels_admitted": 0,
+    "error_calibration": "Desroziers 2005 on cycled train analyses; table rewritten per platform, variable and layer"
+  }
+}
