@@ -139,7 +139,7 @@ class JointObservationDataset:
                                                          issue=issue), limit)
         return values, mask.copy(), profiles
 
-    def sample(self, issue, limit=2000):
+    def sample(self, issue, limit=2000, *, target_horizon_hours=None):
         """Raw surface inputs/targets plus unmodified actual-pressure profile scalars."""
         if type(limit) is not int or limit < 1:
             raise ValueError('Profile scalar limit must be a positive integer.')
@@ -150,9 +150,10 @@ class JointObservationDataset:
         target_hours = hour + np.asarray(self.lead_hours)
         targets = self.surface.values[target_hours].copy()
         target_mask = self.surface.mask[target_hours].copy()
+        target_horizon = self.horizon_hours if target_horizon_hours is None else target_horizon_hours
         profile_inputs = bounded_records(self.profile.records(issue - timedelta(hours=12), issue,
                                                               issue=issue, split=split), limit)
-        profile_targets = bounded_records(self.profile.records(issue, issue + timedelta(hours=self.horizon_hours),
+        profile_targets = bounded_records(self.profile.records(issue, issue + timedelta(hours=target_horizon),
                                                                split=split), limit)
         return inputs, mask.copy(), targets, target_mask, profile_inputs, profile_targets
 

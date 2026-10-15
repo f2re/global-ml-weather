@@ -159,8 +159,41 @@ def normalized_history(model, raw, mask, issue):
     return torch.where(m, (x-baseline)/model.surface_scales, torch.zeros_like(x)), m
 
 
+def supported_issues(dataset, split, limit, rollout_hours):
+    """Select chronologically bounded issues that have real profile target coverage."""
+    if not hasattr(dataset, 'profile') or not hasattr(dataset.profile, 'root'):
+        return dataset.issues(split, limit)
+    sqlite_path = dataset.profile.root / 'observations.sqlite'
+    if not sqlite_path.is_file():
+        return dataset.issues(split, limit)
+    import sqlite3
+    uri = sqlite_path.resolve().as_uri() + '?mode=ro'
+    all_issues = dataset.issues(split)
+    candidates = []
+    with sqlite3.connect(uri, uri=True) as database:
+        cursor = database.cursor()
+        for issue in all_issues:
+            start = issue.isoformat()
+            end = (issue + timedelta(hours=rollout_hours)).isoformat()
+            cursor.execute(
+                'SELECT count(*) FROM records WHERE observed > ? AND observed <= ?',
+                (start, end)
+            )
+            if cursor.fetchone()[0] > 0:
+                candidates.append(issue)
+    if not candidates:
+        return dataset.issues(split, limit)
+    if limit is not None and len(candidates) > limit:
+        candidates = [candidates[i] for i in np.linspace(0, len(candidates) - 1, limit, dtype=int)]
+    return candidates
+
+
 def _batch(model, dataset, issue, limit, rollout_hours):
-    raw, mask, target, target_mask, inputs, targets = dataset.sample(issue, limit)
+    try:
+        raw, mask, target, target_mask, inputs, targets = dataset.sample(
+            issue, limit, target_horizon_hours=rollout_hours)
+    except TypeError:
+        raw, mask, target, target_mask, inputs, targets = dataset.sample(issue, limit)
     x, m = normalized_history(model, raw, mask, issue)
     policy = model.physical_policy
     inputs, _ = screen_humidity(inputs, policy)
@@ -171,7 +204,11 @@ def _batch(model, dataset, issue, limit, rollout_hours):
     target = target[:steps]
     target_mask = target_mask[:steps]
     frames = model(inputs, issue, surface_inputs=x, surface_mask=m, horizon_hours=rollout_hours)
-    profile_loss, counts = objective(model, frames, targets)
+    if not targets:
+        profile_loss = torch.tensor(0.0, device=model.xyz.device)
+        counts = [0] * 5
+    else:
+        profile_loss, counts = objective(model, frames, targets)
     prediction = torch.stack([f.native_normalized for f in frames[1:]])
     y = torch.as_tensor(target, dtype=torch.float32, device=model.xyz.device)
     ym = torch.as_tensor(target_mask, dtype=torch.bool, device=model.xyz.device)
@@ -185,7 +222,8 @@ def score(model, dataset, config, split):
     model.eval()
     rows = []
     with torch.no_grad():
-        for issue in dataset.issues(split, config['max_'+split+'_issues']):
+        issues = supported_issues(dataset, split, config['max_'+split+'_issues'], config['rollout_hours'])
+        for issue in issues:
             p, s, *_ = _batch(model, dataset, issue, config['max_records_per_window'], config['rollout_hours'])
             rows.append((float(p), float(s)))
     if not rows:
@@ -308,7 +346,8 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             _verify(dataset, norms, norm_path, norm_hash, model, station_path, station_hash)
             started = time.monotonic(); model.train(); losses = []; gradients = {}; counts = np.zeros(5, int); native_counts = np.zeros(6, int)
             if device.type == 'cuda': torch.cuda.reset_peak_memory_stats(device)
-            issues = dataset.issues('train', config['max_train_issues']); random.shuffle(issues)
+            issues = supported_issues(dataset, 'train', config['max_train_issues'], config['rollout_hours'])
+            random.shuffle(issues)
             for issue in issues:
                 optimizer.zero_grad(set_to_none=True)
                 p, s, coverage, targets, nc, qc = _batch(
