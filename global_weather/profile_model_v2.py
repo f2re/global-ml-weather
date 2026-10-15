@@ -92,8 +92,16 @@ class PressureProfileModel(nn.Module):
             tokens=self.token(torch.cat((features,self.variable(variables)),-1))
             sums=state.new_zeros(n*37,d).index_add(0,indices,tokens)
             counts=state.new_zeros(n*37).index_add(0,indices,torch.ones(len(rows),device=state.device))
-            updated=self.ingest(sums/counts.clamp_min(1)[:,None],state.reshape(-1,d))
-            state=torch.where((counts>0)[:,None],updated,state.reshape(-1,d)).reshape(n,37,d)
+            has_obs = (counts > 0)
+            if has_obs.any():
+                obs_idx = has_obs.nonzero(as_tuple=True)[0]
+                sub_forcing = sums[obs_idx] / counts[obs_idx, None]
+                flat_state = state.reshape(-1, d)
+                sub_state = flat_state[obs_idx]
+                sub_updated = self.ingest(sub_forcing, sub_state)
+                flat_state = flat_state.clone()
+                flat_state[obs_idx] = sub_updated
+                state = flat_state.reshape(n, 37, d)
         frames=[self._decode(state,issue,0)]
         for lead in range(3,horizon_hours+1,3):
             state=self._advance_state(state,pressure,issue,lead)

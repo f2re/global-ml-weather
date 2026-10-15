@@ -68,10 +68,15 @@ class JointObservationModel(HydrostaticFlowProfileModel):
             valid = mask.any(-1)
             pooled = state.new_zeros(n, d).index_add(0, self.station_operator.cells, tokens * valid[:, None])
             count = state.new_zeros(n).index_add(0, self.station_operator.cells, valid.to(state.dtype))
-            forcing = pooled / count.clamp_min(1)[:, None]
-            forcing = forcing[:, None, :] * self.surface_vertical_weight[None, :, None]
-            updated = self.surface_ingest(forcing.expand_as(state).reshape(-1, d), state.reshape(-1, d)).reshape_as(state)
-            state = torch.where((count > 0)[:, None, None], updated, state)
+            has_obs = (count > 0)
+            if has_obs.any():
+                obs_cells = has_obs.nonzero(as_tuple=True)[0]
+                sub_forcing = (pooled[obs_cells] / count[obs_cells, None])[:, None, :] * self.surface_vertical_weight[None, :, None]
+                sub_forcing = sub_forcing.reshape(-1, d)
+                sub_state = state[obs_cells].reshape(-1, d)
+                sub_updated = self.surface_ingest(sub_forcing, sub_state).reshape(len(obs_cells), state.shape[1], d)
+                state = state.clone()
+                state[obs_cells] = sub_updated
         return state
 
     @staticmethod
