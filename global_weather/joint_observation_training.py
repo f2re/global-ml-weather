@@ -35,6 +35,7 @@ from .station_climatology import StationClimatology
 
 STATUS = 'joint_measured_observation_research_trained'
 MESH8_ROLE = 'mesh8_end_to_end_qualification'
+MESH8_TRAIN_ROLE = 'mesh8_research_training'
 
 
 def _profile_config(value):
@@ -54,7 +55,7 @@ def _profile_config(value):
             raise ValueError('Invalid joint training bound: '+key)
     if not 0 <= result['mesh_level'] <= 8:
         raise ValueError('Joint mesh_level must be within 0..8.')
-    if result['epochs'] > 100 or result['max_records_per_window'] > 20000:
+    if result['epochs'] > 1000 or result['max_records_per_window'] > 20000:
         raise ValueError('Joint experiment exceeds reviewed research limits.')
     for key in ('learning_rate', 'weight_decay', 'gradient_clip'):
         number = result[key]
@@ -94,20 +95,30 @@ def _config(value):
     if result['hidden'] > 128:
         raise ValueError('Joint hidden exceeds reviewed budget.')
     if result['mesh_level'] == 8:
-        if experiment_role != MESH8_ROLE:
-            raise ValueError('mesh_level=8 is currently admitted only by the mesh8 qualification role.')
-        if rollout_hours != 3:
-            raise ValueError('Mesh-8 qualification is intentionally limited to a 3-hour rollout.')
-        if result['hidden'] > 4:
-            raise ValueError('Mesh-8 qualification hidden width is capped at 4 pending measured VRAM telemetry.')
-        if result['epochs'] != 1:
-            raise ValueError('Mesh-8 qualification performs exactly one training epoch.')
-        if result['max_train_issues'] > 4 or result['max_validation_issues'] > 2 or result['max_test_issues'] > 2:
-            raise ValueError('Mesh-8 qualification issue counts exceed the reviewed execution envelope.')
+        if experiment_role == MESH8_ROLE:
+            if rollout_hours != 3:
+                raise ValueError('Mesh-8 qualification is intentionally limited to a 3-hour rollout.')
+            if result['hidden'] > 4:
+                raise ValueError('Mesh-8 qualification hidden width is capped at 4 pending measured VRAM telemetry.')
+            if result['epochs'] != 1:
+                raise ValueError('Mesh-8 qualification performs exactly one training epoch.')
+            if result['max_train_issues'] > 4 or result['max_validation_issues'] > 2 or result['max_test_issues'] > 2:
+                raise ValueError('Mesh-8 qualification issue counts exceed the reviewed execution envelope.')
+        elif experiment_role == MESH8_TRAIN_ROLE:
+            if rollout_hours != 3:
+                raise ValueError('Mesh-8 research training maintains the 3-hour rollout from measured VRAM budget.')
+            if result['hidden'] > 4:
+                raise ValueError('Mesh-8 research training hidden width is capped at 4 from measured 24 GiB VRAM.')
+            if result['epochs'] < 1 or result['epochs'] > 1000:
+                raise ValueError('Mesh-8 research training epochs must be within 1..1000.')
+            if result['max_train_issues'] > 9 or result['max_validation_issues'] > 13 or result['max_test_issues'] > 13:
+                raise ValueError('Mesh-8 research training issue counts exceed supported dataset issues.')
+        else:
+            raise ValueError('mesh_level=8 requires a supported mesh8 role (qualification or research training).')
         if edge_chunk_size is None or edge_chunk_size > 65536:
-            raise ValueError('Mesh-8 qualification requires explicit edge chunks <= 65536.')
+            raise ValueError('Mesh-8 requires explicit edge chunks <= 65536.')
         if policy.memory_budget_mib < 16384:
-            raise ValueError('Mesh-8 qualification requires at least a declared 16 GiB activation budget.')
+            raise ValueError('Mesh-8 requires at least a declared 16 GiB activation budget.')
         if grid_cell_count(8) != 655_362 or not 27.0 < nominal_area_scale_km(8) < 29.0:
             raise RuntimeError('Mesh-8 geometry contract differs from the reviewed experiment.')
     result.update(surface_weight=float(surface_weight), physical_policy=policy.payload(),
@@ -218,11 +229,12 @@ def _batch(model, dataset, issue, limit, rollout_hours):
     return profile_loss, surface_loss, counts, targets, ym.sum((0, 1)).cpu().numpy(), report
 
 
-def score(model, dataset, config, split):
+def score(model, dataset, config, split, issues=None):
     model.eval()
     rows = []
     with torch.no_grad():
-        issues = supported_issues(dataset, split, config['max_'+split+'_issues'], config['rollout_hours'])
+        if issues is None:
+            issues = supported_issues(dataset, split, config['max_'+split+'_issues'], config['rollout_hours'])
         for issue in issues:
             p, s, *_ = _batch(model, dataset, issue, config['max_records_per_window'], config['rollout_hours'])
             rows.append((float(p), float(s)))
@@ -342,11 +354,15 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             checkpoint_path(output, best_ref)
             save(output/'best.json', best_ref)
             trained = np.asarray(previous['trained_variable_mask'], dtype=bool)
+        cached_train_issues = supported_issues(dataset, 'train', config['max_train_issues'], config['rollout_hours'])
+        cached_val_issues = supported_issues(dataset, 'validation', config['max_validation_issues'], config['rollout_hours'])
+        if not cached_train_issues or not cached_val_issues:
+            raise ValueError('No supported joint train/validation issues.')
         for epoch in range(completed+1, config['epochs']+1):
             _verify(dataset, norms, norm_path, norm_hash, model, station_path, station_hash)
             started = time.monotonic(); model.train(); losses = []; gradients = {}; counts = np.zeros(5, int); native_counts = np.zeros(6, int)
             if device.type == 'cuda': torch.cuda.reset_peak_memory_stats(device)
-            issues = supported_issues(dataset, 'train', config['max_train_issues'], config['rollout_hours'])
+            issues = list(cached_train_issues)
             random.shuffle(issues)
             for issue in issues:
                 optimizer.zero_grad(set_to_none=True)
@@ -372,7 +388,7 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
                     'grid_cells': model.grid.n_cells, 'rollout_hours': config['rollout_hours'], 'qc': qc})
             if not losses or not all(gradients.values()) or not (counts > 0).all() or not (native_counts > 0).all():
                 raise ValueError('Incomplete joint branch or measured variable gradient support.')
-            validation = score(model, dataset, config, 'validation')
+            validation = score(model, dataset, config, 'validation', issues=cached_val_issues)
             improved = validation['joint'] < best
             if improved: best, best_epoch, stale = validation['joint'], epoch, 0
             else: stale += 1

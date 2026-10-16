@@ -61,6 +61,16 @@ def test_mesh8_qualification_rejects_unreviewed_resource_escalation():
             _config(candidate)
 
 
+def test_mesh8_research_training_admits_multi_epoch_within_budget():
+    multi = json.loads((ROOT / 'configs' / 'joint_observation_training_mesh8_500.json').read_text())
+    cfg = _config(multi)
+    assert cfg['experiment_role'] == 'mesh8_research_training'
+    assert cfg['epochs'] == 500
+    assert cfg['mesh_level'] == 8
+    assert cfg['rollout_hours'] == 3
+    assert cfg['hidden'] == 4
+
+
 def test_historical_mesh2_config_remains_loadable():
     historical = json.loads((ROOT / 'configs' / 'joint_observation_training_mesh2_pilot.json').read_text())
     cfg = _config(historical)
