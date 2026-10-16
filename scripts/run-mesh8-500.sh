@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 export PYTHONPATH=.
 export CUDA_VISIBLE_DEVICES=0
+echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Starting Mesh-8 500 epochs training on GPU ${CUDA_VISIBLE_DEVICES}..."
 exec .venv/bin/python -u -m global_weather.joint_observation_training \
   --dataset /home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/dataset \
   --norm /home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json \
