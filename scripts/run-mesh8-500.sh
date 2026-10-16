@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+mkdir -p outputs
+exec >> outputs/mesh8-500-training.log 2>&1
+
 export PYTHONPATH=.
 export CUDA_VISIBLE_DEVICES=0
 echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Starting Mesh-8 500 epochs training on GPU ${CUDA_VISIBLE_DEVICES}..."
