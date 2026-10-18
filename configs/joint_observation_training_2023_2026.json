@@ -1,0 +1,60 @@
+{
+  "experiment_id": "joint-mesh8-extended-2023-2026",
+  "experiment_role": "mesh8_extended_observation_training",
+  "scientific_acceptance": false,
+  "mesh_level": 8,
+  "hidden": 4,
+  "epochs": 500,
+  "patience": 50,
+  "threads": 8,
+  "seed": 44,
+  "learning_rate": 0.0001,
+  "weight_decay": 0.01,
+  "gradient_clip": 1.0,
+  "rollout_hours": 3,
+  "surface_weight": 0.5,
+  "hydrostatic_weight": 1.0,
+  "satellite_loss_weight": 0.5,
+  "edge_chunk_size": 32768,
+  "temporal_sampling": {
+    "campaign": "extended_2023_2026",
+    "train_period": ["2023-01-01T00:00:00Z", "2025-01-01T00:00:00Z"],
+    "validation_period": ["2025-01-01T00:00:00Z", "2026-01-01T00:00:00Z"],
+    "test_period": ["2026-01-01T00:00:00Z", "2026-10-01T00:00:00Z"],
+    "seasons_represented": ["DJF", "MAM", "JJA", "SON"],
+    "train_calendar_months_count": 24,
+    "synoptic_hours_utc": [0, 6, 12, 18],
+    "intermediate_synoptic_hours_utc": [3, 9, 15, 21],
+    "issue_stride_hours": 6,
+    "split_guard_hours": 84
+  },
+  "ground_instruments": {
+    "surface_stations": "NOAA_GHCNh_and_SYNOP_hourly",
+    "surface_variables": ["t2m", "td2m", "u10", "v10", "surface_pressure", "mslp"],
+    "upper_air_radiosondes": "NOAA_IGRA2_37_levels",
+    "profile_variables": ["temperature", "specific_humidity", "u", "v", "geopotential"],
+    "climatology_reference": "NOAA_NCEP1_1991_2020_LTM"
+  },
+  "satellite_instruments_curriculum": {
+    "activation_date": "2024-01-01T00:00:00Z",
+    "stages": {
+      "2023": "ground_and_profile_atmospheric_warmup",
+      "2024_H1": "elektro_l_arktika_m_msugs_clearsky_and_amv",
+      "2024_H2": "meteor_m_ikfs2_soundings_and_brlk_ice",
+      "2025_plus": "meteor_m_mtvza_allsky_microwave_full_assimilation"
+    },
+    "platforms": [
+      "arktika_m_1", "arktika_m_2",
+      "elektro_l_2", "elektro_l_3", "elektro_l_4",
+      "meteor_m_2_2", "meteor_m_2_3", "meteor_m_2_4"
+    ],
+    "instruments": [
+      "msu_gs", "msu_gs_m", "mtvza_gy", "ikfs_2", "msu_mr", "brlk_severyanin", "polar_amv"
+    ]
+  },
+  "physical_policy": {
+    "architecture": "hydrostatic_flow",
+    "humidity_min_pressure_pa": 30000.0,
+    "memory_budget_mib": 22528
+  }
+}

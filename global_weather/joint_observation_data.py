@@ -14,39 +14,60 @@ import tempfile
 
 import numpy as np
 
-from .observation_data import ObservationDataset, START, TRAIN_END, VAL_END, END
+from .observation_data import (
+    ObservationDataset,
+    START,
+    TRAIN_END,
+    VAL_END,
+    END,
+    EXTENDED_START,
+    EXTENDED_TRAIN_END,
+    EXTENDED_VAL_END,
+    EXTENDED_END,
+)
 from .observation_training import digest, save
 from .observations import utc
 from .profile_training import ProfileDataset, bounded_records
 
 BOUNDARIES = {'train': (START, TRAIN_END), 'validation': (TRAIN_END, VAL_END),
               'test': (VAL_END, END)}
+BOUNDARIES_2023_2026 = {
+    'train': (EXTENDED_START, EXTENDED_TRAIN_END),
+    'validation': (EXTENDED_TRAIN_END, EXTENDED_VAL_END),
+    'test': (EXTENDED_VAL_END, EXTENDED_END),
+}
 SCHEMA = 'joint-measured-observation-windows-1'
 
 
-def common_windows(horizon_hours=72, issue_stride_hours=24):
+def common_windows(horizon_hours=72, issue_stride_hours=24, boundaries=None):
     """Keep entire histories/targets inside frozen parts and IGRA group guards."""
     if (type(horizon_hours) is not int or horizon_hours < 3 or horizon_hours > 240
             or horizon_hours % 3 or type(issue_stride_hours) is not int
             or issue_stride_hours < 1):
         raise ValueError('Need a 3-hour horizon within 3..240 and positive issue stride.')
+    if boundaries is None:
+        boundaries = BOUNDARIES
+    start_time = boundaries['train'][0]
     rows = []
-    for split, (begin, end) in BOUNDARIES.items():
+    for split, (begin, end) in boundaries.items():
         # Existing IGRA admission excludes 42 hours beside every split boundary.
         issue = begin + timedelta(hours=54)
         while issue + timedelta(hours=horizon_hours + 42) < end:
             rows.append({'issue': issue.isoformat(), 'split': split,
-                         'hour': int((issue - START).total_seconds() / 3600)})
+                         'hour': int((issue - start_time).total_seconds() / 3600)})
             issue += timedelta(hours=issue_stride_hours)
     return rows
 
 
-def _validate_issue(issue, horizon_hours, *, guarded=True):
+def _validate_issue(issue, horizon_hours, *, guarded=True, boundaries=None):
+    if boundaries is None:
+        boundaries = BOUNDARIES
     issue = utc(issue)
-    seconds = (issue - START).total_seconds()
+    start_time = boundaries['train'][0]
+    seconds = (issue - start_time).total_seconds()
     if seconds % 3600:
         raise ValueError('Native hourly dataset requires an integer-hour issue.')
-    for split, (begin, end) in BOUNDARIES.items():
+    for split, (begin, end) in boundaries.items():
         if begin <= issue < end:
             guard = 42 if guarded else 0
             if (issue - timedelta(hours=12 + guard) < begin
@@ -59,7 +80,7 @@ def _validate_issue(issue, horizon_hours, *, guarded=True):
 class JointObservationDataset:
     """Paired sources with a new horizon-specific, chronologically guarded index."""
 
-    def __init__(self, path, profile_root=None, *, horizon_hours=72, issue_stride_hours=24):
+    def __init__(self, path, profile_root=None, *, horizon_hours=72, issue_stride_hours=24, boundaries=None):
         self.bundle_path = None
         if profile_root is None:
             self.bundle_path = Path(path) / 'dataset.json'
@@ -73,9 +94,14 @@ class JointObservationDataset:
             issue_stride_hours = self.manifest['issue_stride_hours']
             path = self.manifest['surface_root']
             profile_root = self.manifest['profile_root']
+            if 'boundaries' in self.manifest:
+                boundaries = {k: (utc(v[0]), utc(v[1])) for k, v in self.manifest['boundaries'].items()}
         else:
             self.manifest = None
-        self.samples = common_windows(horizon_hours, issue_stride_hours)
+        if boundaries is None:
+            boundaries = BOUNDARIES
+        self.boundaries = boundaries
+        self.samples = common_windows(horizon_hours, issue_stride_hours, boundaries=boundaries)
         self.horizon_hours = horizon_hours
         self.lead_hours = list(range(3, horizon_hours + 1, 3))
         self.issue_stride_hours = issue_stride_hours

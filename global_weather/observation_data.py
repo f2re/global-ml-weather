@@ -24,6 +24,27 @@ TRAIN_END = utc('2022-01-01T00:00:00Z')
 VAL_END = utc('2022-07-01T00:00:00Z')
 HOURS = int((END-START).total_seconds()/3600)
 
+EXTENDED_START = utc('2023-01-01T00:00:00Z')
+EXTENDED_TRAIN_END = utc('2025-01-01T00:00:00Z')
+EXTENDED_VAL_END = utc('2026-01-01T00:00:00Z')
+EXTENDED_END = utc('2026-10-01T00:00:00Z')
+EXTENDED_HOURS = int((EXTENDED_END-EXTENDED_START).total_seconds()/3600)
+
+CAMPAIGN_PERIODS = {
+    'legacy_2021_2022': {
+        'start': START,
+        'train_end': TRAIN_END,
+        'val_end': VAL_END,
+        'end': END,
+    },
+    'extended_2023_2026': {
+        'start': EXTENDED_START,
+        'train_end': EXTENDED_TRAIN_END,
+        'val_end': EXTENDED_VAL_END,
+        'end': EXTENDED_END,
+    },
+}
+
 
 def _sources(cache):
     if isinstance(cache,(list,tuple)):
@@ -31,7 +52,7 @@ def _sources(cache):
     root = Path(cache)
     if root.is_symlink():
         raise ValueError('Cache symlinks are forbidden.')
-    paths = sorted(root.rglob('GHCNh_*_202[12].psv'))
+    paths = sorted(root.rglob('GHCNh_*_202[1-6].psv'))
     if not paths:
         paths = sorted(root.rglob('*.sqlite')) + sorted(root.rglob('*.jsonl'))
     if not paths:

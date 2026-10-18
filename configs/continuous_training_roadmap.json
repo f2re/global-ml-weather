@@ -296,10 +296,14 @@
   ],
   "acceptance_scenarios": {
     "A01": {
-      "scenario": "Ввести только даты 2000–2005",
-      "expected": "Планируется многолетний период без ручного выбора станций",
-      "status": "not_executed",
-      "evidence": []
+      "scenario": "Обучение на расширенной выборке 2023–2024 гг. с проверкой на 2025–2026 гг.",
+      "expected": "Охват всех 12 календарных месяцев (24 месяца в train), всех 4 сезонов (DJF, MAM, JJA, SON) и синоптических сроков (00, 06, 12, 18 UTC) с подключением спутников Арктика-М, Электро-Л и Метеор-М с 2024 года",
+      "status": "in_progress",
+      "evidence": [
+        "configs/joint_observation_training_2023_2026.json",
+        "configs/satellite_training_stages.json",
+        "docs/decisions/0022-extended-training-sample-2023-2026.md"
+      ]
     },
     "A02": {
       "scenario": "Нет пригодных спутников за исторический период",
@@ -384,9 +388,13 @@
     },
     "A14": {
       "scenario": "Перейти к спутниковому этапу с 2024 года",
-      "expected": "Сохраняется атмосферная история; доступны только допущенные новые входы",
-      "status": "not_executed",
-      "evidence": []
+      "expected": "Сохраняется атмосферная история 2023 г.; с 2024 г. подключаются группировки Арктика-М, Электро-Л, Метеор-М",
+      "status": "in_progress",
+      "evidence": [
+        "configs/joint_observation_training_2023_2026.json",
+        "configs/satellite_training_stages.json",
+        "docs/decisions/0022-extended-training-sample-2023-2026.md"
+      ]
     },
     "A15": {
       "scenario": "Нет спутников для обязательного спутникового этапа",

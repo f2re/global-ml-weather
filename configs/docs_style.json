@@ -68,7 +68,8 @@
     "docs/decisions/0015-unified-observations-and-official-climatology.md",
     "docs/UNIFIED_OBSERVATIONS.md",
     "agents/tasks/continuous-c4-ru-satellites.md",
-    "docs/decisions/0021-russian-satellite-constellation-assimilation.md"
+    "docs/decisions/0021-russian-satellite-constellation-assimilation.md",
+    "docs/decisions/0022-extended-training-sample-2023-2026.md"
   ],
   "scope_note": "Active operational documentation and agent instructions. Historical reports retain their evidence.",
   "target_interpretation": "Approximately 80% is a stylistic request, not measured official standard compliance.",
