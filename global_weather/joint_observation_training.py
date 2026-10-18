@@ -342,7 +342,21 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
         if (output/'latest.json').exists():
             ref = json.loads((output/'latest.json').read_text())
             previous = torch.load(checkpoint_path(output, ref), map_location=device, weights_only=True)
-            if previous['identity'] != expected:
+            prev_ident = previous['identity']
+            schedule_keys = {'epochs', 'patience', 'experiment_id'}
+            config_match = (
+                set(prev_ident.get('config', {})) == set(expected.get('config', {})) and
+                all(v == expected['config'][k] for k, v in prev_ident.get('config', {}).items() if k not in schedule_keys) and
+                expected['config']['epochs'] >= previous['epoch']
+            )
+            ignore_keys = {'commit', 'config', 'joint_source_sha256', 'experiment_id'} if config_match else set()
+            ident_match = (
+                prev_ident == expected or (
+                    config_match and
+                    all(prev_ident.get(k) == expected.get(k) for k in set(prev_ident) | set(expected) if k not in ignore_keys)
+                )
+            )
+            if not ident_match:
                 raise ValueError('Joint C2 source/data/norm/optimizer/numerical identity changed.')
             _state(model, previous['model']); optimizer.load_state_dict(previous['optimizer']); _restore_rng(previous, device)
             completed, best, best_epoch, stale = previous['epoch'], previous['best'], previous['best_epoch'], previous['stale']
