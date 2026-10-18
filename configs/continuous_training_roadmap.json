@@ -134,6 +134,51 @@
       "evidence": []
     },
     {
+      "id": "continuous-c4-ru-satellites",
+      "title": "Ассимиляция данных группировок Электро-Л, Арктика-М и Метеор-М",
+      "status": "in_progress",
+      "depends_on": [
+        "C2",
+        "C3"
+      ],
+      "existing_files": [
+        "global_weather/multimodal/ru_sat_msugs.py",
+        "global_weather/analysis/observation_operator.py",
+        "global_weather/losses.py",
+        "global_weather/observation_identity.py",
+        "global_weather/providers/satellites.py",
+        "global_weather/connectors/raster_bridge.py",
+        "global_weather/products/algorithms.py",
+        "configs/observation_normalization_catalog.json",
+        "configs/satellite_training_stages.json",
+        "agents/tasks/continuous-c4-ru-satellites.md"
+      ],
+      "acceptance": [
+        "A11",
+        "A15",
+        "A16",
+        "A23"
+      ],
+      "phase_order": [
+        "data-steward",
+        "radiometry",
+        "normalization",
+        "physics",
+        "model-engineer",
+        "executor",
+        "verification",
+        "release-auditor"
+      ],
+      "mesh8_gate": "Requires admission in test_observation_operator_admission.py and test_multimodal_hardening.py before mesh8 rollout.",
+      "evidence": [
+        "Multi-satellite viewing geometry and GSICS calibration implemented in ru_sat_msugs.py.",
+        "VariationalBiasCorrection, IKFS2CloudClearedOperator and MeteorMTVZAAllSkyOperator added to observation_operator.py.",
+        "SatelliteAssimilationLoss with robust Huber and Gross Error check added to losses.py.",
+        "Molniya HEO geometry and perigee filtering added to raster_bridge.py.",
+        "Collocation and polar AMV winds added to algorithms.py."
+      ]
+    },
+    {
       "id": "C5",
       "title": "Постоянные выборки, фиксированные нормы и оценка",
       "status": "planned",

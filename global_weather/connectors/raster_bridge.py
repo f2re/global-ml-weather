@@ -196,3 +196,49 @@ def export_observations(directory, output, *, max_records=100_000):
         Path(temporary).unlink(missing_ok=True)
     return dict(records=count, variable=variable, sha256=sha256(target), model_ready=False,
                 next_step='register exact variable/platform/channel and its frozen sensor-specific normalization; pack_observations validates mesh footprint')
+
+
+R_EARTH_KM: float = 6371.0
+H_ATM_KM: float = 8.4
+R_GEO_KM: float = 42164.0
+
+
+def compute_molniya_heo_geometry(
+    sat_xyz_ecef_km: np.ndarray,
+    lat_deg: np.ndarray,
+    lon_deg: np.ndarray,
+    scan_time: str,
+    apogee_time: str,
+    *,
+    max_apogee_delta_hours: float = 3.2,
+    max_view_zenith_deg: float = 68.0,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Расчет геометрии визирования КА на орбите «Молния» и фильтрация перигейного участка.
+
+    Возвращает (view_zenith_deg, footprint_factor, working_orbit_mask).
+    """
+    dt_hours = abs((utc(scan_time) - utc(apogee_time)).total_seconds()) / 3600.0
+    orbit_active = dt_hours <= max_apogee_delta_hours
+
+    phi = np.deg2rad(lat_deg)
+    lam = np.deg2rad(lon_deg)
+    nx = np.cos(phi) * np.cos(lam)
+    ny = np.cos(phi) * np.sin(lam)
+    nz = np.sin(phi)
+    normal = np.stack([nx, ny, nz], axis=-1)
+
+    r_i = normal * R_EARTH_KM
+    d_vec = np.asarray(sat_xyz_ecef_km, dtype=np.float64) - r_i
+    r_sat = np.linalg.norm(d_vec, axis=-1)
+    r_sat_clamped = np.maximum(r_sat, 100.0)
+
+    mu_sat = np.sum(d_vec * normal, axis=-1) / r_sat_clamped
+    mu_sat_clamped = np.clip(mu_sat, -1.0, 1.0)
+    view_zenith_deg = np.rad2deg(np.arccos(mu_sat_clamped))
+
+    mu_safe = np.maximum(mu_sat, 0.05)
+    r_norm = r_sat_clamped / R_GEO_KM
+    footprint_factor = (r_norm**2) / mu_safe
+
+    working_mask = orbit_active & (view_zenith_deg <= max_view_zenith_deg) & (mu_sat > 0)
+    return view_zenith_deg, footprint_factor, working_mask

@@ -15,6 +15,11 @@ import re
 UTC = timezone.utc
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:/+@=-]{0,511}")
 
+ELEKTRO_L_PLATFORMS = ("elektro_l_2", "elektro_l_3", "elektro_l_4")
+ARKTIKA_M_PLATFORMS = ("arktika_m_1", "arktika_m_2")
+METEOR_M_PLATFORMS = ("meteor_m_2_2", "meteor_m_2_3", "meteor_m_2_4")
+RUSSIAN_SATELLITE_PLATFORMS = ELEKTRO_L_PLATFORMS + ARKTIKA_M_PLATFORMS + METEOR_M_PLATFORMS
+
 
 def _utc(value) -> datetime:
     if isinstance(value, datetime):

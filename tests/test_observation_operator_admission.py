@@ -8,7 +8,9 @@ import torch
 
 from global_weather.analysis.observation_operator import (
     observation_space_loss, predict_observations,
+    IKFS2CloudClearedOperator, MeteorMTVZAAllSkyOperator, VariationalBiasCorrection,
 )
+from global_weather.losses import SatelliteAssimilationLoss
 from global_weather.grid import build_grid, latlon
 from global_weather.vertical import PRESSURE_HPA
 
@@ -158,3 +160,75 @@ def test_interpolation_requires_supported_pressure_and_both_times():
     target["pressure_pa"] = 100001.
     accepted, rejected = predict_observations([left, right], grid, PRESSURE, [target])
     assert not accepted and rejected == {"outside_supported_forecast": 1}
+
+
+def test_ikfs2_operator_cloud_clearing_and_pc_projection():
+    op = IKFS2CloudClearedOperator(num_selected_channels=180, num_pcs=32, num_model_levels=37)
+    n_obs = 4
+    obs_spectra = torch.full((n_obs, 180), 250.0)
+    model_t = torch.full((n_obs, 37), 240.0)
+    model_q = torch.full((n_obs, 37), -5.0)
+    model_t_skin = torch.full((n_obs, 1), 280.0)
+    mu_sat = torch.full((n_obs, 1), 0.8)
+    varbc_pred = torch.zeros((n_obs, 7))
+
+    cld_frac = torch.tensor([0.01, 0.50, 0.0, 0.9])
+    cth_p = torch.tensor([800.0, 300.0, 900.0, 200.0])
+
+    out = op(obs_spectra, model_t, model_q, model_t_skin, mu_sat, varbc_pred, cld_frac, cth_p)
+    assert "pc_innovation" in out and out["pc_innovation"].shape == (n_obs, 32)
+    assert "channel_mask" in out and out["channel_mask"].shape == (n_obs, 180)
+    assert torch.allclose(out["channel_mask"][0], torch.ones(180))
+    assert out["channel_mask"][1, -1] < 0.01
+
+
+def test_mtvza_allsky_operator_c_sym_and_surface_mask():
+    op = MeteorMTVZAAllSkyOperator(num_channels=29, num_model_levels=37)
+    n_obs = 3
+    obs_tb = torch.full((n_obs, 29), 240.0)
+    obs_tb[:, 6] = 220.0
+    obs_tb[:, 7] = 160.0
+    model_profiles = torch.zeros((n_obs, 37 * 3))
+    surface_state = torch.tensor([
+        [285.0, 7.0, 0.0, 0.0],
+        [285.0, 5.0, 1.0, 0.0],
+        [250.0, 10.0, 0.0, 0.8],
+    ])
+    varbc_pred = torch.zeros((n_obs, 7))
+
+    out = op(obs_tb, model_profiles, surface_state, varbc_pred)
+    assert out["normalized_innovation"].shape == (n_obs, 29)
+    assert out["c_sym"].shape == (n_obs,)
+    assert out["admissible_mask"][0, :12].sum() == 12
+    assert out["admissible_mask"][1, :12].sum() == 0
+    assert out["admissible_mask"][2, :12].sum() == 0
+
+
+def test_satellite_assimilation_loss_robust_qc():
+    loss_fn = SatelliteAssimilationLoss(huber_delta=1.5, gross_error_sigma=3.5, varbc_reg_weight=1e-3)
+    mtvza_out = {
+        "normalized_innovation": torch.tensor([[1.0, 2.0, 10.0]]),
+        "admissible_mask": torch.tensor([[1.0, 1.0, 1.0]]),
+    }
+    ikfs2_out = {
+        "masked_channel_innovation": torch.tensor([[0.5, -0.8]]),
+        "channel_mask": torch.tensor([[1.0, 1.0]]),
+    }
+    amv_uv_pred = torch.tensor([[10.0, 5.0]])
+    amv_uv_obs = torch.tensor([[12.0, 6.0]])
+    amv_sigma = torch.tensor([[2.0]])
+    amv_qi = torch.tensor([[0.90]])
+
+    varbc_param = torch.nn.Parameter(torch.tensor([0.1, 0.2]))
+    varbc_prior = torch.tensor([0.0, 0.0])
+
+    loss_dict = loss_fn(
+        mtvza_out, ikfs2_out,
+        amv_uv_pred, amv_uv_obs, amv_sigma, amv_qi,
+        [varbc_param], [varbc_prior],
+    )
+    assert "loss_sat_total" in loss_dict
+    assert loss_dict["loss_sat_total"] > 0
+    assert torch.isfinite(loss_dict["loss_sat_total"])
+    loss_dict["loss_sat_total"].backward()
+    assert varbc_param.grad is not None and torch.isfinite(varbc_param.grad).all()

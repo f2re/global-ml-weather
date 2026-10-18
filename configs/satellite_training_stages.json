@@ -1,0 +1,33 @@
+{
+  "stages": [
+    {
+      "stage_id": "S1_ru_sat_radiometric_warmup",
+      "freeze_forecast_core": true,
+      "mesh_level": "mesh3",
+      "epochs": 8,
+      "active_instruments": ["elektro_l_msugs", "arktika_m_msugs", "meteor_m_ikfs2_clear"],
+      "train_modules": ["multimodal_encoder", "sparse_observation_encoder", "varbc"],
+      "learning_rate": 3e-4
+    },
+    {
+      "stage_id": "S2_joint_clearsky_and_amv",
+      "freeze_forecast_core": false,
+      "mesh_level": "mesh8",
+      "epochs": 15,
+      "active_instruments": ["elektro_l_msugs", "arktika_m_msugs", "meteor_m_ikfs2_above_cloud", "meteor_m_mtvza_upper", "msugs_amv"],
+      "hydrostatic_loss_weight": 1.0,
+      "sat_assimilation_loss_weight": 0.25,
+      "learning_rate": 1e-4
+    },
+    {
+      "stage_id": "S3_allsky_microwave_and_arctic_ice",
+      "freeze_forecast_core": false,
+      "mesh_level": "mesh8",
+      "epochs": 15,
+      "active_instruments": ["elektro_l_msugs", "arktika_m_msugs", "meteor_m_ikfs2_above_cloud", "meteor_m_mtvza_allsky", "meteor_m_brlk_ice", "msugs_amv"],
+      "hydrostatic_loss_weight": 1.0,
+      "sat_assimilation_loss_weight": 0.5,
+      "learning_rate": 5e-5
+    }
+  ]
+}

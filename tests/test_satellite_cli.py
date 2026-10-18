@@ -293,3 +293,21 @@ def test_cache_receipt_cannot_understate_actual_download_size(tmp_path, catalog)
             ]
         )
     assert [call[0] for call in catalog.instances[-1].calls] == ["search"]
+
+
+def test_russian_satellite_platforms_registration():
+    from global_weather.observation_identity import (
+        ELEKTRO_L_PLATFORMS,
+        ARKTIKA_M_PLATFORMS,
+        METEOR_M_PLATFORMS,
+        RUSSIAN_SATELLITE_PLATFORMS,
+    )
+    from global_weather.providers.satellites import (
+        RUSSIAN_SATELLITE_PLATFORMS as PROV_PLATFORMS,
+    )
+
+    assert "elektro_l_2" in ELEKTRO_L_PLATFORMS
+    assert "arktika_m_1" in ARKTIKA_M_PLATFORMS
+    assert "meteor_m_2_2" in METEOR_M_PLATFORMS
+    assert set(RUSSIAN_SATELLITE_PLATFORMS) == set(PROV_PLATFORMS)
+    assert len(RUSSIAN_SATELLITE_PLATFORMS) == 8

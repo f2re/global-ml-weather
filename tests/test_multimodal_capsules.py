@@ -77,3 +77,46 @@ def test_channel_calibration_cannot_be_guessed(tmp_path):
     write_json(tmp_path/'other-sensors.json',registry);p['sensor_registry']=reference(tmp_path,tmp_path/'other-sensors.json')
     write_json(tmp_path/'other-plan.json',p)
     with pytest.raises(ValueError,match='калибровка'):from_capsules(tmp_path/'other-plan.json',tmp_path/'seq.npz')
+
+
+def test_arktika_elektro_msugs_adapter_and_film_block():
+    import torch
+    from global_weather.multimodal.ru_sat_msugs import ArktikaElektroMSUGSAdapter, ViewConditionedFiLMBlock
+    adapter = ArktikaElektroMSUGSAdapter()
+    b, n_sats, n_nodes = 2, 3, 10
+    raw_channels = torch.full((b, n_sats, n_nodes, 10), 260.0)
+    valid_mask = torch.ones((b, n_sats, n_nodes), dtype=torch.bool)
+    node_xyz = torch.randn(n_nodes, 3)
+    node_xyz = node_xyz / torch.linalg.norm(node_xyz, dim=-1, keepdim=True) * 6371.0
+    node_normal = node_xyz / 6371.0
+    sat_xyz = torch.full((b, n_sats, 3), 42164.0)
+    sun_dir = torch.tensor([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    gsics_slope = torch.ones(n_sats, 7)
+    gsics_offset = torch.zeros(n_sats, 7)
+
+    fused = adapter(raw_channels, valid_mask, node_xyz, node_normal, sat_xyz, sun_dir, gsics_slope, gsics_offset)
+    assert fused.shape == (b, n_nodes, 20)
+    assert torch.isfinite(fused).all()
+
+    film = ViewConditionedFiLMBlock(hidden_dim=32, geom_dim=4)
+    h = torch.randn(b, n_nodes, 32)
+    geom_feat = fused[..., 13:17]
+    h_mod = film(h, geom_feat)
+    assert h_mod.shape == (b, n_nodes, 32)
+    assert torch.isfinite(h_mod).all()
+
+
+def test_collocate_msumr_ikfs2_clouds():
+    from global_weather.products.algorithms import collocate_msumr_ikfs2
+    h, w = 40, 40
+    lat_grid, lon_grid = np.mgrid[60.0:64.0:40j, 30.0:34.0:40j]
+    cloud_mask = np.zeros((h, w), dtype=bool)
+    cloud_mask[10:30, 10:30] = True
+    cth_pressure = np.full((h, w), 450.0, dtype=np.float32)
+
+    ikfs2_lats = np.array([62.0, 60.1])
+    ikfs2_lons = np.array([32.0, 30.1])
+    cld_frac, cth = collocate_msumr_ikfs2(cloud_mask, cth_pressure, lat_grid, lon_grid, ikfs2_lats, ikfs2_lons, footprint_km=35.0)
+    assert cld_frac[0] > 0.8
+    assert cth[0] == pytest.approx(450.0, abs=10.0)
+    assert cld_frac[1] < 0.2

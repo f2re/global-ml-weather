@@ -31,3 +31,38 @@ def test_vector_h_matches_cartesian_projection_and_legacy_is_unchanged(latitude,
     assert float(_prediction([frame],grid,record,[75000,70000],3)[0])==pytest.approx(np.sum(weights*u[indices]))
     frame.wind_basis='local_enu_vector';frame.profile_variable_mask[...,3]=False
     assert _prediction([frame],grid,record,[75000,70000],3) is None
+
+
+def test_polar_amv_winds_vector_generation():
+    from global_weather.products.algorithms import polar_amv_winds
+    h, w = 64, 64
+    f0 = np.full((h, w), 270.0, dtype=np.float32)
+    f1 = np.full((h, w), 270.0, dtype=np.float32)
+    f2 = np.full((h, w), 270.0, dtype=np.float32)
+    f0[24:40, 20:36] = 230.0
+    f1[24:40, 22:38] = 230.0
+    f2[24:40, 24:40] = 230.0
+
+    times = [0.0, 900.0, 1800.0]
+    result = polar_amv_winds([f0, f1, f2], times, pixel_scale_km=4.0, template_size_px=16)
+    assert "u" in result and "v" in result and "qi" in result
+    assert len(result["u"]) > 0
+    center_idx = len(result["u"]) // 2
+    assert result["qi"][center_idx] >= 0.80
+
+
+def test_molniya_heo_geometry_apogee_filtering():
+    from global_weather.connectors.raster_bridge import compute_molniya_heo_geometry
+    sat_xyz = np.array([0.0, 0.0, 45000.0])
+    lats = np.array([75.0, 0.0, -60.0])
+    lons = np.array([40.0, 40.0, 40.0])
+
+    scan_t = "2026-10-18T12:00:00Z"
+    apogee_t = "2026-10-18T12:00:00Z"
+    theta, fp_factor, mask = compute_molniya_heo_geometry(sat_xyz, lats, lons, scan_t, apogee_t)
+    assert mask[0]
+    assert not mask[2]
+
+    scan_outside = "2026-10-18T17:30:00Z"
+    _, _, mask_outside = compute_molniya_heo_geometry(sat_xyz, lats, lons, scan_outside, apogee_t)
+    assert not mask_outside.any()

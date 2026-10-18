@@ -211,3 +211,129 @@ def surface_temperature(radiance: Field, emissivity: Field, transmittance: Field
                   assumptions=['clear_land_only', 'known_emissivity_and_atmospheric_terms',
                                'monochromatic_approximation_not_band_response_retrieval', 'surface_not_2m_temperature'],
                   attributes={'wavelength_um': wavelength}, **_identity(radiance, available_at, data_kind))
+
+
+def collocate_msumr_ikfs2(
+    msumr_cloud_mask: np.ndarray,
+    msumr_cth_pressure_hpa: np.ndarray,
+    msumr_lat: np.ndarray,
+    msumr_lon: np.ndarray,
+    ikfs2_lat: np.ndarray,
+    ikfs2_lon: np.ndarray,
+    *,
+    footprint_km: float = 35.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Связывает 1-км пиксели МСУ-МР с 35-км пятнами ИКФС-2.
+
+    Возвращает (cloud_fraction [N_obs], cth_pressure_hpa [N_obs]).
+    """
+    n_obs = len(ikfs2_lat)
+    cloud_fraction = np.zeros(n_obs, dtype=np.float32)
+    cth_pressure = np.full(n_obs, 1013.25, dtype=np.float32)
+
+    deg_radius = (footprint_km / 2.0) / 111.0
+    flat_lat = np.asarray(msumr_lat).ravel()
+    flat_lon = np.asarray(msumr_lon).ravel()
+    flat_mask = np.asarray(msumr_cloud_mask, dtype=bool).ravel()
+    flat_cth = np.asarray(msumr_cth_pressure_hpa, dtype=np.float32).ravel()
+
+    for i in range(n_obs):
+        dlat = flat_lat - ikfs2_lat[i]
+        dlon = (flat_lon - ikfs2_lon[i] + 180.0) % 360.0 - 180.0
+        dlon *= np.cos(np.deg2rad(ikfs2_lat[i]))
+        dist_sq = dlat**2 + dlon**2
+        in_fov = dist_sq <= deg_radius**2
+        if in_fov.any():
+            fov_mask = flat_mask[in_fov]
+            cloud_fraction[i] = float(np.mean(fov_mask))
+            if fov_mask.any():
+                cth_pressure[i] = float(np.median(flat_cth[in_fov & flat_mask]))
+            else:
+                cth_pressure[i] = 1013.25
+        else:
+            cloud_fraction[i] = 0.0
+            cth_pressure[i] = 1013.25
+
+    return cloud_fraction, cth_pressure
+
+
+def polar_amv_winds(
+    triplet_ir_bt: list[np.ndarray],
+    triplet_times_sec: list[float],
+    pixel_scale_km: float = 4.0,
+    search_radius_px: int = 8,
+    template_size_px: int = 16,
+) -> dict[str, np.ndarray]:
+    """Генерация полярных AMV-ветров по триплетам МСУ-ГС КА «Арктика-М».
+
+    Вычисляет компоненты скорости u, v, смещение и индикатор качества QI.
+    """
+    if len(triplet_ir_bt) != 3 or len(triplet_times_sec) != 3:
+        raise ValueError("Нужен триплет из ровно трех последовательных кадров.")
+    dt1 = triplet_times_sec[1] - triplet_times_sec[0]
+    dt2 = triplet_times_sec[2] - triplet_times_sec[1]
+    if dt1 <= 0 or dt2 <= 0:
+        raise ValueError("Временные отметки триплета должны строго возрастать.")
+
+    f0, f1, f2 = triplet_ir_bt
+    h, w = f1.shape
+    step = template_size_px
+    y_coords, x_coords = np.mgrid[template_size_px:h-template_size_px:step, template_size_px:w-template_size_px:step]
+    pts_y = y_coords.ravel()
+    pts_x = x_coords.ravel()
+    n_pts = len(pts_y)
+
+    u_vec = np.zeros(n_pts, dtype=np.float32)
+    v_vec = np.zeros(n_pts, dtype=np.float32)
+    qi_vec = np.zeros(n_pts, dtype=np.float32)
+
+    half = template_size_px // 2
+    for i in range(n_pts):
+        cy, cx = pts_y[i], pts_x[i]
+        t1 = f1[cy-half:cy+half, cx-half:cx+half]
+        if not np.isfinite(t1).all():
+            continue
+
+        best_diff0 = 1e9
+        best_dy0, best_dx0 = 0, 0
+        for dy in range(-search_radius_px, search_radius_px + 1):
+            for dx in range(-search_radius_px, search_radius_px + 1):
+                y0, x0 = cy + dy, cx + dx
+                if 0 <= y0 - half and y0 + half <= h and 0 <= x0 - half and x0 + half <= w:
+                    patch0 = f0[y0-half:y0+half, x0-half:x0+half]
+                    diff = np.mean(np.abs(patch0 - t1))
+                    if diff < best_diff0:
+                        best_diff0 = diff
+                        best_dy0, best_dx0 = dy, dx
+
+        best_diff2 = 1e9
+        best_dy2, best_dx2 = 0, 0
+        for dy in range(-search_radius_px, search_radius_px + 1):
+            for dx in range(-search_radius_px, search_radius_px + 1):
+                y2, x2 = cy + dy, cx + dx
+                if 0 <= y2 - half and y2 + half <= h and 0 <= x2 - half and x2 + half <= w:
+                    patch2 = f2[y2-half:y2+half, x2-half:x2+half]
+                    diff = np.mean(np.abs(patch2 - t1))
+                    if diff < best_diff2:
+                        best_diff2 = diff
+                        best_dy2, best_dx2 = dy, dx
+
+        vx1 = (-best_dx0 * pixel_scale_km * 1000.0) / dt1
+        vy1 = (-best_dy0 * pixel_scale_km * 1000.0) / dt1
+        vx2 = (best_dx2 * pixel_scale_km * 1000.0) / dt2
+        vy2 = (best_dy2 * pixel_scale_km * 1000.0) / dt2
+
+        u_vec[i] = 0.5 * (vx1 + vx2)
+        v_vec[i] = 0.5 * (vy1 + vy2)
+
+        speed_diff = np.hypot(vx1 - vx2, vy1 - vy2)
+        mean_speed = np.hypot(u_vec[i], v_vec[i]) + 1e-3
+        qi_vec[i] = float(np.clip(1.0 - speed_diff / (0.5 * mean_speed + 5.0), 0.0, 1.0))
+
+    return {
+        "u": u_vec,
+        "v": v_vec,
+        "qi": qi_vec,
+        "pts_y": pts_y,
+        "pts_x": pts_x,
+    }

@@ -11,7 +11,10 @@ from .catalog import CATALOG, variable_spec
 from .core import utc, require_hash, validate_metadata, canonical, digest
 from .io import load_product, exclusive_bytes, arrays, sha256, regular
 
-SATELLITE_SOURCES = ('electro_l', 'arktika_m', 'meteor_msu_mr', 'meteor_mtvza')
+SATELLITE_SOURCES = (
+    'electro_l', 'arktika_m', 'meteor_msu_mr', 'meteor_mtvza',
+    'meteor_ikfs2', 'arktika_m_amv', 'meteor_brlk',
+)
 
 
 def check_variable(var):

@@ -8,7 +8,7 @@ from torch.nn import functional as F
 from scipy.spatial import cKDTree
 from ..grid import EARTH_RADIUS_M, unit_xyz
 from ..observations import SOURCES
-from .networks import ImagerEncoder, MicrowaveEncoder
+from .networks import ImagerEncoder, MicrowaveEncoder, ViewConditionedFiLMBlock, ArktikaElektroMSUGSAdapter
 from .contracts import utc
 
 

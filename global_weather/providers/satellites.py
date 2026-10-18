@@ -15,6 +15,12 @@ from ._gptl.network import STAC, NetworkError, redact
 from ._gptl.model import normalize_asset, level_of, parse_time, platform_of
 from ..pipeline.dataset import utc
 from ..pipeline.io import atomic_json, sha256
+from ..observation_identity import (
+    ELEKTRO_L_PLATFORMS,
+    ARKTIKA_M_PLATFORMS,
+    METEOR_M_PLATFORMS,
+    RUSSIAN_SATELLITE_PLATFORMS,
+)
 
 
 class SatelliteCatalog:

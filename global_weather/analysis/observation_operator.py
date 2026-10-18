@@ -13,6 +13,7 @@ from typing import Iterable, Sequence
 
 import numpy as np
 import torch
+import torch.nn as nn
 
 from ..grid import SphereGrid, unit_xyz
 from ..observation_identity import observation_identity
@@ -311,3 +312,172 @@ def observation_space_loss(frames: Sequence, grid: SphereGrid, pressure_axis_pa,
     loss = (e * w).sum() / w.sum()
     return loss, {'accepted': accepted, 'rejected': rejected,
                   'weighted_rmse': float(torch.sqrt(loss.detach()).cpu())}
+
+
+class VariationalBiasCorrection(nn.Module):
+    """
+    Обучаемый модуль VarBC с 7 физико-геометрическими предикторами.
+    Веса beta регуляризуются относительно фонового состояния в `continuous/store.py`.
+    """
+
+    def __init__(self, num_channels: int, num_predictors: int = 7) -> None:
+        super().__init__()
+        self.beta_0 = nn.Parameter(torch.zeros(num_channels))
+        self.beta_w = nn.Parameter(torch.zeros(num_channels, num_predictors))
+
+    def forward(self, predictors: torch.Tensor) -> torch.Tensor:
+        """
+        predictors: [N_obs, 7] -> (m_air-1, (m_air-1)^2, cos_scan, sin_scan, dZ_trop, dZ_strat, cos_orb)
+        Возвращает поправку смещения: [N_obs, num_channels]
+        """
+        return self.beta_0.unsqueeze(0) + torch.matmul(predictors, self.beta_w.t())
+
+
+class IKFS2CloudClearedOperator(nn.Module):
+    """
+    Оператор наблюдения для гиперспектрального ИК-зондировщика ИКФС-2 в связке с МСУ-МР.
+    Выполняет проекцию на главные компоненты (PCA) и маскирование каналов ниже верхней границы облаков.
+    """
+
+    def __init__(
+        self,
+        num_selected_channels: int = 180,
+        num_pcs: int = 32,
+        num_model_levels: int = 37,
+    ) -> None:
+        super().__init__()
+        self.num_pcs = num_pcs
+        # Матрица собственных векторов U_K и шум NEDR загружаются из assets/normalization/
+        self.register_buffer("pca_basis", torch.eye(num_selected_channels, num_pcs))
+        self.register_buffer("nedr_inv", torch.ones(num_selected_channels))
+        self.register_buffer("clim_mean", torch.zeros(num_selected_channels))
+        # Давление пика весовой функции каждого из 180 каналов ИКФС-2 (гПа)
+        self.register_buffer(
+            "channel_peak_pressure_hpa",
+            torch.linspace(30.0, 980.0, num_selected_channels),
+        )
+
+        # Быстрый нейросетевой суррогат прямого оператора переноса излучения H_ikfs2(T(p), q(p), T_skin, mu_sat)
+        in_features = num_model_levels * 2 + 2
+        self.forward_rt_surrogate = nn.Sequential(
+            nn.Linear(in_features, 256),
+            nn.SiLU(),
+            nn.Linear(256, 256),
+            nn.SiLU(),
+            nn.Linear(256, num_selected_channels),
+        )
+        self.varbc = VariationalBiasCorrection(num_channels=num_selected_channels)
+
+    @torch.no_grad()
+    def compute_above_cloud_mask(
+        self,
+        msumr_cloud_fraction: torch.Tensor,  # [N_obs] доля облаков в 35-км пятне ИКФС-2 по МСУ-МР
+        msumr_cth_pressure_hpa: torch.Tensor,  # [N_obs] давление ВГО (гПа)
+        margin_hpa: float = 50.0,
+        tau_hpa: float = 15.0,
+    ) -> torch.Tensor:
+        """
+        Возвращает весовую маску допустимости каналов [N_obs, 180].
+        Каналы, чья функция вклада пикует ниже (p_cld - 50 гПа), подавляются.
+        """
+        is_clear = (msumr_cloud_fraction < 0.05).float().unsqueeze(-1)  # [N_obs, 1]
+        p_cutoff = msumr_cth_pressure_hpa.unsqueeze(-1) - margin_hpa    # [N_obs, 1]
+        p_peak = self.channel_peak_pressure_hpa.unsqueeze(0)            # [1, 180]
+        above_cloud_gate = torch.sigmoid((p_cutoff - p_peak) / tau_hpa)
+        return torch.maximum(is_clear, above_cloud_gate)
+
+    def forward(
+        self,
+        obs_spectra: torch.Tensor,           # [N_obs, 180]
+        model_t_profile: torch.Tensor,       # [N_obs, L] интерполированный профиль T
+        model_q_profile: torch.Tensor,       # [N_obs, L] интерполированный профиль log(q)
+        model_t_skin: torch.Tensor,          # [N_obs, 1]
+        mu_sat: torch.Tensor,                # [N_obs, 1]
+        varbc_predictors: torch.Tensor,      # [N_obs, 7]
+        msumr_cloud_fraction: torch.Tensor,  # [N_obs]
+        msumr_cth_pressure_hpa: torch.Tensor,  # [N_obs]
+    ) -> dict[str, torch.Tensor]:
+        x_col = torch.cat([model_t_profile, model_q_profile, model_t_skin, mu_sat], dim=-1)
+        sim_spectra = self.forward_rt_surrogate(x_col)
+        bias = self.varbc(varbc_predictors)
+
+        channel_mask = self.compute_above_cloud_mask(msumr_cloud_fraction, msumr_cth_pressure_hpa)
+        # Нормированная невязка в спектральном пространстве с маскированием облачных слоев
+        masked_innovation = (obs_spectra - sim_spectra - bias) * self.nedr_inv.unsqueeze(0) * channel_mask
+        # Проекция очищенной невязки в подпространство главных компонент (PC scores)
+        pc_innovation = torch.matmul(masked_innovation, self.pca_basis)
+
+        return {
+            "pc_innovation": pc_innovation,
+            "masked_channel_innovation": masked_innovation,
+            "channel_mask": channel_mask,
+            "varbc_bias": bias,
+        }
+
+
+class MeteorMTVZAAllSkyOperator(nn.Module):
+    """
+    Всепогодный (All-Sky) оператор наблюдения для 29 каналов СВЧ-радиометра МТВЗА-ГЯ (КА «Метеор-М»).
+    Динамически масштабирует матрицу ошибок R(C_sym) и фильтрует поверхностно-чувствительные каналы.
+    """
+
+    def __init__(self, num_channels: int = 29, num_model_levels: int = 37) -> None:
+        super().__init__()
+        self.num_channels = num_channels
+        self.register_buffer("sigma_clr", torch.full((num_channels,), 0.6))
+        self.register_buffer("sigma_cld", torch.full((num_channels,), 4.5))
+        self.register_buffer("c_clr", torch.full((num_channels,), 0.05))
+        self.register_buffer("c_cld", torch.full((num_channels,), 0.45))
+
+        # Маска каналов, чувствительных к поверхности (окна 10.6-36.5, 89 ГГц и нижние каналы 52-53 ГГц)
+        surface_sensitive = torch.zeros(num_channels, dtype=torch.bool)
+        surface_sensitive[:12] = True
+        self.register_buffer("surface_sensitive_mask", surface_sensitive)
+
+        in_features = num_model_levels * 3 + 4  # T(p), q(p), clwc(p) + T_skin, wind_10m, lsm, sea_ice
+        self.allsky_rt_surrogate = nn.Sequential(
+            nn.Linear(in_features, 256),
+            nn.SiLU(),
+            nn.Linear(256, 256),
+            nn.SiLU(),
+            nn.Linear(256, num_channels),
+        )
+        self.varbc = VariationalBiasCorrection(num_channels=num_channels)
+
+    def forward(
+        self,
+        obs_tb: torch.Tensor,             # [N_obs, 29]
+        model_profiles: torch.Tensor,     # [N_obs, 3*L] (T, q, cloud_liquid_water)
+        surface_state: torch.Tensor,      # [N_obs, 4] (T_skin, wind_10m, land_mask, sea_ice_fraction)
+        varbc_predictors: torch.Tensor,    # [N_obs, 7]
+        idx_36v: int = 6,
+        idx_36h: int = 7,
+        delta_tb_clear_ocean: float = 65.0,
+    ) -> dict[str, torch.Tensor]:
+        x_in = torch.cat([model_profiles, surface_state], dim=-1)
+        sim_tb = self.allsky_rt_surrogate(x_in)
+        bias = self.varbc(varbc_predictors)
+
+        # Расчет симметричного индекса облачности C_sym по поляризационной разности 36.5 ГГц
+        c_obs = (1.0 - (obs_tb[:, idx_36v] - obs_tb[:, idx_36h]) / delta_tb_clear_ocean).clamp(0.0, 1.5)
+        c_fg = (1.0 - (sim_tb[:, idx_36v] - sim_tb[:, idx_36h]) / delta_tb_clear_ocean).clamp(0.0, 1.5)
+        c_sym = 0.5 * (c_obs + c_fg).unsqueeze(-1)  # [N_obs, 1]
+
+        # Кусочно-линейное масштабирование ошибки наблюдения sigma_obs(C_sym)
+        ramp = ((c_sym - self.c_clr) / (self.c_cld - self.c_clr)).clamp(0.0, 1.0)
+        sigma_obs = self.sigma_clr + (self.sigma_cld - self.sigma_clr) * ramp  # [N_obs, 29]
+
+        # Отключение низковысотных каналов над сушей и морским льдом для атмосферного анализа
+        land_or_ice = ((surface_state[:, 2] > 0.1) | (surface_state[:, 3] > 0.05)).unsqueeze(-1)
+        admissible_mask = ~(land_or_ice & self.surface_sensitive_mask.unsqueeze(0))
+
+        innovation = obs_tb - sim_tb - bias
+        normalized_innovation = (innovation / sigma_obs) * admissible_mask.float()
+
+        return {
+            "normalized_innovation": normalized_innovation,
+            "sigma_obs": sigma_obs,
+            "admissible_mask": admissible_mask.float(),
+            "c_sym": c_sym.squeeze(-1),
+            "varbc_bias": bias,
+        }
