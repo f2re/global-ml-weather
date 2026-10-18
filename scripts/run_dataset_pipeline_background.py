@@ -41,6 +41,11 @@ def run_pipeline(
     log_file: Path,
     worker_root: Path = ARKTIKA_WORKER_ROOT,
     stride_hours: int = 6,
+    acquire_satellites: bool = False,
+    max_satellite_scenes: int = 20,
+    acquire_ghcnh: bool = False,
+    admission_path: Path | None = None,
+    ghcnh_years: tuple[int, ...] = (2023, 2024, 2025, 2026),
 ):
     log("=== Старт фонового конвейера подготовки выборки 2023–2026 ===", log_file)
 
@@ -114,6 +119,43 @@ def run_pipeline(
         }, f, indent=2, ensure_ascii=False)
     log(f"Индекс спутниковых сцен сохранен в {scenes_manifest}", log_file)
 
+    # 4. Скачивание каналов МСУ-ГС при флаге acquire_satellites
+    if acquire_satellites:
+        from scripts.fetch_arktika_worker_data import ensure_asset_downloaded
+        log(f"Загрузка растров каналов МСУ-ГС для выборки (лимит: {max_satellite_scenes} сцен)...", log_file)
+        sat_dir = output_dir / "satellites"
+        downloaded_count = 0
+        for sc in scenes[:max_satellite_scenes]:
+            assets = get_scene_assets(sc["item_id"], worker_root)
+            for ast in assets:
+                # Фильтруем основные ИК-каналы (ch 4, 5, 6, 7, 8, 9, 10)
+                if ast.get("channel") in (4, 5, 6, 7, 8, 9, 10) or ast.get("filename", "").endswith(".tif"):
+                    try:
+                        p = ensure_asset_downloaded(ast, sat_dir / sc["platform"] / sc["stamp"][:10])
+                        downloaded_count += 1
+                    except Exception as ex:
+                        log(f"Предупреждение загрузки {ast.get('filename')}: {ex}", log_file)
+        log(f"Успешно загружено растров каналов: {downloaded_count}", log_file)
+
+    # 5. Загрузка наблюдений станций GHCNh для 2023–2026 при флаге acquire_ghcnh
+    if acquire_ghcnh and admission_path and Path(admission_path).is_file():
+        from global_weather.observation_acquisition import acquire as acquire_ghcnh_fn
+        log(f"Запуск загрузки станций GHCNh для годов {ghcnh_years}...", log_file)
+        ghcnh_cache = output_dir / "ghcnh_cache"
+        ghcnh_report = output_dir / "ghcnh_acquisition_report.json"
+        try:
+            report = acquire_ghcnh_fn(
+                admission_path,
+                ghcnh_cache,
+                ghcnh_report,
+                network=True,
+                years=ghcnh_years,
+            )
+            downloaded = sum(1 for r in report.get("results", []) if r.get("status") == "downloaded")
+            log(f"Загрузка станций GHCNh завершена: скачано файлов {downloaded}", log_file)
+        except Exception as ex:
+            log(f"Ошибка при загрузке станций GHCNh: {ex}", log_file)
+
     log("=== Формирование расширенной выборки успешно завершено ===", log_file)
 
 
@@ -122,9 +164,23 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=Path("data/extended_sample_2023_2026"))
     parser.add_argument("--log-file", type=Path, default=Path("outputs/dataset_pipeline_2023_2026.log"))
     parser.add_argument("--stride-hours", type=int, default=6)
+    parser.add_argument("--acquire-satellites", action="store_true")
+    parser.add_argument("--max-satellite-scenes", type=int, default=20)
+    parser.add_argument("--acquire-ghcnh", action="store_true")
+    parser.add_argument("--admission", type=Path, default=None)
+    parser.add_argument("--ghcnh-years", type=int, nargs="+", default=[2023, 2024, 2025, 2026])
     args = parser.parse_args()
 
-    run_pipeline(args.output_dir, args.log_file, stride_hours=args.stride_hours)
+    run_pipeline(
+        args.output_dir,
+        args.log_file,
+        stride_hours=args.stride_hours,
+        acquire_satellites=args.acquire_satellites,
+        max_satellite_scenes=args.max_satellite_scenes,
+        acquire_ghcnh=args.acquire_ghcnh,
+        admission_path=args.admission,
+        ghcnh_years=tuple(args.ghcnh_years),
+    )
 
 
 if __name__ == "__main__":

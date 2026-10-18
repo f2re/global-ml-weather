@@ -17,8 +17,17 @@ import sqlite3
 import sys
 import urllib.request
 
-ARKTIKA_WORKER_ROOT = Path("/Users/meteo/Documents/WWW/arktika-worker")
-sys.path.insert(0, str(ARKTIKA_WORKER_ROOT))
+ARKTIKA_WORKER_ROOT = (
+    Path(os.environ["ARKTIKA_WORKER_ROOT"])
+    if "ARKTIKA_WORKER_ROOT" in os.environ
+    else (
+        Path.home() / "arktika-worker"
+        if (Path.home() / "arktika-worker" / "data" / "catalog.sqlite").is_file()
+        else Path("/Users/meteo/Documents/WWW/arktika-worker")
+    )
+)
+if str(ARKTIKA_WORKER_ROOT) not in sys.path:
+    sys.path.insert(0, str(ARKTIKA_WORKER_ROOT))
 
 try:
     from arktika.orbit import calculate_viewing_geometry
