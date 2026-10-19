@@ -55,7 +55,7 @@ def _profile_config(value):
             raise ValueError('Invalid joint training bound: '+key)
     if not 0 <= result['mesh_level'] <= 8:
         raise ValueError('Joint mesh_level must be within 0..8.')
-    if result['epochs'] > 1000 or result['max_records_per_window'] > 20000:
+    if result['epochs'] > 2000 or result['max_records_per_window'] > 20000:
         raise ValueError('Joint experiment exceeds reviewed research limits.')
     for key in ('learning_rate', 'weight_decay', 'gradient_clip'):
         number = result[key]
@@ -109,8 +109,8 @@ def _config(value):
                 raise ValueError('Mesh-8 research training maintains the 3-hour rollout from measured VRAM budget.')
             if result['hidden'] > 4:
                 raise ValueError('Mesh-8 research training hidden width is capped at 4 from measured 24 GiB VRAM.')
-            if result['epochs'] < 1 or result['epochs'] > 1000:
-                raise ValueError('Mesh-8 research training epochs must be within 1..1000.')
+            if result['epochs'] < 1 or result['epochs'] > 2000:
+                raise ValueError('Mesh-8 research training epochs must be within 1..2000.')
             if result['max_train_issues'] > 9 or result['max_validation_issues'] > 13 or result['max_test_issues'] > 13:
                 raise ValueError('Mesh-8 research training issue counts exceed supported dataset issues.')
         else:

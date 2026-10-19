@@ -78,6 +78,14 @@ def test_mesh8_research_training_admits_multi_epoch_within_budget():
     assert cfg_1000['rollout_hours'] == 3
     assert cfg_1000['hidden'] == 4
 
+    multi_2000 = json.loads((ROOT / 'configs' / 'joint_observation_training_mesh8_2000.json').read_text())
+    cfg_2000 = _config(multi_2000)
+    assert cfg_2000['experiment_role'] == 'mesh8_research_training'
+    assert cfg_2000['epochs'] == 2000
+    assert cfg_2000['mesh_level'] == 8
+    assert cfg_2000['rollout_hours'] == 3
+    assert cfg_2000['hidden'] == 4
+
 
 def test_historical_mesh2_config_remains_loadable():
     historical = json.loads((ROOT / 'configs' / 'joint_observation_training_mesh2_pilot.json').read_text())
