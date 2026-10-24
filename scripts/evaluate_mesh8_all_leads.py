@@ -21,16 +21,52 @@ import torch
 
 from global_weather.grid import unit_xyz
 from global_weather.joint_observation_data import JointObservationDataset
-from global_weather.joint_observation_training import load_frozen, normalized_history, supported_issues
+from global_weather.joint_observation_training import (
+    _build,
+    _device,
+    _state,
+    normalized_history,
+    supported_issues,
+)
 from global_weather.observation_data import NATIVE_VARIABLES, UNITS
+from global_weather.observation_training import checkpoint_path
 from global_weather.observations import utc
+from global_weather.profile_normalization import load_normalization
 from global_weather.profile_physics import screen_humidity
 from global_weather.profile_training import VARIABLES
 from global_weather.profile_training_v2 import _prediction
+from global_weather.station_climatology import StationClimatology
 from global_weather.vertical import PRESSURE_HPA, PROFILE_UNITS
 
 
 LEAD_HOURS = [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63, 66, 69, 72]
+
+
+def load_model_checkpoint(dataset_path, training, device='auto'):
+    training = Path(training)
+    completion = json.loads((training / 'complete.json').read_text())
+    ref = json.loads((training / 'best.json').read_text())
+    state = torch.load(checkpoint_path(training, ref), map_location='cpu', weights_only=True)
+    expected = completion['identity']
+
+    dataset = JointObservationDataset(dataset_path)
+    norms = load_normalization(json.loads(Path(expected['norm_path']).read_text()))
+    station = StationClimatology.load(expected['station_climatology_path'])
+    dev = _device(device)
+    model = _build(dataset, norms, expected['config'], station, dev, expected['climatology_path'], expected.get('static_path'))
+    _state(model, state['model'])
+    model.eval()
+    for p in model.parameters():
+        p.requires_grad_(False)
+    model.trained_variable_mask = np.asarray(state['trained_variable_mask'], dtype=bool)
+    model.frozen_metadata = {
+        'config': expected['config'],
+        'epoch': state['epoch'],
+        'identity': expected,
+        'trained_variable_mask': state['trained_variable_mask'],
+    }
+    model.frozen_checkpoint_sha256 = ref['sha256']
+    return model, dataset
 
 
 def streaming_forward(model, inputs, issue, surface_inputs, surface_mask, horizon_hours=72):
@@ -352,12 +388,12 @@ def main(argv=None):
     parser.add_argument('--horizon-hours', type=int, default=72)
     args = parser.parse_args(argv)
 
-    print(f"Loading frozen model from {args.training} on device {args.device}...")
-    model, dataset = load_frozen(args.dataset, args.training, device=args.device)
+    print(f"Loading checkpoint from {args.training} on device {args.device}...")
+    model, dataset = load_model_checkpoint(args.dataset, args.training, device=args.device)
     config = model.frozen_metadata['config']
     epoch = model.frozen_metadata['epoch']
     sha256_hash = model.frozen_checkpoint_sha256
-    print(f"Frozen checkpoint loaded: epoch {epoch}, SHA256: {sha256_hash}")
+    print(f"Checkpoint loaded: epoch {epoch}, SHA256: {sha256_hash}")
 
     eval_out = {
         'schema': 'mesh8-all-leads-physical-evaluation-1',
