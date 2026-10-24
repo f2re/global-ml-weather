@@ -267,10 +267,12 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
                     stabilized = enforce_global_mass_and_tendency_bounds(
                         curr_dict, surf_prev, surf_init
                     )
-                    frame.native_physical[..., 0] = stabilized["station_temperature"]
-                    frame.native_physical[..., 1] = stabilized["station_dew_point"]
-                    frame.native_physical[..., 4] = stabilized["station_pressure"]
-                    frame.native_physical[..., 5] = stabilized["station_mean_sea_level_pressure"]
+                    native_updated = frame.native_physical.clone()
+                    native_updated[..., 0] = stabilized["station_temperature"]
+                    native_updated[..., 1] = stabilized["station_dew_point"]
+                    native_updated[..., 4] = stabilized["station_pressure"]
+                    native_updated[..., 5] = stabilized["station_mean_sea_level_pressure"]
+                    frame.native_physical = native_updated
                     surf_prev = stabilized
                 mod_surf = frame.native_physical.numpy()
             else:
