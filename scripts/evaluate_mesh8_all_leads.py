@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timedelta, timezone
+import gc
 import json
 import math
 from pathlib import Path
@@ -18,6 +19,7 @@ import sys
 import numpy as np
 import torch
 
+from global_weather.grid import unit_xyz
 from global_weather.joint_observation_data import JointObservationDataset
 from global_weather.joint_observation_training import load_frozen, normalized_history, supported_issues
 from global_weather.observation_data import NATIVE_VARIABLES, UNITS
@@ -29,6 +31,76 @@ from global_weather.vertical import PRESSURE_HPA, PROFILE_UNITS
 
 
 LEAD_HOURS = [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63, 66, 69, 72]
+
+
+def streaming_forward(model, inputs, issue, surface_inputs, surface_mask, horizon_hours=72):
+    """Memory-efficient streaming forward pass moving large profile grids to host RAM."""
+    model._surface_history = (surface_inputs, surface_mask)
+    try:
+        issue = utc(issue)
+        n, d = model.grid.n_cells, model.hidden
+        pressure = model.pressure_encoder(model.log_pressure) + model.levels
+        state = model._initial_state(issue, pressure)
+
+        # 12-hour input assimilation
+        for hour in range(12):
+            rows = [
+                r for r in inputs
+                if issue - timedelta(hours=12 - hour) < utc(r['observed_at']) <= issue - timedelta(hours=11 - hour)
+                and utc(r['available_at']) <= issue
+            ]
+            rows = [r for r in rows if model.normalization.at(r['variable'], r['pressure_pa'])[2]]
+            if not rows:
+                continue
+            variables = torch.tensor([VARIABLES.index(r['variable']) for r in rows], device=state.device)
+            pressures = np.array([r['pressure_pa'] for r in rows])
+            levels = np.abs(np.log(pressures[:, None]) - np.log(np.array(PRESSURE_HPA)[None] * 100)).argmin(1)
+            cells = model.grid.locate([r['latitude'] for r in rows], [r['longitude'] for r in rows])
+            indices = torch.tensor(cells * 37 + levels, device=state.device)
+            normalized = [model.normalization.normalize(r['variable'], r['value'], r['pressure_pa']) for r in rows]
+            xyz = unit_xyz([r['latitude'] for r in rows], [r['longitude'] for r in rows])
+            extra = np.column_stack((
+                normalized,
+                np.log(pressures / 100000),
+                [(issue - utc(r['observed_at'])).total_seconds() / 43200 for r in rows],
+                xyz,
+            ))
+            features = torch.tensor(extra, dtype=state.dtype, device=state.device)
+            tokens = model.token(torch.cat((features, model.variable(variables)), -1))
+            sums = state.new_zeros(n * 37, d).index_add(0, indices, tokens)
+            counts = state.new_zeros(n * 37).index_add(0, indices, torch.ones(len(rows), device=state.device))
+            has_obs = (counts > 0)
+            if has_obs.any():
+                obs_idx = has_obs.nonzero(as_tuple=True)[0]
+                sub_forcing = sums[obs_idx] / counts[obs_idx, None]
+                flat_state = state.reshape(-1, d)
+                sub_state = flat_state[obs_idx]
+                sub_updated = model.ingest(sub_forcing, sub_state)
+                flat_state = flat_state.clone()
+                flat_state[obs_idx] = sub_updated
+                state = flat_state.reshape(n, 37, d)
+
+        # Initial frame (lead 0) offloaded to CPU
+        f0 = model._decode(state, issue, 0)
+        f0.profiles = f0.profiles.cpu()
+        f0.profile_variable_mask = f0.profile_variable_mask.cpu()
+        if hasattr(f0, 'native_physical') and f0.native_physical is not None:
+            f0.native_physical = f0.native_physical.cpu()
+        frames = [f0]
+
+        # Autoregressive rollout: advance on GPU, move decoded fields to CPU
+        for lead in range(3, horizon_hours + 1, 3):
+            state = model._advance_state(state, pressure, issue, lead)
+            f = model._decode(state, issue, lead)
+            f.profiles = f.profiles.cpu()
+            f.profile_variable_mask = f.profile_variable_mask.cpu()
+            if hasattr(f, 'native_physical') and f.native_physical is not None:
+                f.native_physical = f.native_physical.cpu()
+            frames.append(f)
+
+        return frames
+    finally:
+        model._surface_history = None
 
 
 def get_persistence_surface(raw: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -86,7 +158,6 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
     leads = [lead for lead in LEAD_HOURS if lead <= horizon_hours]
     num_steps = len(leads)
 
-    # Accumulators per lead: lead_h -> var -> channel -> list of diffs
     lead_surf_diffs = {
         lead: {
             'model': [[] for _ in range(6)],
@@ -122,7 +193,7 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
         target_mask = target_mask[:num_steps]
 
         with torch.inference_mode():
-            frames = model(inputs_screened, issue, surface_inputs=x, surface_mask=m, horizon_hours=horizon_hours)
+            frames = streaming_forward(model, inputs_screened, issue, surface_inputs=x, surface_mask=m, horizon_hours=horizon_hours)
 
         # 1. Surface evaluation across all leads
         pers_surf = get_persistence_surface(raw, mask)
@@ -130,7 +201,7 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
             lead_h = leads[step_idx]
             month = frame.valid_time.month - 1
             if hasattr(frame, 'native_physical') and frame.native_physical is not None:
-                mod_surf = frame.native_physical.cpu().numpy()
+                mod_surf = frame.native_physical.numpy()
             else:
                 mod_surf = (frame.native_normalized * model.surface_scales + model.surface_monthly[month]).cpu().numpy()
 
@@ -163,6 +234,8 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
             for lead_h in leads
         }
 
+        # Keep model.pressure_pa on CPU for CPU observation operator
+        pressure_pa_cpu = model.pressure_pa.cpu()
         for record in targets_screened:
             var_idx = VARIABLES.index(record['variable'])
             if var_idx == 1 and record['pressure_pa'] < policy.humidity_min_pressure_pa:
@@ -171,15 +244,14 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
             if not supported:
                 continue
 
-            # Determine lead bin
             dt_hours = (utc(record['observed_at']) - issue).total_seconds() / 3600.0
             step_bin = int(np.clip(round(dt_hours / 3.0), 1, num_steps))
             lead_h = leads[step_bin - 1]
 
-            result = _prediction(frames, model.grid, record, model.pressure_pa, horizon_hours)
+            result = _prediction(frames, model.grid, record, pressure_pa_cpu, horizon_hours)
             if result is None:
                 continue
-            prediction_val = float(result[0].cpu().numpy())
+            prediction_val = float(result[0].numpy())
             obs_val = float(record['value'])
             lead_prof_diffs[lead_h]['model'][var_idx].append(prediction_val - obs_val)
 
@@ -191,10 +263,16 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
             # Climatology
             clim_f = clim_prof_frames.get(lead_h)
             if clim_f is not None:
-                res_clim = _prediction([clim_f], model.grid, record, model.pressure_pa, horizon_hours)
+                res_clim = _prediction([clim_f], model.grid, record, pressure_pa_cpu, horizon_hours)
                 if res_clim is not None:
-                    clim_val = float(res_clim[0].cpu().numpy())
+                    clim_val = float(res_clim[0].numpy())
                     lead_prof_diffs[lead_h]['climatology'][var_idx].append(clim_val - obs_val)
+
+        # Garbage collect frame memory before next issue
+        del frames
+        gc.collect()
+        if device.type == 'cuda':
+            torch.cuda.empty_cache()
 
     # Compile results per lead
     leads_output = {}
