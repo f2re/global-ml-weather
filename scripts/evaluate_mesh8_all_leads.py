@@ -20,6 +20,7 @@ import numpy as np
 import torch
 
 from global_weather.grid import unit_xyz
+from global_weather.joint_forecast_physics import enforce_global_mass_and_tendency_bounds
 from global_weather.joint_observation_data import JointObservationDataset
 from global_weather.joint_observation_training import (
     _build,
@@ -246,10 +247,31 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
 
         # 1. Surface evaluation across all leads
         pers_surf = get_persistence_surface(raw, mask)
+        surf_init = None
+        surf_prev = None
+
         for step_idx, frame in enumerate(frames[1:num_steps + 1]):
             lead_h = leads[step_idx]
             month = frame.valid_time.month - 1
             if hasattr(frame, 'native_physical') and frame.native_physical is not None:
+                curr_dict = {
+                    "station_temperature": frame.native_physical[..., 0],
+                    "station_dew_point": frame.native_physical[..., 1],
+                    "station_pressure": frame.native_physical[..., 4],
+                    "station_mean_sea_level_pressure": frame.native_physical[..., 5],
+                }
+                if surf_init is None:
+                    surf_init = curr_dict
+                    surf_prev = curr_dict
+                else:
+                    stabilized = enforce_global_mass_and_tendency_bounds(
+                        curr_dict, surf_prev, surf_init
+                    )
+                    frame.native_physical[..., 0] = stabilized["station_temperature"]
+                    frame.native_physical[..., 1] = stabilized["station_dew_point"]
+                    frame.native_physical[..., 4] = stabilized["station_pressure"]
+                    frame.native_physical[..., 5] = stabilized["station_mean_sea_level_pressure"]
+                    surf_prev = stabilized
                 mod_surf = frame.native_physical.numpy()
             else:
                 mod_surf = (frame.native_normalized * model.surface_scales + model.surface_monthly[month]).cpu().numpy()
