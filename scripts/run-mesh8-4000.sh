@@ -7,6 +7,7 @@ exec >> outputs/mesh8-500-training.log 2>&1
 export PYTHONPATH=.
 export CUDA_VISIBLE_DEVICES=0
 echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] Continuing Mesh-8 training to 4000 epochs on GPU ${CUDA_VISIBLE_DEVICES}..."
+echo "$$" > outputs/mesh8-4000-training.pid
 exec .venv/bin/python -u -m global_weather.joint_observation_training \
   --dataset /home/user/global-ml-weather-joint-20261012/outputs/joint-20261012/dataset \
   --norm /home/user/global-ml-weather-r7/outputs/remote-r7-stations/graphcast-norms.json \
