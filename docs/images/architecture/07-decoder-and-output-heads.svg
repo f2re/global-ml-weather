@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="1600" height="900" fill="white"/>
+<style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#0b2a5b}.t{font-weight:700}.s{fill:#5d6b82}.w{fill:white}.mon{font-family:DejaVu Sans Mono,monospace}.small{font-size:21px}.body{font-size:25px}.h2{font-size:31px;font-weight:700}.h1{font-size:47px;font-weight:700}.label{font-size:23px;font-weight:700}</style>
+<text x="42" y="60" class="h1">7. Ветка B — Joint / Hydrostatic Mesh-8</text>
+<text x="44" y="98" class="s" font-size="28">основной физически ориентированный исследовательский контур на полной вертикали</text>
+<rect x="25" y="130" width="245" height="52" rx="14" fill="#0e9f8b" stroke="#0e9f8b" stroke-width="0"/>
+<text x="45" y="166" class="w h2">1. Входы</text>
+<rect x="290" y="130" width="250" height="52" rx="14" fill="#0e9f8b" stroke="#0e9f8b" stroke-width="0"/>
+<text x="310" y="166" class="w h2">2. PressureProfileModel</text>
+<rect x="560" y="130" width="330" height="52" rx="14" fill="#0e9f8b" stroke="#0e9f8b" stroke-width="0"/>
+<text x="580" y="166" class="w h2">3. HydrostaticFlow</text>
+<rect x="910" y="130" width="300" height="52" rx="14" fill="#0e9f8b" stroke="#0e9f8b" stroke-width="0"/>
+<text x="930" y="166" class="w h2">4. Joint surface</text>
+<rect x="1230" y="130" width="345" height="52" rx="14" fill="#0e9f8b" stroke="#0e9f8b" stroke-width="0"/>
+<text x="1250" y="166" class="w h2">5. Decode / output</text>
+<rect x="40" y="215" width="215" height="250" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="58" y="249" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Наблюдения</text>
+<circle cx="66" cy="278" r="4.5" fill="#0b2a5b"/>
+<text x="81" y="285" font-size="20" fill="#0b2a5b">GHCNh: 12 ч</text>
+<circle cx="66" cy="308" r="4.5" fill="#0b2a5b"/>
+<text x="81" y="315" font-size="20" fill="#0b2a5b">IGRA profiles</text>
+<circle cx="66" cy="338" r="4.5" fill="#0b2a5b"/>
+<text x="81" y="345" font-size="20" fill="#0b2a5b">seasonal climate</text>
+<circle cx="66" cy="368" r="4.5" fill="#0b2a5b"/>
+<text x="81" y="375" font-size="20" fill="#0b2a5b">DEM/land/slope</text>
+<circle cx="66" cy="398" r="4.5" fill="#0b2a5b"/>
+<text x="81" y="405" font-size="20" fill="#0b2a5b">без спутников</text>
+<defs><marker id="m27" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0e9f8b"/></marker></defs>
+<line x1="255" y1="330" x2="310" y2="330" stroke="#0e9f8b" stroke-width="5" marker-end="url(#m27)"/>
+<rect x="310" y="215" width="210" height="250" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="328" y="249" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">State</text>
+<circle cx="336" cy="278" r="4.5" fill="#0b2a5b"/>
+<text x="351" y="285" font-size="20" fill="#0b2a5b">Ncell × 37 × H</text>
+<circle cx="336" cy="308" r="4.5" fill="#0b2a5b"/>
+<text x="351" y="315" font-size="20" fill="#0b2a5b">давление сохраняется</text>
+<circle cx="336" cy="338" r="4.5" fill="#0b2a5b"/>
+<text x="351" y="345" font-size="20" fill="#0b2a5b">полная вертикаль</text>
+<circle cx="336" cy="368" r="4.5" fill="#0b2a5b"/>
+<text x="351" y="375" font-size="20" fill="#0b2a5b">без K=8</text>
+<defs><marker id="m39" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0e9f8b"/></marker></defs>
+<line x1="520" y1="330" x2="580" y2="330" stroke="#0e9f8b" stroke-width="5" marker-end="url(#m39)"/>
+<rect x="580" y="205" width="310" height="115" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="598" y="239" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Horizontal exchange</text>
+<circle cx="606" cy="268" r="4.5" fill="#0b2a5b"/>
+<text x="621" y="275" font-size="20" fill="#0b2a5b">wind + ∇Φ + Coriolis</text>
+<circle cx="606" cy="298" r="4.5" fill="#0b2a5b"/>
+<text x="621" y="305" font-size="20" fill="#0b2a5b">chunked edges на Mesh-8</text>
+<rect x="580" y="340" width="310" height="115" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="598" y="374" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Vertical coupling</text>
+<circle cx="606" cy="403" r="4.5" fill="#0b2a5b"/>
+<text x="621" y="410" font-size="20" fill="#0b2a5b">gate по dry potential temperature θ</text>
+<circle cx="606" cy="433" r="4.5" fill="#0b2a5b"/>
+<text x="621" y="440" font-size="20" fill="#0b2a5b">устойчивые слои смешиваются слабее</text>
+<rect x="580" y="475" width="310" height="100" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="598" y="509" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Residual tendency</text>
+<circle cx="606" cy="538" r="4.5" fill="#0b2a5b"/>
+<text x="621" y="545" font-size="20" fill="#0b2a5b">learned 3-hour state update</text>
+<defs><marker id="m57" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0e9f8b"/></marker></defs>
+<line x1="890" y1="385" x2="930" y2="385" stroke="#0e9f8b" stroke-width="5" marker-end="url(#m57)"/>
+<rect x="930" y="215" width="260" height="155" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="948" y="249" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Surface ingest</text>
+<circle cx="956" cy="278" r="4.5" fill="#0b2a5b"/>
+<text x="971" y="285" font-size="20" fill="#0b2a5b">masked station history</text>
+<circle cx="956" cy="308" r="4.5" fill="#0b2a5b"/>
+<text x="971" y="315" font-size="20" fill="#0b2a5b">surface_encoder + GRUCell</text>
+<circle cx="956" cy="338" r="4.5" fill="#0b2a5b"/>
+<text x="971" y="345" font-size="20" fill="#0b2a5b">vertical taper</text>
+<rect x="930" y="400" width="260" height="150" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="948" y="434" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Terrain context</text>
+<circle cx="956" cy="463" r="4.5" fill="#0b2a5b"/>
+<text x="971" y="470" font-size="20" fill="#0b2a5b">elevation</text>
+<circle cx="956" cy="493" r="4.5" fill="#0b2a5b"/>
+<text x="971" y="500" font-size="20" fill="#0b2a5b">land fraction</text>
+<circle cx="956" cy="523" r="4.5" fill="#0b2a5b"/>
+<text x="971" y="530" font-size="20" fill="#0b2a5b">slope</text>
+<defs><marker id="m75" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0e9f8b"/></marker></defs>
+<line x1="1190" y1="385" x2="1250" y2="385" stroke="#0e9f8b" stroke-width="5" marker-end="url(#m75)"/>
+<rect x="1250" y="215" width="300" height="180" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="1268" y="249" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Hydrostatic decoder</text>
+<circle cx="1276" cy="278" r="4.5" fill="#0b2a5b"/>
+<text x="1291" y="285" font-size="20" fill="#0b2a5b">T &gt; 0</text>
+<circle cx="1276" cy="308" r="4.5" fill="#0b2a5b"/>
+<text x="1291" y="315" font-size="20" fill="#0b2a5b">q &gt; 0</text>
+<circle cx="1276" cy="338" r="4.5" fill="#0b2a5b"/>
+<text x="1291" y="345" font-size="20" fill="#0b2a5b">Φ via hydrostatic projection</text>
+<circle cx="1276" cy="368" r="4.5" fill="#0b2a5b"/>
+<text x="1291" y="375" font-size="20" fill="#0b2a5b">Td ≤ T; P &gt; 0</text>
+<rect x="1250" y="425" width="300" height="125" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="1268" y="459" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Outputs</text>
+<circle cx="1276" cy="488" r="4.5" fill="#0b2a5b"/>
+<text x="1291" y="495" font-size="20" fill="#0b2a5b">37-level profiles</text>
+<circle cx="1276" cy="518" r="4.5" fill="#0b2a5b"/>
+<text x="1291" y="525" font-size="20" fill="#0b2a5b">station-native surface fields</text>
+<circle cx="1276" cy="548" r="4.5" fill="#0b2a5b"/>
+<text x="1291" y="555" font-size="20" fill="#0b2a5b">forecast physics downstream</text>
+<rect x="40" y="630" width="365" height="145" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="222" y="672" font-size="28" font-weight="700" fill="#0b2a5b" text-anchor="middle">Mesh-8 geometry</text>
+<text x="222" y="715" font-size="30" font-weight="700" fill="#0e9f8b" text-anchor="middle">655 362 ячейки</text>
+<text x="222" y="753" font-size="20" font-weight="400" fill="#5d6b82" text-anchor="middle">3 932 160 directed edges</text>
+<rect x="430" y="630" width="365" height="145" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="612" y="672" font-size="28" font-weight="700" fill="#0b2a5b" text-anchor="middle">Квалификация R10</text>
+<text x="612" y="715" font-size="30" font-weight="700" fill="#0e9f8b" text-anchor="middle">rollout = +3 ч</text>
+<text x="612" y="753" font-size="20" font-weight="400" fill="#5d6b82" text-anchor="middle">CUDA; hidden=4; edge chunks</text>
+<rect x="820" y="630" width="365" height="145" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="1002" y="672" font-size="28" font-weight="700" fill="#0b2a5b" text-anchor="middle">Research configs</text>
+<text x="1002" y="715" font-size="30" font-weight="700" fill="#6f42c1" text-anchor="middle">до 4000 эпох</text>
+<text x="1002" y="753" font-size="20" font-weight="400" fill="#5d6b82" text-anchor="middle">не означает 72 ч qualification</text>
+<rect x="1210" y="630" width="340" height="145" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="1380" y="672" font-size="28" font-weight="700" fill="#0b2a5b" text-anchor="middle">Физический статус</text>
+<text x="1380" y="715" font-size="27" font-weight="700" fill="#0e9f8b" text-anchor="middle">learned surrogate</text>
+<text x="1380" y="753" font-size="20" font-weight="400" fill="#5d6b82" text-anchor="middle">не finite-volume solver</text>
+<rect x="110" y="815" width="1380" height="48" rx="18" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="800" y="847" font-size="22" font-weight="700" fill="#0e9f8b" text-anchor="middle">Joint использует те же данные/геометрию/verification infrastructure, но не общий latent state и не общие веса с Adaptive.</text>
+</svg>

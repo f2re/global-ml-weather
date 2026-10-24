@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="1600" height="900" fill="white"/>
+<style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#0b2a5b}.t{font-weight:700}.s{fill:#5d6b82}.w{fill:white}.mon{font-family:DejaVu Sans Mono,monospace}.small{font-size:21px}.body{font-size:25px}.h2{font-size:31px;font-weight:700}.h1{font-size:47px;font-weight:700}.label{font-size:23px;font-weight:700}</style>
+<text x="42" y="60" class="h1">2. Источники данных и представление</text>
+<text x="44" y="98" class="s" font-size="28">что поступает в модели и как данные привязываются к общей геометрии</text>
+<rect x="25" y="125" width="500" height="52" rx="14" fill="#1677d2" stroke="#1677d2" stroke-width="0"/>
+<text x="45" y="161" class="w h2">Источники</text>
+<rect x="550" y="125" width="500" height="52" rx="14" fill="#0b2a5b" stroke="#0b2a5b" stroke-width="0"/>
+<text x="570" y="161" class="w h2">Контроль и привязка</text>
+<rect x="1075" y="125" width="500" height="52" rx="14" fill="#0e9f8b" stroke="#0e9f8b" stroke-width="0"/>
+<text x="1095" y="161" class="w h2">Представления</text>
+<rect x="42" y="190" width="465" height="106" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="60" y="224" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">GHCNh / станции</text>
+<circle cx="68" cy="253" r="4.5" fill="#0b2a5b"/>
+<text x="83" y="260" font-size="20" fill="#0b2a5b">T, Td, u, v, Ps, MSLP</text>
+<circle cx="68" cy="283" r="4.5" fill="#0b2a5b"/>
+<text x="83" y="290" font-size="20" fill="#0b2a5b">нерегулярные точки; 12-часовая история</text>
+<rect x="42" y="312" width="465" height="106" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="60" y="346" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">IGRA</text>
+<circle cx="68" cy="375" r="4.5" fill="#0b2a5b"/>
+<text x="83" y="382" font-size="20" fill="#0b2a5b">T, q, u, v, Φ по фактическим давлениям</text>
+<circle cx="68" cy="405" r="4.5" fill="#0b2a5b"/>
+<text x="83" y="412" font-size="20" fill="#0b2a5b">разреженные профили</text>
+<rect x="42" y="434" width="465" height="106" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="60" y="468" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Спутники</text>
+<circle cx="68" cy="497" r="4.5" fill="#0b2a5b"/>
+<text x="83" y="504" font-size="20" fill="#0b2a5b">многоканальные последовательности</text>
+<circle cx="68" cy="527" r="4.5" fill="#0b2a5b"/>
+<text x="83" y="534" font-size="20" fill="#0b2a5b">только ветвь Multimodal</text>
+<rect x="42" y="556" width="465" height="106" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="60" y="590" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Климатология</text>
+<circle cx="68" cy="619" r="4.5" fill="#0b2a5b"/>
+<text x="83" y="626" font-size="20" fill="#0b2a5b">месячный/сезонный внешний контекст</text>
+<circle cx="68" cy="649" r="4.5" fill="#0b2a5b"/>
+<text x="83" y="656" font-size="20" fill="#0b2a5b">не является наблюдением или целью</text>
+<rect x="42" y="678" width="465" height="106" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="60" y="712" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">DEM / статика</text>
+<circle cx="68" cy="741" r="4.5" fill="#0b2a5b"/>
+<text x="83" y="748" font-size="20" fill="#0b2a5b">elevation, land fraction, slope</text>
+<circle cx="68" cy="771" r="4.5" fill="#0b2a5b"/>
+<text x="83" y="778" font-size="20" fill="#0b2a5b">фиксированные признаки географии</text>
+<rect x="568" y="190" width="465" height="106" rx="16" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="586" y="224" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">1. Причинность</text>
+<circle cx="594" cy="253" r="4.5" fill="#0b2a5b"/>
+<text x="609" y="260" font-size="20" fill="#0b2a5b">только доступные к issue time данные</text>
+<rect x="568" y="312" width="465" height="106" rx="16" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="586" y="346" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">2. Единицы и QC</text>
+<circle cx="594" cy="375" r="4.5" fill="#0b2a5b"/>
+<text x="609" y="382" font-size="20" fill="#0b2a5b">маски, физические диапазоны, provenance</text>
+<rect x="568" y="434" width="465" height="106" rx="16" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="586" y="468" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">3. Нормализация</text>
+<circle cx="594" cy="497" r="4.5" fill="#0b2a5b"/>
+<text x="609" y="504" font-size="20" fill="#0b2a5b">атмосфера и спутниковые каналы раздельно</text>
+<rect x="568" y="556" width="465" height="106" rx="16" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="586" y="590" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">4. Пространственная привязка</text>
+<circle cx="594" cy="619" r="4.5" fill="#0b2a5b"/>
+<text x="609" y="626" font-size="20" fill="#0b2a5b">точки/пиксели → сферическая сетка</text>
+<rect x="568" y="678" width="465" height="106" rx="16" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="586" y="712" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">5. Геометрия</text>
+<circle cx="594" cy="741" r="4.5" fill="#0b2a5b"/>
+<text x="609" y="748" font-size="20" fill="#0b2a5b">двойственная икосаэдрическая; HEALPix — только сравнение</text>
+<rect x="1093" y="205" width="465" height="125" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="1111" y="239" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Глобальная сетка</text>
+<circle cx="1119" cy="268" r="4.5" fill="#0b2a5b"/>
+<text x="1134" y="275" font-size="20" fill="#0b2a5b">N ячеек на сфере</text>
+<circle cx="1119" cy="298" r="4.5" fill="#0b2a5b"/>
+<text x="1134" y="305" font-size="20" fill="#0b2a5b">Mesh-8: 655 362 ячейки</text>
+<rect x="1093" y="350" width="465" height="125" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="1111" y="384" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Профильные токены</text>
+<circle cx="1119" cy="413" r="4.5" fill="#0b2a5b"/>
+<text x="1134" y="420" font-size="20" fill="#0b2a5b">давление и переменная сохраняются</text>
+<circle cx="1119" cy="443" r="4.5" fill="#0b2a5b"/>
+<text x="1134" y="450" font-size="20" fill="#0b2a5b">маски не заполняют пропуски</text>
+<rect x="1093" y="495" width="465" height="125" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="1111" y="529" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Спутниковые признаки</text>
+<circle cx="1119" cy="558" r="4.5" fill="#0b2a5b"/>
+<text x="1134" y="565" font-size="20" fill="#0b2a5b">пространственно-временные карты признаков</text>
+<circle cx="1119" cy="588" r="4.5" fill="#0b2a5b"/>
+<text x="1134" y="595" font-size="20" fill="#0b2a5b">проекция на сферические ячейки</text>
+<rect x="1093" y="640" width="465" height="125" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="1111" y="674" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Статические признаки</text>
+<circle cx="1119" cy="703" r="4.5" fill="#0b2a5b"/>
+<text x="1134" y="710" font-size="20" fill="#0b2a5b">рельеф и тип поверхности</text>
+<circle cx="1119" cy="733" r="4.5" fill="#0b2a5b"/>
+<text x="1134" y="740" font-size="20" fill="#0b2a5b">не меняются от шага к шагу</text>
+<rect x="160" y="830" width="1280" height="48" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="800" y="862" font-size="23" font-weight="700" fill="#0b2a5b" text-anchor="middle">Важно: регулярная GRIB-сетка — формат выдачи, а не внутренняя геометрия модели.</text>
+</svg>

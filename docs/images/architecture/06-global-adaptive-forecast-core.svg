@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="1600" height="900" fill="white"/>
+<style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#0b2a5b}.t{font-weight:700}.s{fill:#5d6b82}.w{fill:white}.mon{font-family:DejaVu Sans Mono,monospace}.small{font-size:21px}.body{font-size:25px}.h2{font-size:31px;font-weight:700}.h1{font-size:47px;font-weight:700}.label{font-size:23px;font-weight:700}</style>
+<text x="42" y="60" class="h1">6. AdaptiveProcessor и декодирование</text>
+<text x="44" y="98" class="s" font-size="28">многоуровневый направленный граф и восстановление физических полей</text>
+<rect x="25" y="130" width="260" height="52" rx="14" fill="#1677d2" stroke="#1677d2" stroke-width="0"/>
+<text x="45" y="166" class="w h2">Вход</text>
+<rect x="310" y="130" width="880" height="52" rx="14" fill="#1677d2" stroke="#1677d2" stroke-width="0"/>
+<text x="330" y="166" class="w h2">AdaptiveProcessor</text>
+<rect x="1215" y="130" width="360" height="52" rx="14" fill="#6f42c1" stroke="#6f42c1" stroke-width="0"/>
+<text x="1235" y="166" class="w h2">Декодирование</text>
+<rect x="45" y="220" width="220" height="180" rx="16" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="63" y="254" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">K=8 latent</text>
+<circle cx="71" cy="283" r="4.5" fill="#0b2a5b"/>
+<text x="86" y="290" font-size="20" fill="#0b2a5b">Ncell × K × H</text>
+<circle cx="71" cy="313" r="4.5" fill="#0b2a5b"/>
+<text x="86" y="320" font-size="20" fill="#0b2a5b">compact column state</text>
+<defs><marker id="m17" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#1677d2"/></marker></defs>
+<line x1="265" y1="310" x2="330" y2="310" stroke="#1677d2" stroke-width="5" marker-end="url(#m17)"/>
+<rect x="335" y="215" width="255" height="160" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="353" y="249" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">DirectedGraph</text>
+<circle cx="361" cy="278" r="4.5" fill="#0b2a5b"/>
+<text x="376" y="285" font-size="20" fill="#0b2a5b">direction</text>
+<circle cx="361" cy="308" r="4.5" fill="#0b2a5b"/>
+<text x="376" y="315" font-size="20" fill="#0b2a5b">edge length</text>
+<circle cx="361" cy="338" r="4.5" fill="#0b2a5b"/>
+<text x="376" y="345" font-size="20" fill="#0b2a5b">Courant-like feature</text>
+<circle cx="361" cy="368" r="4.5" fill="#0b2a5b"/>
+<text x="376" y="375" font-size="20" fill="#0b2a5b">physical context</text>
+<defs><marker id="m29" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#1677d2"/></marker></defs>
+<line x1="590" y1="295" x2="635" y2="295" stroke="#1677d2" stroke-width="5" marker-end="url(#m29)"/>
+<rect x="640" y="215" width="245" height="160" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="658" y="249" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">AdaptiveBlock</text>
+<circle cx="666" cy="278" r="4.5" fill="#0b2a5b"/>
+<text x="681" y="285" font-size="20" fill="#0b2a5b">horizontal exchange</text>
+<circle cx="666" cy="308" r="4.5" fill="#0b2a5b"/>
+<text x="681" y="315" font-size="20" fill="#0b2a5b">vertical attention</text>
+<circle cx="666" cy="338" r="4.5" fill="#0b2a5b"/>
+<text x="681" y="345" font-size="20" fill="#0b2a5b">local MLP</text>
+<circle cx="666" cy="368" r="4.5" fill="#0b2a5b"/>
+<text x="681" y="375" font-size="20" fill="#0b2a5b">regime mixing</text>
+<defs><marker id="m41" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#1677d2"/></marker></defs>
+<line x1="885" y1="295" x2="930" y2="295" stroke="#1677d2" stroke-width="5" marker-end="url(#m41)"/>
+<rect x="935" y="215" width="225" height="160" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="953" y="249" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Hierarchy</text>
+<circle cx="961" cy="278" r="4.5" fill="#0b2a5b"/>
+<text x="976" y="285" font-size="20" fill="#0b2a5b">down: area pooling</text>
+<circle cx="961" cy="308" r="4.5" fill="#0b2a5b"/>
+<text x="976" y="315" font-size="20" fill="#0b2a5b">up: skip + refine</text>
+<circle cx="961" cy="338" r="4.5" fill="#0b2a5b"/>
+<text x="976" y="345" font-size="20" fill="#0b2a5b">local → coarse → local</text>
+<rect x="335" y="420" width="825" height="195" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="748" y="460" font-size="29" font-weight="700" fill="#0b2a5b" text-anchor="middle">Многоуровневая обработка</text>
+<circle cx="375" cy="503" r="4.5" fill="#0b2a5b"/>
+<text x="390" y="510" font-size="23" fill="#0b2a5b">геометрия сетки фиксирована</text>
+<circle cx="375" cy="540" r="4.5" fill="#0b2a5b"/>
+<text x="390" y="547" font-size="23" fill="#0b2a5b">адаптация относится к активациям и сообщениям</text>
+<circle cx="375" cy="577" r="4.5" fill="#0b2a5b"/>
+<text x="390" y="584" font-size="23" fill="#0b2a5b">это не online retraining и не численный solver</text>
+<defs><marker id="m59" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#6f42c1"/></marker></defs>
+<line x1="1160" y1="310" x2="1240" y2="310" stroke="#6f42c1" stroke-width="5" marker-end="url(#m59)"/>
+<rect x="1240" y="215" width="300" height="175" rx="16" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="1258" y="249" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Attention expansion</text>
+<circle cx="1266" cy="278" r="4.5" fill="#0b2a5b"/>
+<text x="1281" y="285" font-size="20" fill="#0b2a5b">K=8 → физическая вертикаль</text>
+<circle cx="1266" cy="308" r="4.5" fill="#0b2a5b"/>
+<text x="1281" y="315" font-size="20" fill="#0b2a5b">decoder heads</text>
+<circle cx="1266" cy="338" r="4.5" fill="#0b2a5b"/>
+<text x="1281" y="345" font-size="20" fill="#0b2a5b">37 уровней + surface</text>
+<rect x="45" y="655" width="470" height="150" rx="18" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="280" y="700" font-size="28" font-weight="700" fill="#1677d2" text-anchor="middle">Прогнозный шаг</text>
+<text x="280" y="742" font-size="34" font-weight="700" fill="#0b2a5b" text-anchor="middle">3 часа</text>
+<text x="280" y="780" font-size="20" font-weight="400" fill="#5d6b82" text-anchor="middle">до 72 ч в Adaptive-контуре</text>
+<rect x="565" y="655" width="470" height="150" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="800" y="700" font-size="28" font-weight="700" fill="#0b2a5b" text-anchor="middle">Профильные выходы</text>
+<text x="800" y="742" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="middle">T • q • u • v • Φ • ω</text>
+<text x="800" y="780" font-size="20" font-weight="400" fill="#5d6b82" text-anchor="middle">на 37 изобарических уровнях</text>
+<rect x="1085" y="655" width="455" height="150" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="1312" y="700" font-size="28" font-weight="700" fill="#0b2a5b" text-anchor="middle">Surface</text>
+<text x="1312" y="742" font-size="22" font-weight="700" fill="#0b2a5b" text-anchor="middle">T • Td • u • v • P • precipitation • cloud</text>
+<text x="1312" y="780" font-size="20" font-weight="400" fill="#5d6b82" text-anchor="middle">отдельные product masks</text>
+</svg>

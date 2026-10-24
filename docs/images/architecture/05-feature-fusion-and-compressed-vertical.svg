@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="1600" height="900" fill="white"/>
+<style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#0b2a5b}.t{font-weight:700}.s{fill:#5d6b82}.w{fill:white}.mon{font-family:DejaVu Sans Mono,monospace}.small{font-size:21px}.body{font-size:25px}.h2{font-size:31px;font-weight:700}.h1{font-size:47px;font-weight:700}.label{font-size:23px;font-weight:700}</style>
+<text x="42" y="60" class="h1">5. Fusion и сжатие вертикали (Adaptive)</text>
+<text x="44" y="98" class="s" font-size="28">как разнородные признаки превращаются в K=8 latent slots</text>
+<rect x="25" y="125" width="1550" height="52" rx="14" fill="#1677d2" stroke="#1677d2" stroke-width="0"/>
+<text x="45" y="161" class="w h2">Источники признаков</text>
+<rect x="55" y="205" width="330" height="110" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="73" y="239" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Sparse obs</text>
+<circle cx="81" cy="268" r="4.5" fill="#0b2a5b"/>
+<text x="96" y="275" font-size="20" fill="#0b2a5b">masked features на общей сетке</text>
+<defs><marker id="m11" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#1677d2"/></marker></defs>
+<line x1="220" y1="315" x2="800" y2="380" stroke="#1677d2" stroke-width="4" marker-end="url(#m11)"/>
+<rect x="430" y="205" width="330" height="110" rx="16" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="448" y="239" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Satellites</text>
+<circle cx="456" cy="268" r="4.5" fill="#0b2a5b"/>
+<text x="471" y="275" font-size="20" fill="#0b2a5b">masked features на общей сетке</text>
+<defs><marker id="m17" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#6f42c1"/></marker></defs>
+<line x1="595" y1="315" x2="800" y2="380" stroke="#6f42c1" stroke-width="4" marker-end="url(#m17)"/>
+<rect x="805" y="205" width="330" height="110" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="823" y="239" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Static fields</text>
+<circle cx="831" cy="268" r="4.5" fill="#0b2a5b"/>
+<text x="846" y="275" font-size="20" fill="#0b2a5b">masked features на общей сетке</text>
+<defs><marker id="m23" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#1677d2"/></marker></defs>
+<line x1="970" y1="315" x2="800" y2="380" stroke="#1677d2" stroke-width="4" marker-end="url(#m23)"/>
+<rect x="1180" y="205" width="330" height="110" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="1198" y="239" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Background / forcing</text>
+<circle cx="1206" cy="268" r="4.5" fill="#0b2a5b"/>
+<text x="1221" y="275" font-size="20" fill="#0b2a5b">masked features на общей сетке</text>
+<defs><marker id="m29" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#1677d2"/></marker></defs>
+<line x1="1345" y1="315" x2="800" y2="380" stroke="#1677d2" stroke-width="4" marker-end="url(#m29)"/>
+<rect x="300" y="385" width="1000" height="52" rx="14" fill="#0b2a5b" stroke="#0b2a5b" stroke-width="0"/>
+<text x="320" y="421" class="w h2">SourceFusion / analysis state</text>
+<rect x="330" y="460" width="940" height="105" rx="16" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="800" y="498" font-size="28" font-weight="700" fill="#0b2a5b" text-anchor="middle">Единое состояние до сжатия</text>
+<text x="800" y="540" font-size="22" font-weight="400" fill="#5d6b82" text-anchor="middle">физическая вертикаль: 37 изобар + surface; маски и provenance сохраняются upstream</text>
+<defs><marker id="m36" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#6f42c1"/></marker></defs>
+<line x1="800" y1="565" x2="800" y2="615" stroke="#6f42c1" stroke-width="5" marker-end="url(#m36)"/>
+<rect x="300" y="620" width="1000" height="52" rx="14" fill="#6f42c1" stroke="#6f42c1" stroke-width="0"/>
+<text x="320" y="656" class="w h2">Attention compression</text>
+<rect x="330" y="690" width="440" height="100" rx="16" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="550" y="730" font-size="27" font-weight="700" fill="#6f42c1" text-anchor="middle">Физическая вертикаль</text>
+<text x="550" y="768" font-size="22" font-weight="400" fill="#5d6b82" text-anchor="middle">37 уровней + поверхность</text>
+<defs><marker id="m43" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#6f42c1"/></marker></defs>
+<line x1="785" y1="740" x2="835" y2="740" stroke="#6f42c1" stroke-width="5" marker-end="url(#m43)"/>
+<rect x="850" y="690" width="420" height="100" rx="16" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="1060" y="730" font-size="28" font-weight="700" fill="#6f42c1" text-anchor="middle">K = 8 latent slots</text>
+<text x="1060" y="768" font-size="22" font-weight="400" fill="#5d6b82" text-anchor="middle">обучаемое компактное состояние</text>
+<rect x="35" y="820" width="1530" height="52" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="800" y="855" font-size="23" font-weight="700" fill="#0b2a5b" text-anchor="middle">K=8 — свойство Adaptive / Multimodal, а не обязательный этап Joint / Hydrostatic Mesh-8.</text>
+</svg>

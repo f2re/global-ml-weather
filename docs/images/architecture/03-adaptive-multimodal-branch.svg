@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="1600" height="900" fill="white"/>
+<style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#0b2a5b}.w{fill:white}.h1{font-size:47px;font-weight:700}.h2{font-size:28px;font-weight:700}.s{fill:#5d6b82}</style>
+<text x="42" y="60" class="h1">3. Ветка A — Adaptive / Multimodal</text>
+<text x="44" y="98" class="s" font-size="28">мультимодальный анализ со сжатой вертикалью K=8</text>
+<rect x="25" y="135" width="360" height="52" rx="14" fill="#1677d2" stroke="#1677d2" stroke-width="0"/>
+<text x="43" y="171" class="w h2">1. Входы и encoders</text>
+<rect x="410" y="135" width="360" height="52" rx="14" fill="#6f42c1" stroke="#6f42c1" stroke-width="0"/>
+<text x="428" y="171" class="w h2">2. Fusion + K=8</text>
+<rect x="795" y="135" width="360" height="52" rx="14" fill="#1677d2" stroke="#1677d2" stroke-width="0"/>
+<text x="813" y="171" class="w h2">3. AdaptiveProcessor</text>
+<rect x="1180" y="135" width="395" height="52" rx="14" fill="#1677d2" stroke="#1677d2" stroke-width="0"/>
+<text x="1198" y="171" class="w h2">4. Decode + output</text>
+<rect x="45" y="220" width="320" height="125" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="63" y="254" font-size="24" font-weight="700" fill="#1677d2" text-anchor="start">Наблюдения</text>
+<circle cx="69" cy="281" r="4" fill="#1677d2"/>
+<text x="84" y="288" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">станции / аэрология</text>
+<circle cx="69" cy="310" r="4" fill="#1677d2"/>
+<text x="84" y="317" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">спутники / статика</text>
+<rect x="45" y="370" width="320" height="220" rx="16" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="63" y="404" font-size="24" font-weight="700" fill="#6f42c1" text-anchor="start">Encoders</text>
+<circle cx="69" cy="431" r="4" fill="#6f42c1"/>
+<text x="84" y="438" font-size="20" font-weight="400" fill="#6f42c1" text-anchor="start">SparseObservationEncoder</text>
+<circle cx="69" cy="460" r="4" fill="#6f42c1"/>
+<text x="84" y="467" font-size="20" font-weight="400" fill="#6f42c1" text-anchor="start">SatelliteBank</text>
+<circle cx="69" cy="489" r="4" fill="#6f42c1"/>
+<text x="84" y="496" font-size="20" font-weight="400" fill="#6f42c1" text-anchor="start">ResU-Net + MaskedConvGRU</text>
+<circle cx="69" cy="518" r="4" fill="#6f42c1"/>
+<text x="84" y="525" font-size="20" font-weight="400" fill="#6f42c1" text-anchor="start">MW MLP + GRU</text>
+<defs><marker id="m29" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#1677d2"/></marker></defs>
+<line x1="365" y1="420" x2="430" y2="420" stroke="#1677d2" stroke-width="5" marker-end="url(#m29)"/>
+<rect x="430" y="220" width="320" height="145" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="448" y="254" font-size="24" font-weight="700" fill="#1677d2" text-anchor="start">SourceFusion</text>
+<circle cx="454" cy="281" r="4" fill="#1677d2"/>
+<text x="469" y="288" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">cross-attention</text>
+<circle cx="454" cy="310" r="4" fill="#1677d2"/>
+<text x="469" y="317" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">маски доступности</text>
+<circle cx="454" cy="339" r="4" fill="#1677d2"/>
+<text x="469" y="346" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">source-aware features</text>
+<rect x="430" y="400" width="320" height="190" rx="16" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="448" y="434" font-size="24" font-weight="700" fill="#6f42c1" text-anchor="start">Vertical compression</text>
+<circle cx="454" cy="461" r="4" fill="#6f42c1"/>
+<text x="469" y="468" font-size="20" font-weight="400" fill="#6f42c1" text-anchor="start">37 изобар + surface</text>
+<circle cx="454" cy="490" r="4" fill="#6f42c1"/>
+<text x="469" y="497" font-size="20" font-weight="400" fill="#6f42c1" text-anchor="start">attention compression</text>
+<circle cx="454" cy="519" r="4" fill="#6f42c1"/>
+<text x="469" y="526" font-size="20" font-weight="400" fill="#6f42c1" text-anchor="start">K=8 latent slots</text>
+<defs><marker id="m47" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#6f42c1"/></marker></defs>
+<line x1="750" y1="420" x2="815" y2="420" stroke="#6f42c1" stroke-width="5" marker-end="url(#m47)"/>
+<rect x="815" y="220" width="320" height="210" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="833" y="254" font-size="24" font-weight="700" fill="#1677d2" text-anchor="start">Multiscale graph</text>
+<circle cx="839" cy="281" r="4" fill="#1677d2"/>
+<text x="854" y="288" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">directed exchange</text>
+<circle cx="839" cy="310" r="4" fill="#1677d2"/>
+<text x="854" y="317" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">area-weighted down/up</text>
+<circle cx="839" cy="339" r="4" fill="#1677d2"/>
+<text x="854" y="346" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">local / vertical / graph mixing</text>
+<circle cx="839" cy="368" r="4" fill="#1677d2"/>
+<text x="854" y="375" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">state-conditioned gates</text>
+<rect x="815" y="460" width="320" height="130" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="833" y="494" font-size="24" font-weight="700" fill="#1677d2" text-anchor="start">Forecast step</text>
+<circle cx="839" cy="521" r="4" fill="#1677d2"/>
+<text x="854" y="528" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">3 часа</text>
+<circle cx="839" cy="550" r="4" fill="#1677d2"/>
+<text x="854" y="557" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">до 72 ч в Adaptive-контуре</text>
+<defs><marker id="m65" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#1677d2"/></marker></defs>
+<line x1="1135" y1="420" x2="1200" y2="420" stroke="#1677d2" stroke-width="5" marker-end="url(#m65)"/>
+<rect x="1200" y="220" width="335" height="150" rx="16" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="1218" y="254" font-size="24" font-weight="700" fill="#6f42c1" text-anchor="start">Attention expansion</text>
+<circle cx="1224" cy="281" r="4" fill="#6f42c1"/>
+<text x="1239" y="288" font-size="20" font-weight="400" fill="#6f42c1" text-anchor="start">K=8 → физическая вертикаль</text>
+<circle cx="1224" cy="310" r="4" fill="#6f42c1"/>
+<text x="1239" y="317" font-size="20" font-weight="400" fill="#6f42c1" text-anchor="start">decoder heads</text>
+<rect x="1200" y="400" width="335" height="190" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="1218" y="434" font-size="24" font-weight="700" fill="#1677d2" text-anchor="start">Outputs</text>
+<circle cx="1224" cy="461" r="4" fill="#1677d2"/>
+<text x="1239" y="468" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">37 levels: T,q,u,v,Φ,ω</text>
+<circle cx="1224" cy="490" r="4" fill="#1677d2"/>
+<text x="1239" y="497" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">surface fields</text>
+<circle cx="1224" cy="519" r="4" fill="#1677d2"/>
+<text x="1239" y="526" font-size="20" font-weight="400" fill="#1677d2" text-anchor="start">product masks</text>
+<rect x="45" y="650" width="1490" height="105" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="790" y="690" font-size="25" font-weight="700" fill="#0b2a5b" text-anchor="middle">K=8 — обучаемое компактное представление колонки, а не уровень давления.</text>
+<text x="790" y="730" font-size="22" font-weight="400" fill="#5d6b82" text-anchor="middle">Это свойство Adaptive / Multimodal; Joint / Hydrostatic Mesh-8 не обязан проходить через K=8.</text>
+<rect x="45" y="785" width="460" height="70" rx="18" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="275" y="829" font-size="23" font-weight="700" fill="#6f42c1" text-anchor="middle">Спутники: только Multimodal</text>
+<rect x="570" y="785" width="460" height="70" rx="18" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="800" y="829" font-size="23" font-weight="700" fill="#1677d2" text-anchor="middle">Шаг прогноза: 3 ч</text>
+<rect x="1095" y="785" width="440" height="70" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="1315" y="829" font-size="23" font-weight="700" fill="#0b2a5b" text-anchor="middle">Отдельные веса от Joint</text>
+</svg>

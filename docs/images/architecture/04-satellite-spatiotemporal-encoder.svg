@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+<rect width="1600" height="900" fill="white"/>
+<style>text{font-family:Arial,DejaVu Sans,sans-serif;fill:#0b2a5b}.t{font-weight:700}.s{fill:#5d6b82}.w{fill:white}.mon{font-family:DejaVu Sans Mono,monospace}.small{font-size:21px}.body{font-size:25px}.h2{font-size:31px;font-weight:700}.h1{font-size:47px;font-weight:700}.label{font-size:23px;font-weight:700}</style>
+<text x="42" y="60" class="h1">4. Спутниковый энкодер Multimodal</text>
+<text x="44" y="98" class="s" font-size="28">исполняемые ветви ResU-Net / MaskedConvGRU и СВЧ-MLP / GRU</text>
+<rect x="25" y="130" width="390" height="52" rx="14" fill="#1677d2" stroke="#1677d2" stroke-width="0"/>
+<text x="45" y="166" class="w h2">Кадры</text>
+<rect x="440" y="130" width="700" height="52" rx="14" fill="#1677d2" stroke="#1677d2" stroke-width="0"/>
+<text x="460" y="166" class="w h2">Кодирование</text>
+<rect x="1165" y="130" width="410" height="52" rx="14" fill="#0e9f8b" stroke="#0e9f8b" stroke-width="0"/>
+<text x="1185" y="166" class="w h2">Проекция и fusion</text>
+<rect x="45" y="210" width="350" height="155" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="63" y="244" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Оптический / ИК imager</text>
+<circle cx="71" cy="273" r="4.5" fill="#0b2a5b"/>
+<text x="86" y="280" font-size="20" fill="#0b2a5b">values + valid mask</text>
+<circle cx="71" cy="303" r="4.5" fill="#0b2a5b"/>
+<text x="86" y="310" font-size="20" fill="#0b2a5b">view/solar geometry</text>
+<circle cx="71" cy="333" r="4.5" fill="#0b2a5b"/>
+<text x="86" y="340" font-size="20" fill="#0b2a5b">observed time + age</text>
+<rect x="45" y="400" width="350" height="155" rx="16" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="63" y="434" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">СВЧ sequence</text>
+<circle cx="71" cy="463" r="4.5" fill="#0b2a5b"/>
+<text x="86" y="470" font-size="20" fill="#0b2a5b">каналы + маски</text>
+<circle cx="71" cy="493" r="4.5" fill="#0b2a5b"/>
+<text x="86" y="500" font-size="20" fill="#0b2a5b">footprint geometry</text>
+<circle cx="71" cy="523" r="4.5" fill="#0b2a5b"/>
+<text x="86" y="530" font-size="20" fill="#0b2a5b">явные spatial links</text>
+<rect x="465" y="210" width="310" height="155" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="483" y="244" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">ResU-Net</text>
+<circle cx="491" cy="273" r="4.5" fill="#0b2a5b"/>
+<text x="506" y="280" font-size="20" fill="#0b2a5b">3 downscale + 3 skip</text>
+<circle cx="491" cy="303" r="4.5" fill="#0b2a5b"/>
+<text x="506" y="310" font-size="20" fill="#0b2a5b">spatial features</text>
+<defs><marker id="m33" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#1677d2"/></marker></defs>
+<line x1="775" y1="285" x2="815" y2="285" stroke="#1677d2" stroke-width="5" marker-end="url(#m33)"/>
+<rect x="820" y="210" width="295" height="155" rx="16" fill="#eaf5ff" stroke="#1677d2" stroke-width="2"/>
+<text x="838" y="244" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">MaskedConvGRU</text>
+<circle cx="846" cy="273" r="4.5" fill="#0b2a5b"/>
+<text x="861" y="280" font-size="20" fill="#0b2a5b">skip keeps previous state</text>
+<circle cx="846" cy="303" r="4.5" fill="#0b2a5b"/>
+<text x="861" y="310" font-size="20" fill="#0b2a5b">delta time + age</text>
+<rect x="465" y="425" width="310" height="155" rx="16" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="483" y="459" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">Microwave MLP</text>
+<circle cx="491" cy="488" r="4.5" fill="#0b2a5b"/>
+<text x="506" y="495" font-size="20" fill="#0b2a5b">каналы + маски + геометрия</text>
+<circle cx="491" cy="518" r="4.5" fill="#0b2a5b"/>
+<text x="506" y="525" font-size="20" fill="#0b2a5b">no channel-index convolution</text>
+<defs><marker id="m47" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#6f42c1"/></marker></defs>
+<line x1="775" y1="500" x2="815" y2="500" stroke="#6f42c1" stroke-width="5" marker-end="url(#m47)"/>
+<rect x="820" y="425" width="295" height="155" rx="16" fill="#f2ecff" stroke="#6f42c1" stroke-width="2"/>
+<text x="838" y="459" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">GRUCell</text>
+<circle cx="846" cy="488" r="4.5" fill="#0b2a5b"/>
+<text x="861" y="495" font-size="20" fill="#0b2a5b">temporal memory</text>
+<circle cx="846" cy="518" r="4.5" fill="#0b2a5b"/>
+<text x="861" y="525" font-size="20" fill="#0b2a5b">causal sequence</text>
+<defs><marker id="m55" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0e9f8b"/></marker></defs>
+<line x1="1115" y1="285" x2="1190" y2="285" stroke="#0e9f8b" stroke-width="5" marker-end="url(#m55)"/>
+<defs><marker id="m57" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0e9f8b"/></marker></defs>
+<line x1="1115" y1="500" x2="1190" y2="500" stroke="#0e9f8b" stroke-width="5" marker-end="url(#m57)"/>
+<rect x="1190" y="210" width="350" height="155" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="1208" y="244" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">project_sequence</text>
+<circle cx="1216" cy="273" r="4.5" fill="#0b2a5b"/>
+<text x="1231" y="280" font-size="20" fill="#0b2a5b">features → dual</text>
+<circle cx="1216" cy="303" r="4.5" fill="#0b2a5b"/>
+<text x="1231" y="310" font-size="20" fill="#0b2a5b">icosahedral grid</text>
+<circle cx="1216" cy="333" r="4.5" fill="#0b2a5b"/>
+<text x="1231" y="340" font-size="20" fill="#0b2a5b">feature projection, not field remap</text>
+<rect x="1190" y="425" width="350" height="155" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="1208" y="459" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">SatelliteBank</text>
+<circle cx="1216" cy="488" r="4.5" fill="#0b2a5b"/>
+<text x="1231" y="495" font-size="20" fill="#0b2a5b">group by sensor</text>
+<circle cx="1216" cy="518" r="4.5" fill="#0b2a5b"/>
+<text x="1231" y="525" font-size="20" fill="#0b2a5b">age + sensor embedding</text>
+<defs><marker id="m73" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#0e9f8b"/></marker></defs>
+<line x1="1365" y1="580" x2="1365" y2="625" stroke="#0e9f8b" stroke-width="5" marker-end="url(#m73)"/>
+<rect x="1190" y="630" width="350" height="125" rx="16" fill="#eafaf7" stroke="#0e9f8b" stroke-width="2"/>
+<text x="1208" y="664" font-size="24" font-weight="700" fill="#0b2a5b" text-anchor="start">SourceFusion</text>
+<circle cx="1216" cy="693" r="4.5" fill="#0b2a5b"/>
+<text x="1231" y="700" font-size="20" fill="#0b2a5b">cross-attention with other sources</text>
+<rect x="45" y="655" width="1070" height="100" rx="18" fill="#f7fafc" stroke="#bdd7ef" stroke-width="2"/>
+<text x="580" y="696" font-size="27" font-weight="700" fill="#0b2a5b" text-anchor="middle">Критическое ограничение</text>
+<text x="580" y="735" font-size="23" font-weight="400" fill="#5d6b82" text-anchor="middle">спутниковая ветвь относится к Multimodal; Joint/Hydrostatic Mesh-8 её сейчас не использует</text>
+</svg>
