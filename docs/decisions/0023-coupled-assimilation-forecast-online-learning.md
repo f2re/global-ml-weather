@@ -8,7 +8,9 @@
 
 Повторный ingest GHCNh/IGRA в Joint при coupled-запуске запрещён, потому что эти же факты уже могли войти в Multimodal analysis.
 
-После поступления фактических наблюдений прогноз верифицируется. Train-роли могут образовать candidate update через существующие `CampaignStore` и `StepTrainer`; validation/test/guard никогда не используются для optimizer step. Candidate публикуется только после guard-проверки. Отклонённый candidate не создаёт checkpoint generation или training_event.
+После поступления фактических наблюдений прогноз верифицируется. Свежий sample допускается в online optimizer только после двух независимых immutable receipts: target SHA должен совпасть с зарегистрированной target-версией (`fact_admitted_verified`), а исходный прогноз этого же sample должен получить error receipt (`forecast_verified_sample`). Для этого canonical feedback path использует `VerifiedReplayPlanner`.
+
+Train-роли могут образовать candidate update через существующие `CampaignStore` и `StepTrainer`; validation/test/guard никогда не используются для optimizer step. Candidate публикуется только после guard-проверки. Отклонённый candidate не создаёт checkpoint generation или training_event.
 
 ## Темпы обучения
 

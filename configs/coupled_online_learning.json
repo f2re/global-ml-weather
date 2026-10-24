@@ -15,7 +15,8 @@
     "min_new_samples": 32,
     "max_new_samples": 128,
     "replay_per_new": 3,
-    "replay_pool_size": 4096
+    "replay_pool_size": 4096,
+    "verified_feedback_required": true
   },
   "promotion": {
     "primary_metric": "rmse",
@@ -35,6 +36,7 @@
   "notes": [
     "Initial online feedback is +3 h, matching the currently qualified Mesh-8 rollout; longer horizons require a new qualified campaign contract.",
     "A forecast is never trained against observations that were unavailable at its issue time.",
+    "Fresh online samples require both verified factual admission and a forecast-error receipt for the same sample.",
     "Validation, test and guard roles are immutable and are never scheduled for optimizer use.",
     "Rejected candidate updates are not published and do not create training_events.",
     "The configured thresholds are research defaults, not demonstrated meteorological optima."

@@ -10,7 +10,8 @@
 Запись фактического применения требует C2 и подтверждённой контрольной точки.
 
 Для `coupled-multimodal-hydrostatic-v1` используйте `CoupledCampaignStore` с явным immutable contract. Не запускайте coupled-модель внутри старого default `adaptive` campaign.
-Feedback после прихода факта выполняйте через `ReplayPlanner` и `GuardedOnlineLearner`. `validation`, `test` и `guard` не допускаются к optimizer step. Отклонённый кандидат не должен публиковать generation или `training_event`.
+Для фактического online loop используйте `admit_registered_fact`, `verify_sample_forecast` и `VerifiedReplayPlanner`: свежий sample допускается к optimizer только после совпадения SHA зарегистрированной target-версии и отдельного error receipt для того же sample.
+`validation`, `test` и `guard` не допускаются к optimizer step. Отклонённый кандидат не должен публиковать generation или `training_event`.
 Fast loop по умолчанию изменяет bridge и прогнозную динамику/головы. Размораживание Multimodal encoder/fusion относится к отдельному slow loop с собственной guard-проверкой.
 
 Сохраняйте идемпотентность, неизменность истории, внешние ключи и транзакции.
