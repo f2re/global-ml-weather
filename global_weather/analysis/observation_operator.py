@@ -22,6 +22,57 @@ from ..vertical import PROFILE_VARIABLES, PROFILE_UNITS, SURFACE_VARIABLES, SURF
 UTC = timezone.utc
 SURFACE_ELEVATION_TOLERANCE_M = 1e-3
 
+G_STD = 9.80665          # м/с^2
+R_DRY = 287.058          # Дж/(кг·К)
+LAPSE_RATE_T = 0.0065    # К/м (стандартный вертикальный градиент температуры)
+LAPSE_RATE_TD = 0.0020   # К/м (градиент для точки росы)
+MAX_DZ_METERS = 2500.0   # защита от выбросов в метаданных высоты станции
+
+
+def apply_orographic_station_reduction(
+    interp_surface: dict[str, torch.Tensor],
+    mesh_elevation_m: torch.Tensor,
+    station_elevation_m: torch.Tensor,
+    station_mask: torch.Tensor | None = None,
+) -> dict[str, torch.Tensor]:
+    """Приводит интерполированные с сетки Mesh-8 приземные поля к фактической высоте станции.
+
+    interp_surface: словарь тензоров на точках станций:
+        - 'station_temperature' (K)
+        - 'station_dew_point' (K)
+        - 'station_pressure' (Pa)
+    mesh_elevation_m: интерполированная с тех же k=3 ячеек высота рельефа сетки (м)
+    station_elevation_m: фактическая высота станции из метаданных WMO/GHCNh (м)
+    """
+    valid_elev = torch.isfinite(station_elevation_m) & torch.isfinite(mesh_elevation_m)
+    if station_mask is not None:
+        valid_elev = valid_elev & station_mask
+
+    dz = torch.where(
+        valid_elev,
+        torch.clamp(station_elevation_m - mesh_elevation_m, -MAX_DZ_METERS, MAX_DZ_METERS),
+        torch.zeros_like(mesh_elevation_m),
+    )
+
+    t_mesh = interp_surface["station_temperature"]
+    td_mesh = interp_surface["station_dew_point"]
+    p_mesh = interp_surface["station_pressure"]
+
+    # 1. Адиабатическая поправка приземной температуры и точки росы
+    t_station = t_mesh - LAPSE_RATE_T * dz
+    td_station = torch.minimum(td_mesh - LAPSE_RATE_TD * dz, t_station)
+
+    # 2. Барометрическая формула (гипсометрическое уравнение) со средней температурой слоя
+    t_layer_mean = torch.clamp(0.5 * (t_mesh + t_station), min=200.0, max=330.0)
+    exponent = -(G_STD * dz) / (R_DRY * t_layer_mean)
+    p_station = p_mesh * torch.exp(exponent)
+
+    out = dict(interp_surface)
+    out["station_temperature"] = t_station
+    out["station_dew_point"] = td_station
+    out["station_pressure"] = p_station
+    return out
+
 
 def _surface_reference(frame, record, cells):
     """Require matching measured and model references; perform no height correction.

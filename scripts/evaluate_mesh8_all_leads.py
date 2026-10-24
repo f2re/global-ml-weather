@@ -40,6 +40,20 @@ from global_weather.vertical import PRESSURE_HPA, PROFILE_UNITS
 
 
 LEAD_HOURS = [3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57, 60, 63, 66, 69, 72]
+MIN_PROFILE_COUNT = 25
+
+
+def compute_skill_score(model_metric: dict, baseline_metric: dict, min_count: int = 1) -> float | None:
+    if (
+        model_metric.get("count", 0) < min_count
+        or baseline_metric.get("count", 0) < min_count
+        or model_metric.get("rmse") is None
+        or baseline_metric.get("rmse") is None
+        or baseline_metric["rmse"] <= 1e-12
+    ):
+        return None
+    return float(1.0 - (model_metric["rmse"] / baseline_metric["rmse"]))
+
 
 
 def load_model_checkpoint(dataset_path, training, device='auto'):
@@ -329,12 +343,9 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
             c_res['unit'] = UNITS[var_idx]
             surf_clim[name] = c_res
 
-            m_rmse = m_res['rmse']
-            p_rmse = p_res['rmse']
-            c_rmse = c_res['rmse']
             surf_skill[name] = {
-                'vs_persistence': float(1.0 - m_rmse / p_rmse) if m_rmse and p_rmse and p_rmse > 0 else None,
-                'vs_climatology': float(1.0 - m_rmse / c_rmse) if m_rmse and c_rmse and c_rmse > 0 else None,
+                'vs_persistence': compute_skill_score(m_res, p_res, min_count=10),
+                'vs_climatology': compute_skill_score(m_res, c_res, min_count=10),
             }
 
         prof_model = {}
@@ -344,22 +355,22 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
         for var_idx, name in enumerate(VARIABLES):
             m_res = compute_metrics(lead_prof_diffs[lead_h]['model'][var_idx])
             m_res['unit'] = PROFILE_UNITS[var_idx]
+            m_res['sufficient_sample'] = bool(m_res['count'] >= MIN_PROFILE_COUNT)
             prof_model[name] = m_res
 
             p_res = compute_metrics(lead_prof_diffs[lead_h]['persistence'][var_idx])
             p_res['unit'] = PROFILE_UNITS[var_idx]
+            p_res['sufficient_sample'] = bool(p_res['count'] >= MIN_PROFILE_COUNT)
             prof_pers[name] = p_res
 
             c_res = compute_metrics(lead_prof_diffs[lead_h]['climatology'][var_idx])
             c_res['unit'] = PROFILE_UNITS[var_idx]
+            c_res['sufficient_sample'] = bool(c_res['count'] >= MIN_PROFILE_COUNT)
             prof_clim[name] = c_res
 
-            m_rmse = m_res['rmse']
-            p_rmse = p_res['rmse']
-            c_rmse = c_res['rmse']
             prof_skill[name] = {
-                'vs_persistence': float(1.0 - m_rmse / p_rmse) if m_rmse and p_rmse and p_rmse > 0 else None,
-                'vs_climatology': float(1.0 - m_rmse / c_rmse) if m_rmse and c_rmse and c_rmse > 0 else None,
+                'vs_persistence': compute_skill_score(m_res, p_res, min_count=MIN_PROFILE_COUNT),
+                'vs_climatology': compute_skill_score(m_res, c_res, min_count=MIN_PROFILE_COUNT),
             }
 
         leads_output[str(lead_h)] = {

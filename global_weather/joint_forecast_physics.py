@@ -15,6 +15,7 @@ not hard conservation claims.
 from __future__ import annotations
 
 import numpy as np
+import torch
 
 from .grid import EARTH_RADIUS_M, latlon
 from .profile_physics import EPSILON, RD, pressure_layer_thickness
@@ -340,3 +341,69 @@ def apply_forecast_physics(profiles, profile_mask, grid, elevation_m, *, copy=No
                         'geopotential/geometric DEM datum approximation'],
     }
     return profiles, mask, metadata
+
+
+def enforce_global_mass_and_tendency_bounds(
+    surface_next: dict[str, torch.Tensor],
+    surface_prev: dict[str, torch.Tensor],
+    surface_init: dict[str, torch.Tensor],
+    cell_area_weights: torch.Tensor | None = None,
+    max_dp_3h_pa: float = 1800.0,   # макс. физическая тенденция давления за 3ч (18 гПа)
+    max_dt_3h_k: float = 12.0,      # макс. скачок температуры за 3ч (12 К)
+) -> dict[str, torch.Tensor]:
+    """Стабилизирует шаг авторегрессии:
+
+    1) Ограничивает экстремальные нефизичные скачки за один 3-часовой шаг.
+    2) Проецирует поле P_sfc и MSLP на многообразие постоянной глобальной массы атмосферы.
+    3) Гарантирует физическое условие T_d <= T.
+    """
+    out = dict(surface_next)
+
+    # Веса площади ячеек икосаэдрической сетки (на Mesh-8 площади почти равны, но точный вес лучше)
+    if cell_area_weights is None:
+        w = torch.ones_like(out["station_pressure"])
+    else:
+        w = cell_area_weights.to(out["station_pressure"].device)
+    w = w / w.sum(dim=-1, keepdim=True).clamp_min(1e-12)
+
+    # 1. Ограничение 3-часовой барической и термической тенденции
+    dp = torch.clamp(
+        out["station_pressure"] - surface_prev["station_pressure"],
+        min=-max_dp_3h_pa,
+        max=max_dp_3h_pa,
+    )
+    p_bounded = surface_prev["station_pressure"] + dp
+
+    # 2. Сохранение глобальной средней массы атмосферы относительно t=0
+    p_init_mean = (surface_init["station_pressure"] * w).sum(dim=-1, keepdim=True)
+    p_curr_mean = (p_bounded * w).sum(dim=-1, keepdim=True)
+    p_conserved = p_bounded - (p_curr_mean - p_init_mean)
+    out["station_pressure"] = torch.clamp(p_conserved, min=45000.0, max=108500.0)
+
+    if "station_mean_sea_level_pressure" in out and "station_mean_sea_level_pressure" in surface_init:
+        dmslp = torch.clamp(
+            out["station_mean_sea_level_pressure"] - surface_prev["station_mean_sea_level_pressure"],
+            min=-max_dp_3h_pa,
+            max=max_dp_3h_pa,
+        )
+        mslp_bounded = surface_prev["station_mean_sea_level_pressure"] + dmslp
+        mslp_init_mean = (surface_init["station_mean_sea_level_pressure"] * w).sum(dim=-1, keepdim=True)
+        mslp_curr_mean = (mslp_bounded * w).sum(dim=-1, keepdim=True)
+        out["station_mean_sea_level_pressure"] = torch.clamp(
+            mslp_bounded - (mslp_curr_mean - mslp_init_mean),
+            min=87000.0,
+            max=108500.0,
+        )
+
+    # 3. Ограничение скачка температуры и защита дефицита точки росы (Td <= T)
+    dt = torch.clamp(
+        out["station_temperature"] - surface_prev["station_temperature"],
+        min=-max_dt_3h_k,
+        max=max_dt_3h_k,
+    )
+    t_next = surface_prev["station_temperature"] + dt
+    out["station_temperature"] = t_next
+    out["station_dew_point"] = torch.minimum(out["station_dew_point"], t_next)
+
+    return out
+

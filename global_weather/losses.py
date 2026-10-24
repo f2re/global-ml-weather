@@ -126,3 +126,38 @@ class SatelliteAssimilationLoss(nn.Module):
             "loss_amv": loss_amv,
             "loss_varbc_reg": loss_varbc,
         }
+
+
+def masked_rmse_with_bias_penalty(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    mask: torch.Tensor,
+    scale: float = 1.0,
+    bias_weight: float = 0.25,
+    min_effective_count: int = 30,
+) -> torch.Tensor:
+    """Вычисляет нормированный Huber/MSE лосс + явный штраф за систематическое смещение (bias).
+
+    Для разреженных высотных профилей (TEMP) плавно зануляет вес на сроках,
+    где число наблюдений меньше порога репрезентативности min_effective_count.
+    """
+    valid = mask.bool() & torch.isfinite(pred) & torch.isfinite(target)
+    count = valid.sum()
+    if count == 0:
+        return pred.sum() * 0.0
+
+    diff = torch.where(valid, (pred - target) / scale, torch.zeros_like(pred))
+
+    # Среднеквадратичная компонента (с мягким сглаживанием выбросов Huber beta=3.0)
+    huber = F.smooth_l1_loss(diff, torch.zeros_like(diff), reduction="none", beta=3.0)
+    mse_term = (huber * valid).sum() / count.clamp_min(1)
+
+    # Явный штраф за систематический сдвиг (убирает Warm Bias +2.5K и провал давления)
+    mean_bias = diff.sum() / count.clamp_min(1)
+    bias_term = mean_bias.pow(2)
+
+    # Защита от градиентного взрыва на промежуточных сроках с 1-5 радиозондами
+    sample_confidence = torch.clamp(count.float() / float(min_effective_count), min=0.0, max=1.0)
+
+    return sample_confidence * (mse_term + bias_weight * bias_term)
+
