@@ -86,6 +86,30 @@ def test_mesh8_research_training_admits_multi_epoch_within_budget():
     assert cfg_2000['rollout_hours'] == 3
     assert cfg_2000['hidden'] == 4
 
+    multi_4000 = json.loads((ROOT / 'configs' / 'joint_observation_training_mesh8_4000.json').read_text())
+    cfg_4000 = _config(multi_4000)
+    assert cfg_4000['experiment_role'] == 'mesh8_research_training'
+    assert cfg_4000['epochs'] == 4000
+    assert cfg_4000['mesh_level'] == 8
+    assert cfg_4000['rollout_hours'] == 3
+    assert cfg_4000['hidden'] == 4
+
+
+def test_prune_intermediate_checkpoints_preserves_milestones_and_metrics(tmp_path):
+    from global_weather.joint_observation_training import _prune_intermediate_checkpoints
+    for e in (2000, 2001, 2002, 2050):
+        d = tmp_path / f'epoch-{e:04d}'
+        d.mkdir()
+        (d / 'state.pt').write_bytes(b'weights')
+        (d / 'metrics.json').write_text('{}')
+    _prune_intermediate_checkpoints(tmp_path, current_epoch=2003, best_epoch=2000)
+    assert (tmp_path / 'epoch-2000' / 'state.pt').exists()
+    assert not (tmp_path / 'epoch-2001' / 'state.pt').exists()
+    assert (tmp_path / 'epoch-2001' / 'metrics.json').exists()
+    assert not (tmp_path / 'epoch-2002' / 'state.pt').exists()
+    assert (tmp_path / 'epoch-2002' / 'metrics.json').exists()
+    assert (tmp_path / 'epoch-2050' / 'state.pt').exists()
+
 
 def test_historical_mesh2_config_remains_loadable():
     historical = json.loads((ROOT / 'configs' / 'joint_observation_training_mesh2_pilot.json').read_text())

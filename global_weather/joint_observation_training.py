@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import random
+import shutil
 import time
 
 import numpy as np
@@ -55,7 +56,7 @@ def _profile_config(value):
             raise ValueError('Invalid joint training bound: '+key)
     if not 0 <= result['mesh_level'] <= 8:
         raise ValueError('Joint mesh_level must be within 0..8.')
-    if result['epochs'] > 2000 or result['max_records_per_window'] > 20000:
+    if result['epochs'] > 4000 or result['max_records_per_window'] > 20000:
         raise ValueError('Joint experiment exceeds reviewed research limits.')
     for key in ('learning_rate', 'weight_decay', 'gradient_clip'):
         number = result[key]
@@ -109,8 +110,8 @@ def _config(value):
                 raise ValueError('Mesh-8 research training maintains the 3-hour rollout from measured VRAM budget.')
             if result['hidden'] > 4:
                 raise ValueError('Mesh-8 research training hidden width is capped at 4 from measured 24 GiB VRAM.')
-            if result['epochs'] < 1 or result['epochs'] > 2000:
-                raise ValueError('Mesh-8 research training epochs must be within 1..2000.')
+            if result['epochs'] < 1 or result['epochs'] > 4000:
+                raise ValueError('Mesh-8 research training epochs must be within 1..4000.')
             if result['max_train_issues'] > 9 or result['max_validation_issues'] > 13 or result['max_test_issues'] > 13:
                 raise ValueError('Mesh-8 research training issue counts exceed supported dataset issues.')
         else:
@@ -278,6 +279,21 @@ def _verify(dataset, norms, norm_path, norm_hash, model, station_path, station_h
             raise ValueError('Immutable terrain changed.')
 
 
+def _prune_intermediate_checkpoints(output, current_epoch, best_epoch):
+    """Retain milestone checkpoints (every 50 epochs), latest, and best; prune intermediate state.pt to preserve disk space."""
+    free_bytes = shutil.disk_usage(output).free
+    low_disk = free_bytes < 30 * (1024**3)
+    start_k = 1 if low_disk else 2001
+    for k in range(start_k, current_epoch):
+        if k % 50 != 0 and k != best_epoch:
+            state_file = output / f'epoch-{k:04d}' / 'state.pt'
+            if state_file.is_file():
+                try:
+                    state_file.unlink()
+                except OSError:
+                    pass
+
+
 def train(dataset_path, norm_path, output, config, climatology_path=None, static_path=None):
     config = _config(config)
     dataset = JointObservationDataset(dataset_path)
@@ -435,6 +451,7 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             if improved:
                 best_ref = ref
                 save(output/'best.json', best_ref)
+            _prune_intermediate_checkpoints(output, epoch, best_epoch)
             print(json.dumps(metrics), flush=True)
             if stale >= config['patience']: break
         save(output/'complete.json', {'identity': expected, 'status': STATUS, 'best_epoch': best_epoch,
