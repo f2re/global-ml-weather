@@ -70,6 +70,39 @@ class NearestSphericalOperator(nn.Module):
         return field[self.cells]
 
 
+class StationMicroclimateCorrector(nn.Module):
+    """Устраняет подсеточную ошибку репрезентативности (28 км ячейка -> конкретный датчик WMO).
+
+    Использует статические топографические признаки станции, вектор идентичности станции
+    и фазу локального солнечного времени (для учёта долинных инверсий и бризов).
+    """
+    def __init__(self, num_stations: int = 15000, embed_dim: int = 8, terrain_feat_dim: int = 6):
+        super().__init__()
+        self.station_embed = nn.Embedding(num_stations, embed_dim)
+        nn.init.zeros_(self.station_embed.weight)
+
+        in_dim = embed_dim + terrain_feat_dim + 4 + 2  # embed + terrain + (T, Td, u, v) + (sin_lt, cos_lt)
+        self.mlp = nn.Sequential(
+            nn.Linear(in_dim, 32),
+            nn.SiLU(),
+            nn.Linear(32, 4),  # поправки (dT, dTd, du, dv)
+        )
+        nn.init.zeros_(self.mlp[-1].weight)
+        nn.init.zeros_(self.mlp[-1].bias)
+
+    def forward(
+        self,
+        station_idx: torch.Tensor,
+        terrain_feats: torch.Tensor,
+        local_solar_time_rad: torch.Tensor,
+        interp_surface_norm: torch.Tensor,
+    ) -> torch.Tensor:
+        emb = self.station_embed(station_idx.clamp(0, self.station_embed.num_embeddings - 1))
+        solar_enc = torch.stack([torch.sin(local_solar_time_rad), torch.cos(local_solar_time_rad)], dim=-1)
+        x = torch.cat([emb, terrain_feats, interp_surface_norm, solar_enc], dim=-1)
+        return 3.0 * torch.tanh(self.mlp(x) / 3.0)
+
+
 class StationObservationModel(nn.Module):
     """12-hour causal ingestion followed by 24 autonomous three-hour updates.
 

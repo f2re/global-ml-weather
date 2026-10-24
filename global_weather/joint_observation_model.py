@@ -20,6 +20,31 @@ from .profile_hydrostatic_model import HydrostaticFlowProfileModel
 ARCHITECTURE = 'joint-measured-physical-v2'
 
 
+class ClimatologyAnomalyStepper(nn.Module):
+    """Предсказывает эволюцию синоптической аномалии поверх суточно-сезонного
+
+    климатического хода x_clim(t). Гарантирует отсутствие климатического дрейфа.
+    """
+    def __init__(self, num_vars: int, init_half_life_hours: float = 36.0, dt_hours: float = 3.0):
+        super().__init__()
+        self.dt_hours = dt_hours
+        init_alpha = 0.5 ** (dt_hours / init_half_life_hours)
+        init_logit = float(np.log(init_alpha / (1.0 - init_alpha)))
+        self.alpha_logit = nn.Parameter(torch.full((1, 1, num_vars), init_logit))
+
+    def forward(
+        self,
+        state_prev: torch.Tensor,
+        clim_prev: torch.Tensor,
+        clim_next: torch.Tensor,
+        gnn_delta_anom: torch.Tensor,
+    ) -> torch.Tensor:
+        alpha = torch.sigmoid(self.alpha_logit)
+        anom_prev = state_prev - clim_prev
+        anom_next = alpha * anom_prev + gnn_delta_anom
+        return clim_next + anom_next
+
+
 class JointObservationModel(HydrostaticFlowProfileModel):
     def __init__(self, grid, normalization, station_coordinates, surface_scales,
                  surface_monthly, hidden=64, climatology=None, static=None):

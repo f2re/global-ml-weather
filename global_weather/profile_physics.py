@@ -148,13 +148,14 @@ def screen_humidity(records, policy: PhysicalPolicy):
                       'interpretation': 'gross_error_screen_not_sensor_failure_attribution'}
 
 
-def hydrostatic_projection(temperature, humidity, raw_geopotential, pressure_pa, weights=None):
-    """Hydrostatic least-squares projection with a freely learned column anchor.
+def hydrostatic_projection(temperature, humidity, raw_geopotential, pressure_pa, weights=None,
+                           surface_geopotential=None):
+    """Hydrostatic least-squares projection with a freely learned column anchor or fixed terrain anchor.
 
     Phi[k+1]-Phi[k] = Rd * mean(Tv[k:k+2]) * log(p[k]/p[k+1]).
-    The additive anchor minimizes weighted squared distance to raw Phi. It is
-    NOT pinned to zero, ISA, climatology or a guessed surface height. Condensate
-    loading is not represented. Supported full columns are required by caller.
+    When surface_geopotential is provided (e.g. g * z_mesh), the column base is
+    pinned to physical terrain. Condensate loading is not represented.
+    Supported full columns are required by caller.
     """
     if temperature.shape != humidity.shape or temperature.shape != raw_geopotential.shape:
         raise ValueError('T, q and geopotential shapes must match.')
@@ -169,11 +170,51 @@ def hydrostatic_projection(temperature, humidity, raw_geopotential, pressure_pa,
     tv = temperature * (1 + (1/EPSILON - 1)*humidity)
     thickness = RD * .5*(tv[..., :-1]+tv[..., 1:]) * torch.log(pressure_pa[:-1]/pressure_pa[1:])
     g = torch.cat((torch.zeros_like(temperature[..., :1]), thickness.cumsum(-1)), -1)
-    w = torch.ones_like(pressure_pa) if weights is None else weights
-    if w.shape != pressure_pa.shape or not bool(torch.isfinite(w).all()) or not bool((w > 0).all()):
-        raise ValueError('Finite positive projection metric required.')
-    anchor = ((raw_geopotential-g)*w).sum(-1, keepdim=True)/w.sum()
+    if surface_geopotential is not None:
+        anchor = surface_geopotential.unsqueeze(-1) if surface_geopotential.dim() == g.dim() - 1 else surface_geopotential
+    else:
+        w = torch.ones_like(pressure_pa) if weights is None else weights
+        if w.shape != pressure_pa.shape or not bool(torch.isfinite(w).all()) or not bool((w > 0).all()):
+            raise ValueError('Finite positive projection metric required.')
+        anchor = ((raw_geopotential-g)*w).sum(-1, keepdim=True)/w.sum()
     return anchor + g
+
+
+def integrate_hydrostatic_geopotential(
+    t_profile: torch.Tensor,
+    q_profile: torch.Tensor,
+    pressure_levels_pa: torch.Tensor,
+    p_surface_pa: torch.Tensor,
+    t_surface_k: torch.Tensor,
+    z_surface_m: torch.Tensor,
+) -> torch.Tensor:
+    """Вычисляет геопотенциал Phi [B, N_cells, 37] (м^2/с^2) строго по барометрической формуле.
+
+    Снижает риск расхождения знаков смещения между T и Phi и связывает
+    градиенты радиозондовых измерений геопотенциала напрямую с температурой всех слоёв ниже.
+    """
+    g_std = 9.80665
+    r_dry = 287.058
+    q_safe = torch.clamp(q_profile, min=0.0, max=0.05)
+    tv_profile = t_profile * (1.0 + (1.0 / EPSILON - 1.0) * q_safe)
+
+    p_lev = pressure_levels_pa.view(*([1] * (t_profile.dim() - 1)), -1).to(t_profile.device)
+    phi_sfc = g_std * z_surface_m.unsqueeze(-1)
+
+    # 1. Геопотенциал первого уровня сетки относительно поверхности
+    tv_sfc = t_surface_k.unsqueeze(-1) * (1.0 + (1.0 / EPSILON - 1.0) * q_safe[..., :1])
+    tv_mean_0 = 0.5 * (tv_sfc + tv_profile[..., :1])
+    dlnp_0 = torch.log(p_surface_pa.unsqueeze(-1).clamp_min(100.0) / p_lev[..., :1])
+    phi_0 = phi_sfc + r_dry * tv_mean_0 * dlnp_0
+
+    # 2. Послойное интегрирование между 37 изобарическими уровнями вверх
+    tv_layer = 0.5 * (tv_profile[..., :-1] + tv_profile[..., 1:])
+    dlnp_layers = torch.log(p_lev[..., :-1] / p_lev[..., 1:])
+    dphi_layers = r_dry * tv_layer * dlnp_layers
+
+    phi_upper = phi_0 + torch.cumsum(dphi_layers, dim=-1)
+    return torch.cat([phi_0, phi_upper], dim=-1)
+
 
 
 def physical_objective(model, frames, targets, policy: PhysicalPolicy):

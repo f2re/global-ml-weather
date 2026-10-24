@@ -19,7 +19,7 @@ from torch.nn import functional as F
 from .grid import EARTH_RADIUS_M
 from .observations import utc
 from .profile_model_v2 import PressureProfileModel
-from .profile_physics import hydrostatic_projection, RD
+from .profile_physics import hydrostatic_projection, integrate_hydrostatic_geopotential, RD
 from .profile_seasonal_model import SeasonalProfileModel
 
 ARCHITECTURE = 'hydrostatic-primitive-conditioned-v2'
