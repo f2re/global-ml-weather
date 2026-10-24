@@ -1,0 +1,44 @@
+{
+  "schema": "coupled-online-learning-1",
+  "architecture": "coupled-multimodal-hydrostatic-v1",
+  "analysis_role": "causal_multimodal_assimilation",
+  "forecast_role": "hydrostatic_37_level_autonomous_forecast",
+  "bridge": {
+    "heads": 4,
+    "max_residual": 0.25
+  },
+  "fast_update": {
+    "scope": "fast",
+    "learning_rate": 1e-05,
+    "weight_decay": 0.0001,
+    "gradient_clip": 0.5,
+    "min_new_samples": 32,
+    "max_new_samples": 128,
+    "replay_per_new": 3,
+    "replay_pool_size": 4096
+  },
+  "promotion": {
+    "primary_metric": "rmse",
+    "min_relative_improvement": 0.001,
+    "guardrail_metrics": [
+      "rmse",
+      "mae",
+      "abs_bias"
+    ],
+    "max_relative_guardrail_degradation": 0.005
+  },
+  "slow_update": {
+    "scope": "slow",
+    "after_accepted_fast_steps": 24,
+    "requires_separate_guard_evaluation": true
+  },
+  "notes": [
+    "Initial online feedback is +3 h, matching the currently qualified Mesh-8 rollout; longer horizons require a new qualified campaign contract.",
+    "A forecast is never trained against observations that were unavailable at its issue time.",
+    "Validation, test and guard roles are immutable and are never scheduled for optimizer use.",
+    "Rejected candidate updates are not published and do not create training_events.",
+    "The configured thresholds are research defaults, not demonstrated meteorological optima."
+  ],
+  "horizon_hours": 3,
+  "planned_extension_hours": 72
+}

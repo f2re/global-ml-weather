@@ -8,6 +8,7 @@
 - `JointObservationModel` / `HydrostaticFlowProfileModel` работают непосредственно на 37 физических уровнях давления и не обязаны проходить через `K=8`.
 - Спутниковые энкодеры относятся к Multimodal-ветви. Текущий Joint/Mesh-8 эксперимент спутниковые параметры не использует.
 - Ветки используют общую инфраструктуру данных, сферической геометрии, нормировки, provenance, checkpoints, verification и выдачи, но не общий latent state и не общие веса.
+- Экспериментальный `coupled-multimodal-hydrostatic-v1` теперь может использовать Multimodal только как analysis/assimilation encoder и передавать его latent state через обучаемый bridge в 37-уровневый Hydrostatic forecast core. Старые checkpoints ветвей от этого не становятся совместимыми.
 
 > Изображения являются техническими схемами текущего кода. Для спорных деталей источником истины остаются код, конфигурации экспериментов и решения в `docs/decisions/`.
 
@@ -75,7 +76,7 @@ Joint-контур строится как `PressureProfileModel → Hydrostatic
 
 ## Как связаны две ветви
 
-Сейчас ветки параллельны:
+Базовые ветви остаются параллельными:
 
 ```text
 общие данные / геометрия / нормы / provenance
@@ -90,11 +91,14 @@ Joint-контур строится как `PressureProfileModel → Hydrostatic
         verification / issuance infrastructure
 ```
 
-Выход Adaptive не подаётся автоматически в Joint, и checkpoint одной ветви несовместим с другой. Возможное будущее объединение — использовать Multimodal как learned analysis/assimilation encoder и передавать физически декодированное 37-уровневое состояние в HydrostaticFlow processor. Это направление, а не текущий canonical graph.
+Старые standalone checkpoints ветвей остаются несовместимыми. Однако opt-in контур `coupled-multimodal-hydrostatic-v1` уже реализует вычислительную связь: Multimodal выполняет причинный анализ, `LatentToPressureBridge` переводит `K` latent slots в 37-уровневое скрытое состояние, а HydrostaticFlow выполняет автономный прогноз. Это экспериментальный граф и он не заменяет standalone R10 без отдельного paired-обучения и квалификации.
+
+[Связанный анализ и guarded online feedback](COUPLED_ONLINE_LEARNING.md).
 
 ## Связанные документы
 
 - [Точная архитектура и ограничения](ARCHITECTURE.md)
+- [Связанный анализ и самообучение](COUPLED_ONLINE_LEARNING.md)
 - [Контракт данных](DATA_CONTRACT.md)
 - [Многомодальная модель](MULTIMODAL.md)
 - [Обучение](TRAINING.md)

@@ -109,11 +109,23 @@ Hard-domain projection обеспечивает `T > 0`, `Td > 0`, `Td ≤ T`, `
 
 ## 3. Как связаны ветки
 
-Ветки связаны общей инфраструктурой, а не последовательным вычислительным графом.
+Исторические Adaptive/Multimodal и Joint/Hydrostatic checkpoints остаются самостоятельными и несовместимыми. Для нового эксперимента добавлен opt-in контур `coupled-multimodal-hydrostatic-v1`, который соединяет их функционально, но не смешивает старые веса автоматически.
 
-Сейчас нет автоматической цепочки `Adaptive → Joint` или `Joint → Adaptive`. Нет общего latent state и нет совместимых checkpoints.
+```text
+causal observations + satellites
+  → MultimodalWeatherModel.analysis_state
+  → [Ncell, K=8, H_analysis]
+  → LatentToPressureBridge
+  → [Ncell, 37, H_forecast]
+  → HydrostaticFlowProfileModel / Joint surface head
+  → autonomous forecast
+```
 
-Общие элементы:
+В coupled-контуре Multimodal/Adaptive выполняет только анализ и ассимиляцию. Его собственный прогнозный decoder не используется. Joint/Hydrostatic выполняет прогнозную динамику, но его прежний ingest GHCNh/IGRA/станций не вызывается повторно. Это принципиально: одно наблюдение не должно дважды менять начальное состояние.
+
+`LatentToPressureBridge` использует 37 запросов гидростатического фонового состояния и cross-attention к `K` латентным позициям анализа. Поправка ограничена gate-механизмом; свежий bridge инициализируется как no-op. Поэтому coupled checkpoint требует отдельного paired-обучения и не наследует skill старого R10 только от факта подключения модулей.
+
+Общие элементы всех контуров:
 
 - семейство сферических сеток и grid fingerprints;
 - причинный отбор наблюдений;
@@ -123,7 +135,13 @@ Hard-domain projection обеспечивает `T > 0`, `Td > 0`, `Td ≤ T`, `
 - training/evaluation infrastructure;
 - NPZ/GRIB2 issuance и telemetry.
 
-Перспективное, но ещё не canonical направление — использовать Multimodal как learned analysis/assimilation encoder, декодировать его состояние в 37 физических уровней и передавать это состояние в HydrostaticFlow processor.
+### Guarded online feedback
+
+Для последующего самообучения используется существующая постоянная программа `CampaignStore` + `StepTrainer`. После поступления фактических целей система считает ошибку, формирует train-use только для неизменяемой роли `train`, смешивает свежие случаи с историческим replay и выполняет кандидатный optimizer step. Кандидат публикуется только если фиксированный validation/guard-набор улучшает primary metric и не нарушает guardrail-метрики. Отклонённый update не получает checkpoint generation и не создаёт `training_event`; следующая сессия восстанавливает последнюю авторитетную модель.
+
+Быстрый loop обновляет bridge и прогнозную динамику/головы. Более редкий slow loop может размораживать Multimodal encoder/fusion после отдельной проверки. Текущий безопасный старт feedback соответствует квалифицированному Mesh-8 горизонту `+3 ч`; переход к `+72 ч` требует нового campaign contract и отдельной квалификации.
+
+[Связанный анализ и online feedback](COUPLED_ONLINE_LEARNING.md) · [решение 0023](decisions/0023-coupled-assimilation-forecast-online-learning.md).
 
 ## 4. Сетка и физические признаки
 
