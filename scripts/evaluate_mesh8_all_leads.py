@@ -69,6 +69,15 @@ def load_model_checkpoint(dataset_path, training, device='auto'):
     return model, dataset
 
 
+def frame_to_cpu(frame):
+    for attr in dir(frame):
+        if not attr.startswith('__'):
+            val = getattr(frame, attr, None)
+            if isinstance(val, torch.Tensor):
+                setattr(frame, attr, val.cpu())
+    return frame
+
+
 def streaming_forward(model, inputs, issue, surface_inputs, surface_mask, horizon_hours=72):
     """Memory-efficient streaming forward pass moving large profile grids to host RAM."""
     model._surface_history = (surface_inputs, surface_mask)
@@ -117,22 +126,12 @@ def streaming_forward(model, inputs, issue, surface_inputs, surface_mask, horizo
                 state = flat_state.reshape(n, 37, d)
 
         # Initial frame (lead 0) offloaded to CPU
-        f0 = model._decode(state, issue, 0)
-        f0.profiles = f0.profiles.cpu()
-        f0.profile_variable_mask = f0.profile_variable_mask.cpu()
-        if hasattr(f0, 'native_physical') and f0.native_physical is not None:
-            f0.native_physical = f0.native_physical.cpu()
-        frames = [f0]
+        frames = [frame_to_cpu(model._decode(state, issue, 0))]
 
         # Autoregressive rollout: advance on GPU, move decoded fields to CPU
         for lead in range(3, horizon_hours + 1, 3):
             state = model._advance_state(state, pressure, issue, lead)
-            f = model._decode(state, issue, lead)
-            f.profiles = f.profiles.cpu()
-            f.profile_variable_mask = f.profile_variable_mask.cpu()
-            if hasattr(f, 'native_physical') and f.native_physical is not None:
-                f.native_physical = f.native_physical.cpu()
-            frames.append(f)
+            frames.append(frame_to_cpu(model._decode(state, issue, lead)))
 
         return frames
     finally:
@@ -265,10 +264,11 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
 
         # 2. Profile evaluation across all leads
         pers_prof_map = get_persistence_profiles(inputs)
-        clim_prof_frames = {
-            lead_h: get_climate_profile_frame(model, issue + timedelta(hours=lead_h))
-            for lead_h in leads
-        }
+        clim_prof_frames = [
+            get_climate_profile_frame(model, issue + timedelta(hours=h))
+            for h in [0] + leads
+        ]
+        clim_prof_frames = [f for f in clim_prof_frames if f is not None]
 
         # Keep model.pressure_pa on CPU for CPU observation operator
         pressure_pa_cpu = model.pressure_pa.cpu()
@@ -284,10 +284,10 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
             step_bin = int(np.clip(round(dt_hours / 3.0), 1, num_steps))
             lead_h = leads[step_bin - 1]
 
-            result = _prediction(frames, model.grid, record, pressure_pa_cpu, horizon_hours)
+            result = _prediction(frames, model.grid, record, pressure_pa_cpu, 3)
             if result is None:
                 continue
-            prediction_val = float(result[0].numpy())
+            prediction_val = float(result[0])
             obs_val = float(record['value'])
             lead_prof_diffs[lead_h]['model'][var_idx].append(prediction_val - obs_val)
 
@@ -297,11 +297,10 @@ def evaluate_split(model, dataset, config, split: str, device: torch.device, hor
                 lead_prof_diffs[lead_h]['persistence'][var_idx].append(pers_prof_map[pers_key] - obs_val)
 
             # Climatology
-            clim_f = clim_prof_frames.get(lead_h)
-            if clim_f is not None:
-                res_clim = _prediction([clim_f], model.grid, record, pressure_pa_cpu, horizon_hours)
+            if clim_prof_frames:
+                res_clim = _prediction(clim_prof_frames, model.grid, record, pressure_pa_cpu, 3)
                 if res_clim is not None:
-                    clim_val = float(res_clim[0].numpy())
+                    clim_val = float(res_clim[0])
                     lead_prof_diffs[lead_h]['climatology'][var_idx].append(clim_val - obs_val)
 
         # Garbage collect frame memory before next issue
