@@ -16,11 +16,13 @@
   "max_test_issues": 2,
   "max_records_per_window": 2000,
   "surface_weight": 0.5,
+  "surface_bias_weight": 0.5,
   "rollout_hours": 3,
   "edge_chunk_size": 32768,
   "physical_policy": {
     "architecture": "hydrostatic_flow",
     "humidity_min_pressure_pa": 30000.0,
+    "bias_weight": 0.5,
     "memory_budget_mib": 22528
   }
 }

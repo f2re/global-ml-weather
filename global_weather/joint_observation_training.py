@@ -365,11 +365,16 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             ref = json.loads((output/'latest.json').read_text())
             previous = torch.load(checkpoint_path(output, ref), map_location=device, weights_only=True)
             prev_ident = previous['identity']
-            schedule_keys = {'epochs', 'patience', 'experiment_id'}
+            schedule_keys = {'epochs', 'patience', 'experiment_id', 'surface_bias_weight'}
+            prev_cfg = dict(prev_ident.get('config', {}))
+            exp_cfg = dict(expected.get('config', {}))
+            prev_pol = {k: v for k, v in prev_cfg.get('physical_policy', {}).items() if k != 'bias_weight'}
+            exp_pol = {k: v for k, v in exp_cfg.get('physical_policy', {}).items() if k != 'bias_weight'}
+            shared_keys = (set(prev_cfg) | set(exp_cfg)) - schedule_keys - {'physical_policy'}
             config_match = (
-                set(prev_ident.get('config', {})) == set(expected.get('config', {})) and
-                all(v == expected['config'][k] for k, v in prev_ident.get('config', {}).items() if k not in schedule_keys) and
-                expected['config']['epochs'] >= previous['epoch']
+                all(prev_cfg.get(k) == exp_cfg.get(k) for k in shared_keys) and
+                prev_pol == exp_pol and
+                exp_cfg.get('epochs', 0) >= previous['epoch']
             )
             ignore_keys = {'commit', 'config', 'joint_source_sha256', 'experiment_id'} if config_match else set()
             ident_match = (
