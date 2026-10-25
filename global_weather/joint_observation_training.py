@@ -75,6 +75,9 @@ def _config(value):
     surface_weight = value.pop('surface_weight', .5)
     if type(surface_weight) not in (int, float) or not 0 < surface_weight < 1:
         raise ValueError('Both measured branches require a positive loss weight.')
+    surface_bias_weight = value.pop('surface_bias_weight', 0.5)
+    if type(surface_bias_weight) not in (int, float) or not 0 <= surface_bias_weight <= 10:
+        raise ValueError('surface_bias_weight must be a finite float >= 0.')
     rollout_hours = value.pop('rollout_hours', 72)
     edge_chunk_size = value.pop('edge_chunk_size', None)
     experiment_id = value.pop('experiment_id', 'joint-measured-observation-pilot')
@@ -122,7 +125,8 @@ def _config(value):
             raise ValueError('Mesh-8 requires at least a declared 16 GiB activation budget.')
         if grid_cell_count(8) != 655_362 or not 27.0 < nominal_area_scale_km(8) < 29.0:
             raise RuntimeError('Mesh-8 geometry contract differs from the reviewed experiment.')
-    result.update(surface_weight=float(surface_weight), physical_policy=policy.payload(),
+    result.update(surface_weight=float(surface_weight), surface_bias_weight=float(surface_bias_weight),
+                  physical_policy=policy.payload(),
                   rollout_hours=rollout_hours, edge_chunk_size=edge_chunk_size,
                   experiment_id=experiment_id, experiment_role=experiment_role,
                   scientific_acceptance=False)
@@ -155,6 +159,7 @@ def _build(dataset, norms, config, station_climate, device, climate_path=None, s
                   'terrain_slope': loaded['slope'], 'fingerprint': loaded['static_sha256']}
     model = JointObservationModel(grid, norms, dataset.surface.latlon, station_climate.std,
                                   station_climate.monthly, config['hidden'], climate, static).to(device)
+    model.surface_bias_weight = config.get('surface_bias_weight', 0.5)
     model.static_path = static_path
     model.static_fingerprint = static.get('fingerprint') if static is not None else None
     model.physical_policy = parse_policy(config['physical_policy'])
@@ -226,7 +231,8 @@ def _batch(model, dataset, issue, limit, rollout_hours):
     ym = torch.as_tensor(target_mask, dtype=torch.bool, device=model.xyz.device)
     months = torch.tensor([f.valid_time.month-1 for f in frames[1:]], device=model.xyz.device)
     anomalies = (y-model.surface_monthly[months])/model.surface_scales
-    surface_loss = anomaly_loss(prediction, anomalies, ym)
+    bias_weight = getattr(model, 'surface_bias_weight', 0.5)
+    surface_loss = anomaly_loss(prediction, anomalies, ym, bias_weight=bias_weight)
     return profile_loss, surface_loss, counts, targets, ym.sum((0, 1)).cpu().numpy(), report
 
 
@@ -294,7 +300,7 @@ def _prune_intermediate_checkpoints(output, current_epoch, best_epoch):
                     pass
 
 
-def train(dataset_path, norm_path, output, config, climatology_path=None, static_path=None):
+def train(dataset_path, norm_path, output, config, climatology_path=None, static_path=None, warm_start=None):
     config = _config(config)
     dataset = JointObservationDataset(dataset_path)
     if dataset.horizon_hours != 72:
@@ -384,6 +390,11 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             checkpoint_path(output, best_ref)
             save(output/'best.json', best_ref)
             trained = np.asarray(previous['trained_variable_mask'], dtype=bool)
+        elif warm_start is not None and Path(warm_start).is_file():
+            warm_state = torch.load(warm_start, map_location=device, weights_only=True)
+            _state(model, warm_state['model'])
+            if 'trained_variable_mask' in warm_state:
+                trained = np.asarray(warm_state['trained_variable_mask'], dtype=bool)
         cached_train_issues = supported_issues(dataset, 'train', config['max_train_issues'], config['rollout_hours'])
         cached_val_issues = supported_issues(dataset, 'validation', config['max_validation_issues'], config['rollout_hours'])
         if not cached_train_issues or not cached_val_issues:
@@ -505,8 +516,10 @@ def main(argv=None):
     parser.add_argument('--dataset', required=True); parser.add_argument('--norm', required=True)
     parser.add_argument('--output', required=True); parser.add_argument('--config', required=True)
     parser.add_argument('--climatology'); parser.add_argument('--static')
+    parser.add_argument('--warm-start')
     args = parser.parse_args(argv)
-    train(args.dataset, args.norm, args.output, json.loads(Path(args.config).read_text()), args.climatology, args.static)
+    train(args.dataset, args.norm, args.output, json.loads(Path(args.config).read_text()),
+          args.climatology, args.static, warm_start=args.warm_start)
 
 
 if __name__ == '__main__': main()

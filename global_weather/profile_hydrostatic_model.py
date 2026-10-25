@@ -111,8 +111,11 @@ class HydrostaticFlowProfileModel(PressureProfileModel):
         q = self.std[:, 1]*F.softplus(z[..., 1] + self.humidity_bias)
         if not bool((q < 1).all()):
             raise FloatingPointError('Humidity mass fraction left its physical domain.')
+        surf_phi = getattr(self, 'terrain_elevation_m', None)
+        surface_geopotential = (surf_phi * 9.80665) if surf_phi is not None else None
         phi = hydrostatic_projection(t, q, frame.profiles[..., 4], self.pressure_pa,
-                                     self.std[:, 4].reciprocal().square())
+                                     self.std[:, 4].reciprocal().square(),
+                                     surface_geopotential=surface_geopotential)
         frame.profiles = torch.stack((t, q, frame.profiles[..., 2], frame.profiles[..., 3],
                                       phi, frame.profiles[..., 5]), -1)
         return frame

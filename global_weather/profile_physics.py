@@ -29,6 +29,7 @@ class PhysicalPolicy:
     maximum_water_relative_humidity: float = 2.0
     humidity_min_pressure_pa: float = 0.0  # optional sensitivity test, NOT default
     variable_weights: tuple = (1., 1., 1., 1., 1.)
+    bias_weight: float = 0.0
     memory_budget_mib: int = 8192
 
     def __post_init__(self):
@@ -38,7 +39,8 @@ class PhysicalPolicy:
             raise ValueError('humidity_qc must be Boolean.')
         for name, lo, hi in (('huber_delta', .1, 100.),
                              ('maximum_water_relative_humidity', 1., 5.),
-                             ('humidity_min_pressure_pa', 0., 100000.)):
+                             ('humidity_min_pressure_pa', 0., 100000.),
+                             ('bias_weight', 0., 100.)):
             x = getattr(self, name)
             if type(x) not in (float, int) or not math.isfinite(x) or not lo <= x <= hi:
                 raise ValueError('Invalid physical policy parameter: ' + name)
@@ -227,6 +229,7 @@ def physical_objective(model, frames, targets, policy: PhysicalPolicy):
     from .profile_training import VARIABLES
     from .analysis.observation_operator import _prediction
     bins, counts, physical_errors = defaultdict(list), [0]*5, defaultdict(list)
+    residuals_by_var = defaultdict(list)
     linear_counts = [0]*5
     p = np.array(PRESSURE_HPA, dtype=float)*100
     dp = pressure_layer_thickness(p)
@@ -253,6 +256,7 @@ def physical_objective(model, frames, targets, policy: PhysicalPolicy):
         if model.normalization.humidity_transform != 'identity':
             raise ValueError('R9 requires unchanged physical GraphCast normalization.')
         residual = (predicted-truth)/math.hypot(float(std), float(error))
+        residuals_by_var[v].append(residual)
         absolute = residual.abs()
         delta = policy.huber_delta
         clipped = absolute.clamp_max(delta)
@@ -279,7 +283,13 @@ def physical_objective(model, frames, targets, policy: PhysicalPolicy):
     for (v, lead), values in leads.items():
         denominator = sum(w for _, w in values)
         variables[v].append(sum(x*w for x, w in values)/denominator)
-    terms = {v: torch.stack(x).mean() for v, x in variables.items()}
+    terms = {}
+    for v, x in variables.items():
+        base_term = torch.stack(x).mean()
+        if policy.bias_weight > 0.0 and v in residuals_by_var and residuals_by_var[v]:
+            mean_bias = torch.stack(residuals_by_var[v]).mean()
+            base_term = base_term + policy.bias_weight * mean_bias.pow(2)
+        terms[v] = base_term
     loss = sum(policy.variable_weights[v]*x for v, x in terms.items())/sum(policy.variable_weights[v] for v in terms)
     report = {'schema': 'profile-physical-objective-report-1', 'accepted': counts,
               'profile_pressure_lead_groups': len(bins),

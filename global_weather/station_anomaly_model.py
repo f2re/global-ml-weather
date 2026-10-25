@@ -128,8 +128,17 @@ class StationAnomalyModel(nn.Module):
         )
 
 
-def anomaly_loss(predicted_anomalies: Tensor, target_anomalies: Tensor, mask: Tensor) -> Tensor:
-    """Equal-variable Huber loss evaluated strictly between predicted and true departures from climate."""
+def anomaly_loss(
+    predicted_anomalies: Tensor,
+    target_anomalies: Tensor,
+    mask: Tensor,
+    bias_weight: float = 0.0,
+) -> Tensor:
+    """Equal-variable Huber loss evaluated strictly between predicted and true departures from climate.
+
+    When bias_weight > 0, an explicit quadratic penalty on mean domain bias is added to prevent
+    unphysical thermal and baric drift.
+    """
     if (predicted_anomalies.shape != target_anomalies.shape
             or predicted_anomalies.shape != mask.shape
             or predicted_anomalies.shape[-1] != 6
@@ -142,9 +151,15 @@ def anomaly_loss(predicted_anomalies: Tensor, target_anomalies: Tensor, mask: Te
     if not bool(torch.isfinite(predicted_anomalies[mask]).all()):
         raise ValueError("Nonfinite predicted anomaly.")
 
-    components = [
-        F.huber_loss(predicted_anomalies[..., v][mask[..., v]], target_anomalies[..., v][mask[..., v]])
-        for v in range(6)
-        if bool(mask[..., v].any())
-    ]
+    components = []
+    for v in range(6):
+        mv = mask[..., v]
+        if bool(mv.any()):
+            pred_v = predicted_anomalies[..., v][mv]
+            targ_v = target_anomalies[..., v][mv]
+            h_loss = F.huber_loss(pred_v, targ_v)
+            if bias_weight > 0.0:
+                mean_bias = (pred_v - targ_v).mean()
+                h_loss = h_loss + bias_weight * mean_bias.pow(2)
+            components.append(h_loss)
     return torch.stack(components).mean()
