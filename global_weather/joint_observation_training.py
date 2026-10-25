@@ -390,10 +390,21 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             best_ref = ref if best_epoch == completed else previous.get('best_ref')
             if best_ref is None and (output/'best.json').exists():
                 best_ref = json.loads((output/'best.json').read_text())
+            if exp_cfg.get('epochs', 0) > completed and (
+                stale >= exp_cfg.get('patience', config['patience'])
+                or prev_cfg.get('surface_bias_weight', 0.0) != exp_cfg.get('surface_bias_weight', 0.0)
+                or prev_pol != exp_pol
+            ):
+                best = float('inf')
+                best_epoch = completed
+                best_ref = ref
+                stale = 0
             if best_ref is None or best_ref['epoch'] != best_epoch:
                 raise ValueError('Joint C2 best checkpoint reference is missing or inconsistent.')
             checkpoint_path(output, best_ref)
             save(output/'best.json', best_ref)
+            if (output/'complete.json').exists() and exp_cfg.get('epochs', 0) > completed:
+                (output/'complete.json').unlink()
             trained = np.asarray(previous['trained_variable_mask'], dtype=bool)
         elif warm_start is not None and Path(warm_start).is_file():
             warm_state = torch.load(warm_start, map_location=device, weights_only=True)

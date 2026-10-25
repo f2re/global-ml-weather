@@ -57,12 +57,23 @@ def compute_skill_score(model_metric: dict, baseline_metric: dict, min_count: in
 
 
 
-def load_model_checkpoint(dataset_path, training, device='auto'):
+def load_model_checkpoint(dataset_path, training, device='auto', checkpoint_ref='latest'):
     training = Path(training)
-    completion = json.loads((training / 'complete.json').read_text())
-    ref = json.loads((training / 'best.json').read_text())
+    if (training / f'{checkpoint_ref}.json').exists():
+        ref = json.loads((training / f'{checkpoint_ref}.json').read_text())
+    elif (training / 'latest.json').exists():
+        ref = json.loads((training / 'latest.json').read_text())
+    elif (training / 'best.json').exists():
+        ref = json.loads((training / 'best.json').read_text())
+    else:
+        raise ValueError(f'No checkpoint reference found in {training}')
+
     state = torch.load(checkpoint_path(training, ref), map_location='cpu', weights_only=True)
-    expected = completion['identity']
+    if (training / 'complete.json').exists():
+        completion = json.loads((training / 'complete.json').read_text())
+        expected = completion['identity']
+    else:
+        expected = state['identity']
 
     dataset = JointObservationDataset(dataset_path)
     norms = load_normalization(json.loads(Path(expected['norm_path']).read_text()))
@@ -417,13 +428,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dataset', required=True, help="Path to observation dataset directory")
     parser.add_argument('--training', default="outputs/mesh8-500-run/training", help="Training root with checkpoints")
+    parser.add_argument('--checkpoint', default="latest", help="Checkpoint reference ('latest', 'best')")
     parser.add_argument('--output', default="outputs/mesh8-500-run/evaluation_metrics_all_leads_epoch2000.json")
     parser.add_argument('--device', default="cuda:0")
     parser.add_argument('--horizon-hours', type=int, default=72)
     args = parser.parse_args(argv)
 
-    print(f"Loading checkpoint from {args.training} on device {args.device}...")
-    model, dataset = load_model_checkpoint(args.dataset, args.training, device=args.device)
+    print(f"Loading checkpoint ({args.checkpoint}) from {args.training} on device {args.device}...")
+    model, dataset = load_model_checkpoint(args.dataset, args.training, device=args.device, checkpoint_ref=args.checkpoint)
     config = model.frozen_metadata['config']
     epoch = model.frozen_metadata['epoch']
     sha256_hash = model.frozen_checkpoint_sha256
