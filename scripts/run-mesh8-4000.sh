@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap '' HUP
 cd "$(dirname "$0")/.."
 mkdir -p outputs
 exec >> outputs/mesh8-500-training.log 2>&1
