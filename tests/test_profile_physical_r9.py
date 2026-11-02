@@ -248,3 +248,48 @@ def test_r9_measured_pipeline_contract_resume_and_physical_diagnostics(tmp_path,
     state=a['model'];state['std']=state['std'].clone()+1
     model,_=training.load_frozen(dataset,tmp_path/'whole')
     with pytest.raises(ValueError,match='fixed normalization'):training._load_fixed_state(model,state)
+
+
+def test_mesh8_convergence_enhancements():
+    from global_weather.profile_physics import compute_vertical_quadrature_weights
+    p = np.array(PRESSURE_HPA, dtype=float) * 100
+    w_mass = pressure_layer_thickness(p) / pressure_layer_thickness(p).sum()
+    w_hybrid = compute_vertical_quadrature_weights(p, 'hybrid')
+    idx_strato = [i for i, val in enumerate(PRESSURE_HPA) if val <= 30]
+    assert w_mass[idx_strato].sum() < 0.05
+    assert w_hybrid[0, idx_strato].sum() > 0.20
+    assert w_hybrid[4, idx_strato].sum() > 0.20
+    assert np.allclose(w_hybrid.sum(axis=-1), 1.0)
+
+    from global_weather.analysis import observation_operator
+    class DummyNorm:
+        humidity_transform = 'identity'
+        def at(self, *a): return 0.0, 1.0, True
+    dummy_model = SimpleNamespace(normalization=DummyNorm(), grid=None, pressure_pa=torch.tensor(PRESSURE_HPA)*100)
+    frames = [SimpleNamespace(valid_time=START)]
+    def make_obs(v, p, val, pid, oid):
+        r = observation(v, value=val, pressure=p)
+        r['profile_id'] = pid
+        r['observation_id'] = oid
+        return r
+
+    targets_dipole = [
+        make_obs('temperature', 2000.0, 0.0, 's1', 't1'),
+        make_obs('temperature', 2000.0, 0.0, 's2', 't2'),
+        make_obs('temperature', 2000.0, 0.0, 's3', 't3'),
+        make_obs('temperature', 75000.0, 0.0, 's4', 't4'),
+        make_obs('temperature', 75000.0, 0.0, 's5', 't5'),
+        make_obs('temperature', 75000.0, 0.0, 's6', 't6'),
+    ]
+    orig_pred = observation_operator._prediction
+    try:
+        observation_operator._prediction = lambda f, g, r, p_axis, lead: (torch.tensor(5.0 if r['pressure_pa'] < 10000.0 else -5.0), None)
+        pol_legacy = PhysicalPolicy(bias_weight=1.0, bias_mode='column')
+        loss_col, _, rep_col = physical_objective(dummy_model, frames, targets_dipole, pol_legacy)
+        pol_charb = PhysicalPolicy(bias_weight=1.0, bias_mode='level_charbonnier', bias_gate_min_count=3)
+        loss_charb, _, rep_charb = physical_objective(dummy_model, frames, targets_dipole, pol_charb)
+        assert loss_col.item() == pytest.approx(rep_col['unpenalized_loss'], abs=1e-5)
+        assert loss_charb.item() > rep_charb['unpenalized_loss'] + 0.5
+    finally:
+        observation_operator._prediction = orig_pred
+

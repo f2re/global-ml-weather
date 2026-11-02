@@ -239,17 +239,22 @@ def _batch(model, dataset, issue, limit, rollout_hours):
 def score(model, dataset, config, split, issues=None):
     model.eval()
     rows = []
+    raw_profile_rows = []
     with torch.no_grad():
         if issues is None:
             issues = supported_issues(dataset, split, config['max_'+split+'_issues'], config['rollout_hours'])
         for issue in issues:
             p, s, *_ = _batch(model, dataset, issue, config['max_records_per_window'], config['rollout_hours'])
+            raw_p = getattr(model, 'last_objective_report', {}).get('unpenalized_loss', float(p))
             rows.append((float(p), float(s)))
+            raw_profile_rows.append(float(raw_p))
     if not rows:
         raise ValueError('No joint '+split+' support.')
     means = np.mean(rows, axis=0)
+    raw_p_mean = float(np.mean(raw_profile_rows))
     return {'profile': float(means[0]), 'surface': float(means[1]),
             'joint': float((1-config['surface_weight'])*means[0]+config['surface_weight']*means[1]),
+            'profile_raw': raw_p_mean,
             'issues': len(rows), 'rollout_hours': config['rollout_hours'],
             'dataset_horizon_hours': dataset.horizon_hours}
 
@@ -366,10 +371,11 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             previous = torch.load(checkpoint_path(output, ref), map_location=device, weights_only=True)
             prev_ident = previous['identity']
             schedule_keys = {'epochs', 'patience', 'experiment_id', 'surface_bias_weight'}
+            policy_schedule_keys = {'bias_weight', 'bias_mode', 'quadrature_mode', 'coupled_wind_loss', 'bias_gate_min_count'}
             prev_cfg = dict(prev_ident.get('config', {}))
             exp_cfg = dict(expected.get('config', {}))
-            prev_pol = {k: v for k, v in prev_cfg.get('physical_policy', {}).items() if k != 'bias_weight'}
-            exp_pol = {k: v for k, v in exp_cfg.get('physical_policy', {}).items() if k != 'bias_weight'}
+            prev_pol = {k: v for k, v in prev_cfg.get('physical_policy', {}).items() if k not in policy_schedule_keys}
+            exp_pol = {k: v for k, v in exp_cfg.get('physical_policy', {}).items() if k not in policy_schedule_keys}
             shared_keys = (set(prev_cfg) | set(exp_cfg)) - schedule_keys - {'physical_policy'}
             config_match = (
                 all(prev_cfg.get(k) == exp_cfg.get(k) for k in shared_keys) and
@@ -394,6 +400,7 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
                 stale >= exp_cfg.get('patience', config['patience'])
                 or prev_cfg.get('surface_bias_weight', 0.0) != exp_cfg.get('surface_bias_weight', 0.0)
                 or prev_pol != exp_pol
+                or prev_cfg.get('physical_policy') != exp_cfg.get('physical_policy')
             ):
                 best = float('inf')
                 best_epoch = completed
@@ -472,7 +479,10 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
                        'rollout_hours': config['rollout_hours'], 'edge_chunk_size': config.get('edge_chunk_size'),
                        'scientific_acceptance': False}
             save(temporary/'metrics.json', metrics); sync_directory(temporary)
-            final = output/f'epoch-{epoch:04d}'; temporary.rename(final); sync_directory(output)
+            final = output/f'epoch-{epoch:04d}'
+            if final.exists():
+                shutil.rmtree(final)
+            temporary.rename(final); sync_directory(output)
             ref = {'directory': final.name, 'epoch': epoch, 'sha256': digest(final/'state.pt')}
             save(output/'latest.json', ref)
             if improved:

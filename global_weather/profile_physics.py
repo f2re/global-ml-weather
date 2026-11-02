@@ -31,6 +31,10 @@ class PhysicalPolicy:
     variable_weights: tuple = (1., 1., 1., 1., 1.)
     bias_weight: float = 0.0
     memory_budget_mib: int = 8192
+    bias_mode: str = 'column'  # 'column' (legacy) or 'level_charbonnier'
+    bias_gate_min_count: int = 3
+    quadrature_mode: str = 'mass'  # 'mass' (legacy) or 'hybrid'
+    coupled_wind_loss: bool = False
 
     def __post_init__(self):
         if self.schema != 'profile-physical-policy-1' or self.architecture not in ('legacy', 'hydrostatic_flow'):
@@ -49,6 +53,14 @@ class PhysicalPolicy:
             raise ValueError('Five finite positive variable weights are required.')
         if type(self.memory_budget_mib) is not int or not 128 <= self.memory_budget_mib <= 1048576:
             raise ValueError('Invalid physical activation memory budget.')
+        if self.bias_mode not in ('column', 'level_charbonnier'):
+            raise ValueError('bias_mode must be column or level_charbonnier.')
+        if type(self.bias_gate_min_count) is not int or self.bias_gate_min_count < 1:
+            raise ValueError('bias_gate_min_count must be a positive integer.')
+        if self.quadrature_mode not in ('mass', 'hybrid'):
+            raise ValueError('quadrature_mode must be mass or hybrid.')
+        if type(self.coupled_wind_loss) is not bool:
+            raise ValueError('coupled_wind_loss must be Boolean.')
 
     def payload(self):
         value = asdict(self)
@@ -74,6 +86,39 @@ def pressure_layer_thickness(pressure_pa):
         raise ValueError('Strictly decreasing finite positive pressure required.')
     interfaces = np.r_[p[0], np.sqrt(p[:-1] * p[1:]), p[-1]]
     return interfaces[:-1] - interfaces[1:]
+
+
+def compute_vertical_quadrature_weights(pressure_pa, quadrature_mode='mass'):
+    """Compute per-variable vertical layer quadrature weights across pressure levels.
+
+    Returns array [5, N_levels] summing to 1.0 along the level axis.
+    """
+    p = np.asarray(pressure_pa, dtype=np.float64)
+    dp = pressure_layer_thickness(p)
+    w_mass = dp / dp.sum()
+    if quadrature_mode == 'mass':
+        return np.tile(w_mass, (5, 1))
+
+    # Logarithmic thickness interfaces: ln(interface_k / interface_{k+1})
+    ln_p = np.log(p)
+    interfaces_ln = np.r_[ln_p[0], 0.5 * (ln_p[:-1] + ln_p[1:]), ln_p[-1]]
+    dlnp = interfaces_ln[:-1] - interfaces_ln[1:]
+
+    # Burst damping above 20 hPa (p < 2000 Pa)
+    burst_damping = np.where(p < 2000.0, 0.5, 1.0)
+    dlnp_damped = dlnp * burst_damping
+    w_log = dlnp_damped / dlnp_damped.sum()
+
+    # 5 variables: 0: temperature, 1: specific_humidity, 2: u, 3: v, 4: geopotential
+    # T and Phi get 0.5 mass + 0.5 log
+    # q, u, v get 0.85 mass + 0.15 log
+    w = np.zeros((5, len(p)), dtype=np.float64)
+    w[0] = 0.50 * w_mass + 0.50 * w_log
+    w[4] = 0.50 * w_mass + 0.50 * w_log
+    w[1] = 0.85 * w_mass + 0.15 * w_log
+    w[2] = 0.85 * w_mass + 0.15 * w_log
+    w[3] = 0.85 * w_mass + 0.15 * w_log
+    return w
 
 
 def saturation_pressure_water(temperature_k):
@@ -230,10 +275,15 @@ def physical_objective(model, frames, targets, policy: PhysicalPolicy):
     from .analysis.observation_operator import _prediction
     bins, counts, physical_errors = defaultdict(list), [0]*5, defaultdict(list)
     residuals_by_var = defaultdict(list)
+    residuals_by_var_level = defaultdict(list)
     linear_counts = [0]*5
     p = np.array(PRESSURE_HPA, dtype=float)*100
-    dp = pressure_layer_thickness(p)
+    w_levels = compute_vertical_quadrature_weights(p, policy.quadrature_mode)
     origin = utc(frames[0].valid_time)
+
+    # If coupled_wind_loss, pair u and v by (lead, level, provider, group)
+    wind_pairs = defaultdict(dict) if policy.coupled_wind_loss else None
+
     for r in targets:
         v = VARIABLES.index(r['variable'])
         _, std, supported = model.normalization.at(v, r['pressure_pa'])
@@ -259,43 +309,105 @@ def physical_objective(model, frames, targets, policy: PhysicalPolicy):
         residuals_by_var[v].append(residual)
         absolute = residual.abs()
         delta = policy.huber_delta
-        clipped = absolute.clamp_max(delta)
-        term = .5*clipped.square() + delta*(absolute-clipped)
         level = int(np.abs(np.log(p)-math.log(r['pressure_pa'])).argmin())
+        residuals_by_var_level[(v, level)].append(residual)
         lead = max(0, math.ceil((utc(r['observed_at'])-origin).total_seconds()/10800))
         group = r.get('profile_id') or r.get('provider_message_id') or r.get('observation_id')
         if not group:
             raise ValueError('Observation/launch identity required; station catalog ID is not required.')
-        bins[(v, lead, level, str(r.get('provider')), group)].append((term, float(quality)))
-        counts[v] += 1
-        linear_counts[v] += int(bool(absolute.detach() > delta))
-        physical_errors[v].append(predicted.detach()-truth)
+
+        if policy.coupled_wind_loss and v in (2, 3):
+            wind_key = (lead, level, str(r.get('provider')), group)
+            wind_pairs[wind_key][v] = (residual, quality, absolute)
+            counts[v] += 1
+            physical_errors[v].append(predicted.detach() - truth)
+        else:
+            clipped = absolute.clamp_max(delta)
+            term = .5*clipped.square() + delta*(absolute-clipped)
+            bins[(v, lead, level, str(r.get('provider')), group)].append((term, float(quality)))
+            counts[v] += 1
+            linear_counts[v] += int(bool(absolute.detach() > delta))
+            physical_errors[v].append(predicted.detach()-truth)
+
+    if policy.coupled_wind_loss and wind_pairs:
+        delta = policy.huber_delta
+        for (lead, level, provider, group), pair_data in wind_pairs.items():
+            if 2 in pair_data and 3 in pair_data:
+                r_u, q_u, abs_u = pair_data[2]
+                r_v, q_v, abs_v = pair_data[3]
+                r_vec = torch.sqrt(r_u.pow(2) + r_v.pow(2) + 1e-12)
+                clipped_vec = r_vec.clamp_max(delta)
+                term_vec = .5 * clipped_vec.square() + delta * (r_vec - clipped_vec)
+                half_term = 0.5 * term_vec
+                qual = 0.5 * (float(q_u) + float(q_v))
+                bins[(2, lead, level, provider, group)].append((half_term, qual))
+                bins[(3, lead, level, provider, group)].append((half_term, qual))
+                is_lin = int(bool(r_vec.detach() > delta))
+                linear_counts[2] += is_lin
+                linear_counts[3] += is_lin
+            else:
+                for v_wind, (r_w, q_w, abs_w) in pair_data.items():
+                    clipped_w = abs_w.clamp_max(delta)
+                    term_w = .5 * clipped_w.square() + delta * (abs_w - clipped_w)
+                    bins[(v_wind, lead, level, provider, group)].append((term_w, float(q_w)))
+                    linear_counts[v_wind] += int(bool(abs_w.detach() > delta))
+
     if not bins:
         raise ValueError('No supported observed targets for R9 objective.')
+
     strata = defaultdict(list)
     for (v, lead, level, provider, group), rows in bins.items():
         weights = rows[0][0].new_tensor([r[1] for r in rows])
         strata[(v, lead, level)].append((torch.stack([r[0] for r in rows])*weights).sum()/weights.sum())
+
     leads = defaultdict(list)
     for (v, lead, level), values in strata.items():
-        leads[(v, lead)].append((torch.stack(values).mean(), float(dp[level])))
+        leads[(v, lead)].append((torch.stack(values).mean(), float(w_levels[v, level])))
+
     variables = defaultdict(list)
     for (v, lead), values in leads.items():
         denominator = sum(w for _, w in values)
         variables[v].append(sum(x*w for x, w in values)/denominator)
+
     terms = {}
     for v, x in variables.items():
         base_term = torch.stack(x).mean()
-        if policy.bias_weight > 0.0 and v in residuals_by_var and residuals_by_var[v]:
-            mean_bias = torch.stack(residuals_by_var[v]).mean()
-            base_term = base_term + policy.bias_weight * mean_bias.pow(2)
-        terms[v] = base_term
+        if policy.bias_weight > 0.0:
+            if policy.bias_mode == 'level_charbonnier':
+                level_penalties = []
+                level_weights_list = []
+                for k in range(len(p)):
+                    res_k = residuals_by_var_level.get((v, k), [])
+                    if len(res_k) >= policy.bias_gate_min_count:
+                        mean_b_k = torch.stack(res_k).mean()
+                        delta_b = 1.0
+                        charb = delta_b * delta_b * (torch.sqrt(1.0 + (mean_b_k / delta_b).pow(2)) - 1.0)
+                        level_penalties.append(charb * float(w_levels[v, k]))
+                        level_weights_list.append(float(w_levels[v, k]))
+                if level_penalties:
+                    bias_penalty = torch.stack(level_penalties).sum() / sum(level_weights_list)
+                    terms[v] = base_term + policy.bias_weight * bias_penalty
+                else:
+                    terms[v] = base_term
+            elif v in residuals_by_var and residuals_by_var[v]:
+                mean_bias = torch.stack(residuals_by_var[v]).mean()
+                terms[v] = base_term + policy.bias_weight * mean_bias.pow(2)
+            else:
+                terms[v] = base_term
+        else:
+            terms[v] = base_term
+
     loss = sum(policy.variable_weights[v]*x for v, x in terms.items())/sum(policy.variable_weights[v] for v in terms)
+
+    unpenalized_loss = sum(policy.variable_weights[v] * torch.stack(variables[v]).mean()
+                           for v in variables) / sum(policy.variable_weights[v] for v in variables)
+
     report = {'schema': 'profile-physical-objective-report-1', 'accepted': counts,
               'profile_pressure_lead_groups': len(bins),
               'variable_loss': {VARIABLES[v]: float(x.detach()) for v, x in terms.items()},
               'physical_rmse': {VARIABLES[v]: float(torch.stack(x).square().mean().sqrt())
                                 for v, x in physical_errors.items()},
-              'huber_linear_fraction': {VARIABLES[v]: linear_counts[v]/counts[v] for v in terms},
+              'huber_linear_fraction': {VARIABLES[v]: linear_counts[v]/max(counts[v], 1) for v in terms},
+              'unpenalized_loss': float(unpenalized_loss.detach()),
               'normalization_changed': False}
     return loss, counts, report

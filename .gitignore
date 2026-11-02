@@ -15,6 +15,9 @@ data/
 credentials.json
 .cdsapirc
 *.receipt.json
+*.tar.gz
+*.zip
+.DS_Store
 
 # Only this provenance-bearing NOAA excerpt belongs in Git, not training data.
 !tests/data/
