@@ -56,7 +56,7 @@ def _profile_config(value):
             raise ValueError('Invalid joint training bound: '+key)
     if not 0 <= result['mesh_level'] <= 8:
         raise ValueError('Joint mesh_level must be within 0..8.')
-    if result['epochs'] > 4000 or result['max_records_per_window'] > 20000:
+    if result['epochs'] > 5000 or result['max_records_per_window'] > 20000:
         raise ValueError('Joint experiment exceeds reviewed research limits.')
     for key in ('learning_rate', 'weight_decay', 'gradient_clip'):
         number = result[key]
