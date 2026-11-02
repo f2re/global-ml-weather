@@ -113,8 +113,8 @@ def _config(value):
                 raise ValueError('Mesh-8 research training maintains the 3-hour rollout from measured VRAM budget.')
             if result['hidden'] > 4:
                 raise ValueError('Mesh-8 research training hidden width is capped at 4 from measured 24 GiB VRAM.')
-            if result['epochs'] < 1 or result['epochs'] > 4000:
-                raise ValueError('Mesh-8 research training epochs must be within 1..4000.')
+            if result['epochs'] < 1 or result['epochs'] > 5000:
+                raise ValueError('Mesh-8 research training epochs must be within 1..5000.')
             if result['max_train_issues'] > 9 or result['max_validation_issues'] > 13 or result['max_test_issues'] > 13:
                 raise ValueError('Mesh-8 research training issue counts exceed supported dataset issues.')
         else:
