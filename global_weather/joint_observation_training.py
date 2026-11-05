@@ -109,8 +109,9 @@ def _config(value):
             if result['max_train_issues'] > 4 or result['max_validation_issues'] > 2 or result['max_test_issues'] > 2:
                 raise ValueError('Mesh-8 qualification issue counts exceed the reviewed execution envelope.')
         elif experiment_role == MESH8_TRAIN_ROLE:
-            if rollout_hours != 3:
-                raise ValueError('Mesh-8 research training maintains the 3-hour rollout from measured VRAM budget.')
+            if (type(rollout_hours) is not int or rollout_hours < 3 or rollout_hours > 72
+                    or rollout_hours % 3 != 0):
+                raise ValueError('Mesh-8 research training requires a 3-hour step rollout within 3..72.')
             if result['hidden'] > 4:
                 raise ValueError('Mesh-8 research training hidden width is capped at 4 from measured 24 GiB VRAM.')
             if result['epochs'] < 1 or result['epochs'] > 5000:
@@ -205,7 +206,7 @@ def supported_issues(dataset, split, limit, rollout_hours):
     return candidates
 
 
-def _batch(model, dataset, issue, limit, rollout_hours):
+def _batch(model, dataset, issue, limit, rollout_hours, *, do_backward=False, surface_weight=0.5):
     try:
         raw, mask, target, target_mask, inputs, targets = dataset.sample(
             issue, limit, target_horizon_hours=rollout_hours)
@@ -220,6 +221,60 @@ def _batch(model, dataset, issue, limit, rollout_hours):
     steps = rollout_hours // 3
     target = target[:steps]
     target_mask = target_mask[:steps]
+
+    if do_backward and model.training and rollout_hours > 3:
+        segment_steps = 2
+        num_segments = steps // segment_steps
+        issue_dt = utc(issue)
+        state = None
+        total_p = 0.0
+        total_s = 0.0
+        total_coverage = np.zeros(5, dtype=int)
+        ym_sum = target_mask.sum((0, 1))
+
+        for seg in range(num_segments):
+            start_step = seg * segment_steps
+            end_step = (seg + 1) * segment_steps
+            start_hour = start_step * 3
+            end_hour = end_step * 3
+
+            if seg == 0:
+                seg_frames = model(inputs, issue, surface_inputs=x, surface_mask=m, horizon_hours=end_hour)
+            else:
+                seg_frames = model(inputs, issue, horizon_hours=end_hour, start_lead=start_hour, initial_state=state)
+
+            seg_targets = [r for r in targets if issue_dt + timedelta(hours=start_hour) < utc(r['observed_at']) <= issue_dt + timedelta(hours=end_hour)]
+            if seg_targets:
+                loss_p, cov = objective(model, seg_frames, seg_targets)
+                total_coverage += np.asarray(cov, dtype=int)
+            else:
+                loss_p = torch.tensor(0.0, device=model.xyz.device)
+
+            pred = torch.stack([f.native_normalized for f in seg_frames[1:]])
+            y_seg = torch.as_tensor(target[start_step:end_step], dtype=torch.float32, device=model.xyz.device)
+            ym_seg = torch.as_tensor(target_mask[start_step:end_step], dtype=torch.bool, device=model.xyz.device)
+            months_seg = torch.tensor([f.valid_time.month-1 for f in seg_frames[1:]], device=model.xyz.device)
+            anom_seg = (y_seg - model.surface_monthly[months_seg]) / model.surface_scales
+            bias_weight = getattr(model, 'surface_bias_weight', 0.5)
+            loss_s = anomaly_loss(pred, anom_seg, ym_seg, bias_weight=bias_weight)
+
+            seg_loss = (1.0 / num_segments) * ((1.0 - surface_weight) * loss_p + surface_weight * loss_s)
+            if not torch.isfinite(seg_loss):
+                raise FloatingPointError('Nonfinite joint loss in segmented rollout.')
+            seg_loss.backward()
+
+            total_p += float(loss_p.detach()) / num_segments
+            total_s += float(loss_s.detach()) / num_segments
+
+            state = model._final_state.detach().requires_grad_(True)
+            del seg_frames, pred, loss_p, loss_s, seg_loss
+            if model.xyz.device.type == 'cuda':
+                torch.cuda.empty_cache()
+
+        p_tensor = torch.tensor(total_p, device=model.xyz.device)
+        s_tensor = torch.tensor(total_s, device=model.xyz.device)
+        return p_tensor, s_tensor, total_coverage, targets, ym_sum, report
+
     frames = model(inputs, issue, surface_inputs=x, surface_mask=m, horizon_hours=rollout_hours)
     if not targets:
         profile_loss = torch.tensor(0.0, device=model.xyz.device)
@@ -370,7 +425,7 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             ref = json.loads((output/'latest.json').read_text())
             previous = torch.load(checkpoint_path(output, ref), map_location=device, weights_only=True)
             prev_ident = previous['identity']
-            schedule_keys = {'epochs', 'patience', 'experiment_id', 'surface_bias_weight'}
+            schedule_keys = {'epochs', 'patience', 'experiment_id', 'surface_bias_weight', 'rollout_hours'}
             policy_schedule_keys = {'bias_weight', 'bias_mode', 'quadrature_mode', 'coupled_wind_loss', 'bias_gate_min_count'}
             prev_cfg = dict(prev_ident.get('config', {}))
             exp_cfg = dict(expected.get('config', {}))
@@ -430,11 +485,18 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             random.shuffle(issues)
             for issue in issues:
                 optimizer.zero_grad(set_to_none=True)
-                p, s, coverage, targets, nc, qc = _batch(
-                    model, dataset, issue, config['max_records_per_window'], config['rollout_hours'])
-                loss = (1-config['surface_weight'])*p+config['surface_weight']*s
-                if not torch.isfinite(loss): raise FloatingPointError('Nonfinite joint loss.')
-                loss.backward(); counts += coverage; native_counts += nc
+                if config['rollout_hours'] > 3:
+                    p, s, coverage, targets, nc, qc = _batch(
+                        model, dataset, issue, config['max_records_per_window'], config['rollout_hours'],
+                        do_backward=True, surface_weight=config['surface_weight'])
+                    loss = (1-config['surface_weight'])*p+config['surface_weight']*s
+                else:
+                    p, s, coverage, targets, nc, qc = _batch(
+                        model, dataset, issue, config['max_records_per_window'], config['rollout_hours'])
+                    loss = (1-config['surface_weight'])*p+config['surface_weight']*s
+                    if not torch.isfinite(loss): raise FloatingPointError('Nonfinite joint loss.')
+                    loss.backward()
+                counts += coverage; native_counts += nc
                 for name, param in model.named_parameters():
                     if param.grad is not None and not torch.isfinite(param.grad).all(): raise FloatingPointError('Nonfinite gradient: '+name)
                     gradients[name] = gradients.get(name, False) or (param.grad is not None and bool(param.grad.abs().sum() > 0))

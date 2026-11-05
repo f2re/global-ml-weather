@@ -4,6 +4,7 @@ from datetime import timedelta
 import numpy as np
 import torch
 from torch import nn
+import torch.utils.checkpoint as checkpoint
 from .grid import unit_xyz
 from .model import ForecastFrame, GraphOps
 from .observations import utc
@@ -70,40 +71,53 @@ class PressureProfileModel(nn.Module):
         updated=self.step(torch.tanh(self.dynamic(context)).reshape(-1,self.hidden),state.reshape(-1,self.hidden)).reshape_as(state)
         return state+.1*(updated-state)
 
-    def forward(self,inputs,issue,*,horizon_hours=72):
+    def forward(self, inputs, issue, *, horizon_hours=72, start_lead=0, initial_state=None):
         if type(horizon_hours) is not int or not 0 <= horizon_hours <= 72 or horizon_hours % 3:
             raise ValueError('Profile horizon must be 0..72 hours in 3-hour steps.')
-        issue=utc(issue); n,d=self.grid.n_cells,self.hidden
-        pressure=self.pressure_encoder(self.log_pressure)+self.levels
-        state=self._initial_state(issue,pressure)
-        for hour in range(12):
-            rows=[r for r in inputs if issue-timedelta(hours=12-hour)<utc(r['observed_at'])<=issue-timedelta(hours=11-hour)
-                  and utc(r['available_at'])<=issue]
-            rows=[r for r in rows if self.normalization.at(r['variable'],r['pressure_pa'])[2]]
-            if not rows: continue
-            variables=torch.tensor([VARIABLES.index(r['variable']) for r in rows],device=state.device)
-            pressures=np.array([r['pressure_pa'] for r in rows]); levels=np.abs(np.log(pressures[:,None])-np.log(np.array(PRESSURE_HPA)[None]*100)).argmin(1)
-            cells=self.grid.locate([r['latitude'] for r in rows],[r['longitude'] for r in rows])
-            indices=torch.tensor(cells*37+levels,device=state.device)
-            normalized=[self.normalization.normalize(r['variable'],r['value'],r['pressure_pa']) for r in rows]
-            xyz=unit_xyz([r['latitude'] for r in rows],[r['longitude'] for r in rows])
-            extra=np.column_stack((normalized,np.log(pressures/100000),[(issue-utc(r['observed_at'])).total_seconds()/43200 for r in rows],xyz))
-            features=torch.tensor(extra,dtype=state.dtype,device=state.device)
-            tokens=self.token(torch.cat((features,self.variable(variables)),-1))
-            sums=state.new_zeros(n*37,d).index_add(0,indices,tokens)
-            counts=state.new_zeros(n*37).index_add(0,indices,torch.ones(len(rows),device=state.device))
-            has_obs = (counts > 0)
-            if has_obs.any():
-                obs_idx = has_obs.nonzero(as_tuple=True)[0]
-                sub_forcing = sums[obs_idx] / counts[obs_idx, None]
-                flat_state = state.reshape(-1, d)
-                sub_state = flat_state[obs_idx]
-                sub_updated = self.ingest(sub_forcing, sub_state)
-                flat_state = flat_state.clone()
-                flat_state[obs_idx] = sub_updated
-                state = flat_state.reshape(n, 37, d)
-        frames=[self._decode(state,issue,0)]
-        for lead in range(3,horizon_hours+1,3):
-            state=self._advance_state(state,pressure,issue,lead)
-            frames.append(self._decode(state,issue,lead))
+        issue = utc(issue); n, d = self.grid.n_cells, self.hidden
+        pressure = self.pressure_encoder(self.log_pressure) + self.levels
+
+        if initial_state is None:
+            state = self._initial_state(issue, pressure)
+            for hour in range(12):
+                rows = [r for r in inputs if issue - timedelta(hours=12-hour) < utc(r['observed_at']) <= issue - timedelta(hours=11-hour)
+                        and utc(r['available_at']) <= issue]
+                rows = [r for r in rows if self.normalization.at(r['variable'], r['pressure_pa'])[2]]
+                if not rows: continue
+                variables = torch.tensor([VARIABLES.index(r['variable']) for r in rows], device=state.device)
+                pressures = np.array([r['pressure_pa'] for r in rows]); levels = np.abs(np.log(pressures[:, None]) - np.log(np.array(PRESSURE_HPA)[None]*100)).argmin(1)
+                cells = self.grid.locate([r['latitude'] for r in rows], [r['longitude'] for r in rows])
+                indices = torch.tensor(cells*37 + levels, device=state.device)
+                normalized = [self.normalization.normalize(r['variable'], r['value'], r['pressure_pa']) for r in rows]
+                xyz = unit_xyz([r['latitude'] for r in rows], [r['longitude'] for r in rows])
+                extra = np.column_stack((normalized, np.log(pressures/100000), [(issue - utc(r['observed_at'])).total_seconds()/43200 for r in rows], xyz))
+                features = torch.tensor(extra, dtype=state.dtype, device=state.device)
+                tokens = self.token(torch.cat((features, self.variable(variables)), -1))
+                sums = state.new_zeros(n*37, d).index_add(0, indices, tokens)
+                counts = state.new_zeros(n*37).index_add(0, indices, torch.ones(len(rows), device=state.device))
+                has_obs = (counts > 0)
+                if has_obs.any():
+                    obs_idx = has_obs.nonzero(as_tuple=True)[0]
+                    sub_forcing = sums[obs_idx] / counts[obs_idx, None]
+                    flat_state = state.reshape(-1, d)
+                    sub_state = flat_state[obs_idx]
+                    sub_updated = self.ingest(sub_forcing, sub_state)
+                    flat_state = flat_state.clone()
+                    flat_state[obs_idx] = sub_updated
+                    state = flat_state.reshape(n, 37, d)
+            frames = [self._decode(state, issue, 0)]
+            loop_start = 3
+        else:
+            state = initial_state
+            frames = [self._decode(state, issue, start_lead)]
+            loop_start = start_lead + 3
+
+        for lead in range(loop_start, horizon_hours + 1, 3):
+            if self.training and state.requires_grad:
+                state = checkpoint.checkpoint(
+                    self._advance_state, state, pressure, issue, lead, use_reentrant=False)
+            else:
+                state = self._advance_state(state, pressure, issue, lead)
+            frames.append(self._decode(state, issue, lead))
+        self._final_state = state
         return frames

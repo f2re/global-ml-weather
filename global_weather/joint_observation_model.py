@@ -132,13 +132,17 @@ class JointObservationModel(HydrostaticFlowProfileModel):
         frame.native_variable_mask = torch.isfinite(frame.native_physical)
         return frame
 
-    def forward(self, inputs, issue, *, surface_inputs, surface_mask, horizon_hours=72):
-        expected = (12, self.station_operator.cells.numel(), 6)
-        if (surface_inputs.shape != expected or surface_mask.shape != expected
-                or surface_mask.dtype != torch.bool or not torch.isfinite(surface_inputs[surface_mask]).all()):
-            raise ValueError('Finite admitted 12-hour native station anomalies required.')
-        self._surface_history = (surface_inputs, surface_mask)
-        try:
-            return super().forward(inputs, issue, horizon_hours=horizon_hours)
-        finally:
-            self._surface_history = None
+    def forward(self, inputs, issue, *, surface_inputs=None, surface_mask=None, horizon_hours=72, start_lead=0, initial_state=None):
+        if initial_state is None:
+            expected = (12, self.station_operator.cells.numel(), 6)
+            if (surface_inputs is None or surface_mask is None
+                    or surface_inputs.shape != expected or surface_mask.shape != expected
+                    or surface_mask.dtype != torch.bool or not torch.isfinite(surface_inputs[surface_mask]).all()):
+                raise ValueError('Finite admitted 12-hour native station anomalies required.')
+            self._surface_history = (surface_inputs, surface_mask)
+            try:
+                return super().forward(inputs, issue, horizon_hours=horizon_hours, start_lead=0, initial_state=None)
+            finally:
+                self._surface_history = None
+        else:
+            return super().forward(inputs, issue, horizon_hours=horizon_hours, start_lead=start_lead, initial_state=initial_state)
