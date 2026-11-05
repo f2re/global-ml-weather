@@ -37,6 +37,30 @@ from .station_climatology import StationClimatology
 STATUS = 'joint_measured_observation_research_trained'
 MESH8_ROLE = 'mesh8_end_to_end_qualification'
 MESH8_TRAIN_ROLE = 'mesh8_research_training'
+MESH8_72H_RESUME_SOURCE_SHA256 = 'fdedba47d34338b1056889f73990a162d57725ded57b737b5e143818747a3f11'
+
+
+def _is_authorized_mesh8_72h_resume(previous, ref, expected):
+    """Allow only the reviewed epoch-4500, 3 h to 72 h curriculum transition."""
+    previous_identity = previous.get('identity', {})
+    previous_config = previous_identity.get('config', {})
+    expected_config = expected.get('config', {})
+    return (
+        previous.get('epoch') == 4500
+        and previous.get('best_epoch') == 4500
+        and ref.get('epoch') == 4500
+        and ref.get('sha256') == MESH8_72H_RESUME_SOURCE_SHA256
+        and previous_identity.get('experiment_id') == 'joint-mesh8-training-4500'
+        and expected.get('experiment_id') == 'joint-mesh8-training-72h'
+        and previous_identity.get('experiment_role') == MESH8_TRAIN_ROLE
+        and expected.get('experiment_role') == MESH8_TRAIN_ROLE
+        and previous_identity.get('grid_level') == 8
+        and expected.get('grid_level') == 8
+        and previous_config.get('rollout_hours') == 3
+        and expected_config.get('rollout_hours') == 72
+        and previous_config.get('learning_rate') == 1e-4
+        and expected_config.get('learning_rate') == 5e-5
+    )
 
 
 def _profile_config(value):
@@ -425,7 +449,10 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             ref = json.loads((output/'latest.json').read_text())
             previous = torch.load(checkpoint_path(output, ref), map_location=device, weights_only=True)
             prev_ident = previous['identity']
-            schedule_keys = {'epochs', 'patience', 'experiment_id', 'surface_bias_weight', 'rollout_hours'}
+            rollout_transition = _is_authorized_mesh8_72h_resume(previous, ref, expected)
+            schedule_keys = {'epochs', 'patience', 'experiment_id', 'surface_bias_weight'}
+            if rollout_transition:
+                schedule_keys.update({'rollout_hours', 'learning_rate'})
             policy_schedule_keys = {'bias_weight', 'bias_mode', 'quadrature_mode', 'coupled_wind_loss', 'bias_gate_min_count'}
             prev_cfg = dict(prev_ident.get('config', {}))
             exp_cfg = dict(expected.get('config', {}))
@@ -438,6 +465,8 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
                 exp_cfg.get('epochs', 0) >= previous['epoch']
             )
             ignore_keys = {'commit', 'config', 'joint_source_sha256', 'experiment_id'} if config_match else set()
+            if config_match and rollout_transition:
+                ignore_keys.add('rollout_hours')
             ident_match = (
                 prev_ident == expected or (
                     config_match and
@@ -446,7 +475,11 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             )
             if not ident_match:
                 raise ValueError('Joint C2 source/data/norm/optimizer/numerical identity changed.')
-            _state(model, previous['model']); optimizer.load_state_dict(previous['optimizer']); _restore_rng(previous, device)
+            _state(model, previous['model']); optimizer.load_state_dict(previous['optimizer'])
+            if rollout_transition:
+                for group in optimizer.param_groups:
+                    group['lr'] = config['learning_rate']
+            _restore_rng(previous, device)
             completed, best, best_epoch, stale = previous['epoch'], previous['best'], previous['best_epoch'], previous['stale']
             best_ref = ref if best_epoch == completed else previous.get('best_ref')
             if best_ref is None and (output/'best.json').exists():
@@ -456,6 +489,7 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
                 or prev_cfg.get('surface_bias_weight', 0.0) != exp_cfg.get('surface_bias_weight', 0.0)
                 or prev_pol != exp_pol
                 or prev_cfg.get('physical_policy') != exp_cfg.get('physical_policy')
+                or prev_cfg.get('rollout_hours') != exp_cfg.get('rollout_hours')
             ):
                 best = float('inf')
                 best_epoch = completed
