@@ -75,3 +75,11 @@ def test_rejects_a_different_checkpoint_hash(reviewed_transition):
     previous, ref, expected = deepcopy(reviewed_transition)
     ref['sha256'] = '0' * 64
     assert not _is_authorized_mesh8_72h_resume(previous, ref, expected)
+
+
+def test_resume_schedule_keys_allow_edge_chunk_size(reviewed_transition):
+    previous, ref, expected = deepcopy(reviewed_transition)
+    previous['identity']['config']['edge_chunk_size'] = 32768
+    expected['config']['edge_chunk_size'] = 16384
+    assert _is_authorized_mesh8_72h_resume(previous, ref, expected)
+

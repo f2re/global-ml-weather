@@ -452,7 +452,7 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
             rollout_transition = _is_authorized_mesh8_72h_resume(previous, ref, expected)
             schedule_keys = {'epochs', 'patience', 'experiment_id', 'surface_bias_weight'}
             if rollout_transition:
-                schedule_keys.update({'rollout_hours', 'learning_rate'})
+                schedule_keys.update({'rollout_hours', 'learning_rate', 'edge_chunk_size'})
             policy_schedule_keys = {'bias_weight', 'bias_mode', 'quadrature_mode', 'coupled_wind_loss', 'bias_gate_min_count'}
             prev_cfg = dict(prev_ident.get('config', {}))
             exp_cfg = dict(expected.get('config', {}))

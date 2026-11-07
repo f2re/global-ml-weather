@@ -18,15 +18,21 @@
   "surface_weight": 0.5,
   "surface_bias_weight": 0.5,
   "rollout_hours": 72,
-  "edge_chunk_size": 16384,
+  "edge_chunk_size": 32768,
   "physical_policy": {
+    "schema": "profile-physical-policy-1",
     "architecture": "hydrostatic_flow",
+    "huber_delta": 2.5,
+    "humidity_qc": true,
+    "maximum_water_relative_humidity": 2.0,
     "humidity_min_pressure_pa": 30000.0,
+    "variable_weights": [1.0, 1.0, 1.0, 1.0, 1.0],
     "bias_weight": 0.15,
+    "memory_budget_mib": 22528,
     "bias_mode": "level_charbonnier",
-    "quadrature_mode": "hybrid",
-    "coupled_wind_loss": true,
     "bias_gate_min_count": 3,
-    "memory_budget_mib": 22528
+    "quadrature_mode": "hybrid",
+    "coupled_wind_loss": true
   }
 }
+
