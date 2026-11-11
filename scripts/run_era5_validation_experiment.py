@@ -217,18 +217,24 @@ def run_experiment(era5_path: str, output_dir: str, forecast_nc: str | None = No
     log(f"Полные метрики сохранены в: {json_path}")
 
     # Экспорт сводной таблицы CSV
+    def fmt(val, prec=4):
+        return f"{val:.{prec}f}" if val is not None else ""
+
     csv_path = output_path / "metrics_summary.csv"
     with open(csv_path, "w", encoding="utf-8") as f:
         f.write("kind,variable,level_hpa,lead_hours,persist_rmse,persist_bias,persist_acc,model_rmse,model_bias,model_acc,skill_score\n")
         for r in results:
             p = r["persistence"]
             m = r["model_forecast"] or {}
-            ss = f"{r['skill_score_vs_persistence']:.4f}" if r['skill_score_vs_persistence'] is not None else ""
-            m_rmse = f"{m.get('rmse', ''):.4f}" if m.get('rmse') is not None else ""
-            m_bias = f"{m.get('bias', ''):.4f}" if m.get('bias') is not None else ""
-            m_acc = f"{m.get('acc', ''):.4f}" if m.get('acc') is not None else ""
+            ss = fmt(r['skill_score_vs_persistence'])
+            p_rmse = fmt(p.get('rmse'))
+            p_bias = fmt(p.get('bias'))
+            p_acc = fmt(p.get('acc'))
+            m_rmse = fmt(m.get('rmse'))
+            m_bias = fmt(m.get('bias'))
+            m_acc = fmt(m.get('acc'))
             f.write(f"{r['kind']},{r['variable']},{r['level_hpa']},{r['lead_hours']},"
-                    f"{p['rmse']:.4f},{p['bias']:.4f},{p['acc']:.4f},{m_rmse},{m_bias},{m_acc},{ss}\n")
+                    f"{p_rmse},{p_bias},{p_acc},{m_rmse},{m_bias},{m_acc},{ss}\n")
     log(f"Сводная CSV-таблица сохранена в: {csv_path}")
 
     # Генерация Markdown отчета
