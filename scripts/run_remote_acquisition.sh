@@ -8,6 +8,7 @@ cd "$DIR"
 LOG="outputs/remote_acquisition_runner.log"
 mkdir -p outputs data/extended_sample_2023_2026
 
+ADMISSION="${ADMISSION_PATH:-assets/admission_851_stations.json}"
 echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] === Старт удаленного сбора данных 2023-2026 ===" >> "$LOG"
 
 exec .venv/bin/python -u scripts/run_dataset_pipeline_background.py \
@@ -17,6 +18,6 @@ exec .venv/bin/python -u scripts/run_dataset_pipeline_background.py \
     --acquire-satellites \
     --max-satellite-scenes 100 \
     --acquire-ghcnh \
-    --admission /home/user/global-ml-weather-r3/outputs/remote-r3-v2-stations/admission.json \
+    --admission "$ADMISSION" \
     --ghcnh-years 2023 2024 2025 2026 \
     >> "$LOG" 2>&1
