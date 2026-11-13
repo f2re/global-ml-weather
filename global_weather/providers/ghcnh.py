@@ -127,11 +127,24 @@ def read_records(path, *, acquired_at, latency_minutes, start=None, end=None):
                     if math.isfinite(elevation) and elevation != -999.9:record["elevation_m"]=elevation
                 except (ValueError,TypeError):pass
                 key=record["observation_id"]
-                if key in selected and selected[key] != record:
-                    raise ValueError("Противоречащие дубликаты GHCNh: требуется согласование источника.")
-                if key in selected:counts["identical_duplicates"]+=1
+                if key in selected:
+                    if selected[key] != record:
+                        prev_hour = selected[key].get("_raw_hour")
+                        curr_hour = row.get("Hour")
+                        if prev_hour == "24" and curr_hour != "24":
+                            record["_raw_hour"] = curr_hour
+                            selected[key] = record
+                            continue
+                        elif prev_hour != "24" and curr_hour == "24":
+                            counts["identical_duplicates"] += 1
+                            continue
+                        raise ValueError("Противоречащие дубликаты GHCNh: требуется согласование источника.")
+                    counts["identical_duplicates"] += 1
+                record["_raw_hour"] = row.get("Hour")
                 selected[key]=record
     records=sorted(selected.values(),key=lambda x:(x["observed_at"],x["observation_id"]))
+    for r in records:
+        r.pop("_raw_hour", None)
     return records,dict(counts,records=len(records),historical_availability_known=False)
 
 
