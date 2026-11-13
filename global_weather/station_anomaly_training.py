@@ -21,7 +21,7 @@ os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
 import torch
 
 from .grid import build_pyramid
-from .observation_data import ObservationDataset, START
+from .observation_data import ObservationDataset, START, campaign_bounds
 from .observations import utc
 from .observation_training import (
     checkpoint_path,
@@ -81,8 +81,9 @@ def evaluate(model: StationAnomalyModel, dataset: ObservationDataset, climatolog
                 continue
 
             from datetime import timedelta
-            t_inputs = [START + timedelta(hours=int(h)) for h in input_hours]
-            t_targets = [START + timedelta(hours=int(h)) for h in target_hours]
+            start = campaign_bounds(getattr(dataset, 'campaign', 'legacy_2021_2022'))[0]
+            t_inputs = [start + timedelta(hours=int(h)) for h in input_hours]
+            t_targets = [start + timedelta(hours=int(h)) for h in target_hours]
 
             c_inputs = climatology.for_window(t_inputs)
             c_targets = climatology.for_window(t_targets)
@@ -117,9 +118,9 @@ def train(dataset_path: str | Path, output: str | Path, config: dict | None = No
     if climatology_path and Path(climatology_path).exists():
         climatology = StationClimatology.load(climatology_path)
     else:
-        # Fit from dataset's train split
         from datetime import timedelta
-        all_timestamps = [START + timedelta(hours=h) for h in range(len(dataset.values))]
+        start = campaign_bounds(getattr(dataset, 'campaign', 'legacy_2021_2022'))[0]
+        all_timestamps = [start + timedelta(hours=h) for h in range(len(dataset.values))]
         train_indices = set(dataset.subset('train'))
         train_hours_mask = np.zeros(len(dataset.values), dtype=bool)
         for idx in train_indices:
@@ -167,8 +168,9 @@ def train(dataset_path: str | Path, output: str | Path, config: dict | None = No
                 if not y_mask.any() or not x_mask.any():
                     continue
 
-                t_inputs = [START + timedelta(hours=int(h)) for h in input_hours]
-                t_targets = [START + timedelta(hours=int(h)) for h in target_hours]
+                start = campaign_bounds(getattr(dataset, 'campaign', 'legacy_2021_2022'))[0]
+                t_inputs = [start + timedelta(hours=int(h)) for h in input_hours]
+                t_targets = [start + timedelta(hours=int(h)) for h in target_hours]
                 c_inputs = climatology.for_window(t_inputs)
                 c_targets = climatology.for_window(t_targets)
 
