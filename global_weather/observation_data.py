@@ -129,10 +129,13 @@ def _checked(record, start=START, hours=HOURS):
 
 def _unique(cache, database, *, train_only=False, retained=None, start=START, train_end=TRAIN_END, end=END, hours=HOURS):
     sources=[]
+    all_paths = _sources(cache)
     with sqlite3.connect(database) as db:
         db.execute('CREATE TABLE observations (id TEXT PRIMARY KEY, revision INTEGER, record TEXT, hash TEXT)')
         db.execute('CREATE TABLE seen_versions (id TEXT PRIMARY KEY, hash TEXT)')
-        for path in _sources(cache):
+        for idx, path in enumerate(all_paths):
+            if idx % 200 == 0 or idx == len(all_paths) - 1:
+                print(f"[observation_data] Ingesting source {idx+1}/{len(all_paths)}: {path.name}", flush=True)
             if train_only and path.suffix == '.psv' and not any(path.name.endswith(f'_{y}.psv') for y in range(start.year, train_end.year)):
                 continue
             before = sha256(path)
@@ -231,6 +234,7 @@ def _prepare(cache, admission_path, output, campaign='legacy_2021_2022'):
     sums=np.zeros(shape,dtype=np.float32); counts=np.zeros(shape,dtype=np.uint16)
     # Max availability within each bin allows causal masking even for delays.
     available=np.zeros(shape,dtype=np.int64)
+    print(f"[observation_data] Populating hourly grid from SQLite across {len(stations)} stations...", flush=True)
     with sqlite3.connect(output/'observations.sqlite') as db:
         for (text,) in db.execute('SELECT record FROM observations'):
             record=json.loads(text); checked=_checked(record, start=start, hours=hours)
@@ -246,6 +250,7 @@ def _prepare(cache, admission_path, output, campaign='legacy_2021_2022'):
     mask=counts>0
     np.divide(sums,counts,out=sums,where=mask)
     train_end_idx=int((train_end-start).total_seconds()/3600)
+    print(f"[observation_data] Computing training normalization statistics across {len(VARIABLES)} variables...", flush=True)
     mean=[];std=[]
     for v in range(len(VARIABLES)):
         measured=sums[:train_end_idx,:,v][mask[:train_end_idx,:,v]].astype(np.float64)
