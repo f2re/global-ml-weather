@@ -24,7 +24,7 @@ import torch
 from .grid import build_grid, build_mesh8_grid, grid_cell_count, nominal_area_scale_km
 from .joint_observation_data import JointObservationDataset
 from .joint_observation_model import ARCHITECTURE, JointObservationModel
-from .observation_data import START, TRAIN_END
+from .observation_data import START, TRAIN_END, campaign_bounds
 from .observation_training import checkpoint_path, digest, save, sync_directory
 from .observations import utc
 from .profile_normalization import load_normalization
@@ -417,9 +417,11 @@ def train(dataset_path, norm_path, output, config, climatology_path=None, static
         else:
             if (output/'latest.json').exists():
                 raise ValueError('Resume station climatology is missing.')
-            timestamps = [START+timedelta(hours=h) for h in range(len(dataset.surface.values))]
+            campaign = dataset.surface.manifest.get('campaign', 'legacy_2021_2022')
+            start, train_end, val_end, end, hours = campaign_bounds(campaign)
+            timestamps = [start+timedelta(hours=h) for h in range(len(dataset.surface.values))]
             station_climate = StationClimatology.fit(dataset.surface.values, dataset.surface.mask, timestamps,
-                                                    np.array([t < TRAIN_END for t in timestamps]))
+                                                    np.array([t < train_end for t in timestamps]))
             station_climate.save(station_path)
         station_hash = digest(station_path)
         model = _build(dataset, norms, config, station_climate, device, climatology_path, static_path)

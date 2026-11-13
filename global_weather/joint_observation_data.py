@@ -139,7 +139,8 @@ class JointObservationDataset:
             raise ValueError('Joint manifest changed.')
 
     def issues(self, split, limit=None):
-        if split not in BOUNDARIES:
+        boundaries = getattr(self, 'boundaries', BOUNDARIES)
+        if split not in boundaries:
             raise ValueError('Unknown joint dataset split.')
         rows = [utc(row['issue']) for row in self.samples if row['split'] == split]
         if limit is not None:
@@ -154,7 +155,9 @@ class JointObservationDataset:
         if type(limit) is not int or limit < 1:
             raise ValueError('Profile scalar limit must be a positive integer.')
         issue = utc(issue)
-        hour_float = (issue - START).total_seconds() / 3600
+        boundaries = getattr(self, 'boundaries', BOUNDARIES)
+        start_time = boundaries['train'][0]
+        hour_float = (issue - start_time).total_seconds() / 3600
         if hour_float % 1 or not 11 <= hour_float < len(self.surface.values):
             raise ValueError('Forecast history requires a supported integer-hour issue.')
         hour = int(hour_float)
@@ -169,7 +172,8 @@ class JointObservationDataset:
         """Raw surface inputs/targets plus unmodified actual-pressure profile scalars."""
         if type(limit) is not int or limit < 1:
             raise ValueError('Profile scalar limit must be a positive integer.')
-        issue, split, hour = _validate_issue(issue, self.horizon_hours)
+        boundaries = getattr(self, 'boundaries', BOUNDARIES)
+        issue, split, hour = _validate_issue(issue, self.horizon_hours, boundaries=boundaries)
         hours = np.arange(hour - 11, hour + 1)
         mask = self.surface.mask[hours] & (self.surface.available[hours] <= hour * 3600)
         inputs = np.where(mask, self.surface.values[hours], 0).astype(np.float32)
@@ -184,15 +188,16 @@ class JointObservationDataset:
         return inputs, mask.copy(), targets, target_mask, profile_inputs, profile_targets
 
 
-def prepare_joint(surface_root, profile_root, output, *, horizon_hours=72, issue_stride_hours=24):
+def prepare_joint(surface_root, profile_root, output, *, horizon_hours=72, issue_stride_hours=24, boundaries=None):
     """Atomically publish a reference bundle; reuse only exactly matching inputs."""
     output = Path(output)
     dataset = JointObservationDataset(surface_root, profile_root, horizon_hours=horizon_hours,
-                                      issue_stride_hours=issue_stride_hours)
+                                      issue_stride_hours=issue_stride_hours, boundaries=boundaries)
     manifest = {'schema': SCHEMA, 'data_kind': 'real',
                 'surface_root': str(dataset.surface.root.resolve()),
                 'profile_root': str(dataset.profile.root.resolve()),
                 'horizon_hours': horizon_hours, 'issue_stride_hours': issue_stride_hours,
+                'boundaries': {k: [v[0].isoformat(), v[1].isoformat()] for k, v in dataset.boundaries.items()},
                 'fingerprint': dataset.fingerprint, 'samples': dataset.samples,
                 'input_hours': 12, 'lead_hours': dataset.lead_hours,
                 'profile_operator': 'actual scalar pressure/location/time; no fabricated standard-level targets',
@@ -221,9 +226,11 @@ def main(argv=None):
     parser.add_argument('--output', required=True)
     parser.add_argument('--horizon-hours', type=int, default=72)
     parser.add_argument('--issue-stride-hours', type=int, default=24)
+    parser.add_argument('--campaign', choices=('legacy_2021_2022', 'extended_2023_2026'), default='legacy_2021_2022')
     args = parser.parse_args(argv)
+    boundaries = BOUNDARIES_2023_2026 if args.campaign == 'extended_2023_2026' else None
     prepare_joint(args.surface, args.profile, args.output, horizon_hours=args.horizon_hours,
-                  issue_stride_hours=args.issue_stride_hours)
+                  issue_stride_hours=args.issue_stride_hours, boundaries=boundaries)
 
 
 if __name__ == '__main__':

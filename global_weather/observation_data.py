@@ -46,6 +46,18 @@ CAMPAIGN_PERIODS = {
 }
 
 
+def campaign_bounds(campaign='legacy_2021_2022'):
+    if campaign not in CAMPAIGN_PERIODS:
+        raise ValueError(f'Unknown campaign: {campaign}')
+    p = CAMPAIGN_PERIODS[campaign]
+    start = p['start']
+    train_end = p['train_end']
+    val_end = p['val_end']
+    end = p['end']
+    hours = int((end - start).total_seconds() / 3600)
+    return start, train_end, val_end, end, hours
+
+
 def _sources(cache):
     if isinstance(cache,(list,tuple)):
         return sorted({path for root in cache for path in _sources(root)})
@@ -60,7 +72,7 @@ def _sources(cache):
     return paths
 
 
-def _records(path):
+def _records(path, start=START, end=END):
     if path.is_symlink() or any(part.lower() == 'era5' for part in path.parts) or path.name.lower().startswith('era5'):
         raise ValueError('Only immutable GHCNh observation sources are admitted.')
     if path.suffix == '.psv':
@@ -68,7 +80,7 @@ def _records(path):
         if receipt.get('sha256') != sha256(path):
             raise ValueError('GHCNh source hash mismatch.')
         records, _ = read_records(path, acquired_at=receipt['acquired_at'],
-                                  latency_minutes=60, start=START.isoformat(), end=END.isoformat())
+                                  latency_minutes=60, start=start.isoformat(), end=end.isoformat())
         yield from records
     elif path.suffix == '.sqlite':
         with sqlite3.connect(path.resolve().as_uri()+'?mode=ro', uri=True) as connection:
@@ -83,7 +95,7 @@ def _records(path):
         raise ValueError('Unsupported observation cache format.')
 
 
-def _checked(record):
+def _checked(record, start=START, hours=HOURS):
     if record.get('provider') != 'NOAA_GHCNh' or record.get('valid') is not True:
         return None
     variable = record.get('variable')
@@ -105,9 +117,9 @@ def _checked(record):
     if available < observed:
         raise ValueError('Observation available before measurement.')
     # Trailing bins (t-1h,t]: exact hour measurements belong to that hour.
-    seconds = (observed-START).total_seconds()
+    seconds = (observed-start).total_seconds()
     hour = math.ceil(seconds/3600)
-    if not 0 <= hour < HOURS:
+    if not 0 <= hour < hours:
         return None
     lat, lon = record['latitude'], record['longitude']
     if not math.isfinite(lat+lon) or abs(lat)>90 or abs(lon)>180:
@@ -115,17 +127,17 @@ def _checked(record):
     return identity[1], hour, v, available, observed
 
 
-def _unique(cache, database, *, train_only=False, retained=None):
+def _unique(cache, database, *, train_only=False, retained=None, start=START, train_end=TRAIN_END, end=END, hours=HOURS):
     sources=[]
     with sqlite3.connect(database) as db:
         db.execute('CREATE TABLE observations (id TEXT PRIMARY KEY, revision INTEGER, record TEXT, hash TEXT)')
         db.execute('CREATE TABLE seen_versions (id TEXT PRIMARY KEY, hash TEXT)')
         for path in _sources(cache):
-            if train_only and path.suffix == '.psv' and not path.name.endswith('_2021.psv'):
+            if train_only and path.suffix == '.psv' and not any(path.name.endswith(f'_{y}.psv') for y in range(start.year, train_end.year)):
                 continue
             before = sha256(path)
-            for record in _records(path):
-                if train_only and not START <= utc(record['observed_at']) < TRAIN_END:
+            for record in _records(path, start=start, end=end):
+                if train_only and not start <= utc(record['observed_at']) < train_end:
                     continue
                 record_identity=record.get('observation_id','').split('/')
                 if retained is not None and (len(record_identity)<2 or record_identity[1] not in retained):
@@ -141,11 +153,11 @@ def _unique(cache, database, *, train_only=False, retained=None):
                         raise ValueError('Conflicting observation version.')
                     continue
                 db.execute('INSERT INTO seen_versions VALUES (?,?)',(key,fingerprint))
-                checked = _checked(record)
+                checked = _checked(record, start=start, hours=hours)
                 if checked is None:
                     continue
                 station, _, _, _, observed = checked
-                if (train_only and not START <= observed < TRAIN_END) or (retained is not None and station not in retained):
+                if (train_only and not start <= observed < train_end) or (retained is not None and station not in retained):
                     continue
                 revision = record.get('revision', 0)
                 if type(revision) is not int or revision < 0:
@@ -163,24 +175,25 @@ def _unique(cache, database, *, train_only=False, retained=None):
     return sources
 
 
-def admit(cache, output, *, station_limit=1024, minimum_coverage=.05):
-    """Freeze station selection using 2021 QC and hourly completeness only."""
+def admit(cache, output, *, station_limit=1024, minimum_coverage=.05, campaign='legacy_2021_2022'):
+    """Freeze station selection using train QC and hourly completeness only."""
     import tempfile
     if type(station_limit) is not int or not 1<=station_limit<=1024 or not 0<minimum_coverage<=1:
         raise ValueError('Invalid station admission bounds.')
+    start, train_end, val_end, end, hours = campaign_bounds(campaign)
     stats={}; geometry={}
     with tempfile.TemporaryDirectory(prefix='station-admission-',dir=Path(output).parent) as temp:
         database=Path(temp)/'unique.sqlite'
-        sources=_unique(cache,database,train_only=True)
+        sources=_unique(cache,database,train_only=True, start=start, train_end=train_end, end=end, hours=hours)
         with sqlite3.connect(database) as db:
             for (text,) in db.execute('SELECT record FROM observations'):
-                record=json.loads(text); station,hour,v,_,_=_checked(record)
+                record=json.loads(text); station,hour,v,_,_=_checked(record, start=start, hours=hours)
                 stats.setdefault(station,[set() for _ in VARIABLES])[v].add(hour)
                 position=(record['latitude'],record['longitude'])
                 if station in geometry and geometry[station]!=position:
                     raise ValueError('Station location changed; operator metadata needed.')
                 geometry[station]=position
-    train_hours=int((TRAIN_END-START).total_seconds()/3600)
+    train_hours=int((train_end-start).total_seconds()/3600)
     accepted=[]; rejected=[]
     for station in sorted(stats):
         coverage=[len(hours)/train_hours for hours in stats[station]]
@@ -193,14 +206,15 @@ def admit(cache, output, *, station_limit=1024, minimum_coverage=.05):
     if not accepted:
         raise ValueError('No stations pass train-only admission.')
     report={'schema':'native-station-admission-1','stations':accepted,'rejected':rejected,
-            'minimum_coverage':minimum_coverage,'period':[START.isoformat(),TRAIN_END.isoformat()],
+            'minimum_coverage':minimum_coverage,'period':[start.isoformat(),train_end.isoformat()],
+            'campaign': campaign,
             'selection':'any_native_variable_hourly_coverage_train_only_then_station_id',
             'sources':sources,'variables':list(NATIVE_VARIABLES)}
     atomic_json(output,report)
     return report
 
 
-def _prepare(cache, admission_path, output):
+def _prepare(cache, admission_path, output, campaign='legacy_2021_2022'):
     output=Path(output); output.mkdir(parents=True,exist_ok=False)
     admission=read_json(admission_path); stations=admission['stations']
     if admission.get('schema')!='native-station-admission-1' or not 1<=len(stations)<=1024:
@@ -208,45 +222,51 @@ def _prepare(cache, admission_path, output):
     indices={station['id']:i for i,station in enumerate(stations)}
     if len(indices)!=len(stations):
         raise ValueError('Duplicate station IDs.')
-    sources=_unique(cache,output/'observations.sqlite',retained=set(indices))
-    for source in admission['sources']:
+    start, train_end, val_end, end, hours = campaign_bounds(campaign)
+    sources=_unique(cache,output/'observations.sqlite',retained=set(indices), start=start, train_end=train_end, end=end, hours=hours)
+    for source in admission.get('sources', []):
         if sha256(source['path'])!=source['sha256']:
             raise ValueError('Admission train data changed.')
-    shape=(HOURS,len(stations),len(VARIABLES))
+    shape=(hours,len(stations),len(VARIABLES))
     sums=np.zeros(shape,dtype=np.float32); counts=np.zeros(shape,dtype=np.uint16)
     # Max availability within each bin allows causal masking even for delays.
     available=np.zeros(shape,dtype=np.int64)
     with sqlite3.connect(output/'observations.sqlite') as db:
         for (text,) in db.execute('SELECT record FROM observations'):
-            record=json.loads(text); station,hour,v,ready,_=_checked(record); s=indices[station]
+            record=json.loads(text); checked=_checked(record, start=start, hours=hours)
+            if checked is None:
+                continue
+            station,hour,v,ready,_=checked; s=indices[station]
             if (record['latitude'],record['longitude'])!=(stations[s]['latitude'],stations[s]['longitude']):
                 raise ValueError('Station geometry differs from frozen admission.')
             if counts[hour,s,v]==65535:
                 raise ValueError('Hourly measurement count exceeds limit.')
             sums[hour,s,v]+=record['value']; counts[hour,s,v]+=1
-            available[hour,s,v]=max(available[hour,s,v],math.ceil((ready-START).total_seconds()))
+            available[hour,s,v]=max(available[hour,s,v],math.ceil((ready-start).total_seconds()))
     mask=counts>0
     np.divide(sums,counts,out=sums,where=mask)
-    train_end=int((TRAIN_END-START).total_seconds()/3600)
+    train_end_idx=int((train_end-start).total_seconds()/3600)
     mean=[];std=[]
     for v in range(len(VARIABLES)):
-        measured=sums[:train_end,:,v][mask[:train_end,:,v]].astype(np.float64)
+        measured=sums[:train_end_idx,:,v][mask[:train_end_idx,:,v]].astype(np.float64)
         if len(measured)<2 or not np.isfinite(measured).all() or measured.std()<=0:
             raise ValueError('Insufficient variable train statistics; no invented norms.')
         mean.append(float(measured.mean()));std.append(float(measured.std()))
     # Normalize unique hourly observations once, never overlapping issue windows.
     norm={'schema':'native-station-norm-1','mean':mean,'std':std,'units':UNITS,
-          'variables':NATIVE_VARIABLES,'period':[START.isoformat(),TRAIN_END.isoformat()],
+          'variables':NATIVE_VARIABLES,'period':[start.isoformat(),train_end.isoformat()],
+          'campaign': campaign,
           'method':'unique_hourly_station_variable_means_population_std','data_kind':'real'}
     atomic_json(output/'norm.json',norm)
     np.savez(output/'hourly.npz',values=sums,mask=mask,available_seconds=available)
     samples=[]
-    for split,begin,end in [('train',START,TRAIN_END),('validation',TRAIN_END,VAL_END),('test',VAL_END,END)]:
+    for split,begin,end_bound in [('train',start,train_end),('validation',train_end,val_end),('test',val_end,end)]:
         issue=begin+timedelta(days=1)
-        while issue+timedelta(hours=72)<end:
-            samples.append({'issue':issue.isoformat(),'hour':int((issue-START).total_seconds()/3600),'split':split})
+        while issue+timedelta(hours=72)<end_bound:
+            samples.append({'issue':issue.isoformat(),'hour':int((issue-start).total_seconds()/3600),'split':split})
             issue+=timedelta(days=1)
     manifest={'schema':'native-station-dataset-1','data_kind':'real','stations':stations,
+              'campaign': campaign,
               'variables':NATIVE_VARIABLES,'units':UNITS,'samples':samples,'guard_hours':84,
               'input_hours':12,'lead_hours':list(range(3,73,3)),
               'operator':'station_ID_readout_hourly_mean_trailing_(t-1h,t]; native_instrument_height_unknown',
@@ -261,7 +281,7 @@ def _prepare(cache, admission_path, output):
     return read_json(output/'dataset.json')
 
 
-def prepare(cache, admission_path, output):
+def prepare(cache, admission_path, output, campaign='legacy_2021_2022'):
     """Publish complete data atomically; reuse only unchanged frozen artifacts."""
     import tempfile
     output=Path(output)
@@ -278,7 +298,7 @@ def prepare(cache, admission_path, output):
     output.parent.mkdir(parents=True,exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.observation-prepare-',dir=output.parent) as temp:
         stage=Path(temp)/'dataset'
-        manifest=_prepare(cache,admission_path,stage)
+        manifest=_prepare(cache,admission_path,stage,campaign=campaign)
         stage.rename(output)
     return manifest
 
@@ -300,9 +320,11 @@ class ObservationDataset:
                 raise ValueError('Observation dataset artifact changed.')
         self.norm=read_json(self.root/'norm.json');self.mean=np.asarray(self.norm['mean'],dtype=np.float32)
         self.std=np.asarray(self.norm['std'],dtype=np.float32)
+        self.campaign = self.manifest.get('campaign', 'legacy_2021_2022')
+        start, train_end, val_end, end, hours = campaign_bounds(self.campaign)
         if (self.norm.get('schema')!='native-station-norm-1' or self.norm.get('data_kind')!='real' or
                 self.norm.get('method')!='unique_hourly_station_variable_means_population_std' or
-                self.norm.get('period')!=[START.isoformat(),TRAIN_END.isoformat()] or
+                self.norm.get('period')!=[start.isoformat(),train_end.isoformat()] or
                 self.norm.get('variables')!=list(NATIVE_VARIABLES) or self.norm.get('units')!=list(UNITS) or
                 self.mean.shape!=(6,) or self.std.shape!=(6,) or not np.isfinite(self.mean).all() or
                 not np.isfinite(self.std).all() or (self.std<=0).any()):
@@ -313,19 +335,19 @@ class ObservationDataset:
         station_ids=[station['id'] for station in self.manifest['stations']]
         if not 1<=len(station_ids)<=1024 or len(set(station_ids))!=len(station_ids):
             raise ValueError('Invalid native station inventory.')
-        shape=(HOURS,len(self.manifest['stations']),6)
+        shape=(hours,len(self.manifest['stations']),6)
         if (self.values.shape!=shape or self.mask.shape!=shape or self.available.shape!=shape or
                 self.mask.dtype!=bool or not np.isfinite(self.values[self.mask]).all()):
             raise ValueError('Invalid hourly observation arrays.')
-        boundaries={'train':(START,TRAIN_END),'validation':(TRAIN_END,VAL_END),'test':(VAL_END,END)}
+        boundaries={'train':(start,train_end),'validation':(train_end,val_end),'test':(val_end,end)}
         seen=set()
         for row in self.samples:
             issue=utc(row['issue']);split=row['split']
             if split not in boundaries:
                 raise ValueError('Unknown chronological split.')
-            begin,end=boundaries[split]
-            if (type(row['hour']) is not int or not begin<=issue-timedelta(hours=12) or not issue+timedelta(hours=72)<end or
-                    row['hour']!=(issue-START).total_seconds()/3600 or issue in seen):
+            begin,end_bound=boundaries[split]
+            if (type(row['hour']) is not int or not begin<=issue-timedelta(hours=12) or not issue+timedelta(hours=72)<end_bound or
+                    row['hour']!=(issue-start).total_seconds()/3600 or issue in seen):
                 raise ValueError('Observation windows cross the frozen chronological split.')
             seen.add(issue)
         self.latlon=np.asarray([[s['latitude'],s['longitude']] for s in self.manifest['stations']],dtype=np.float32)
@@ -349,13 +371,14 @@ def main(argv=None):
     parser.add_argument('--source-cache',required=True,action='append');parser.add_argument('--output',required=True)
     parser.add_argument('--admission');parser.add_argument('--station-limit',type=int,default=1024)
     parser.add_argument('--minimum-coverage',type=float,default=.05)
+    parser.add_argument('--campaign',choices=list(CAMPAIGN_PERIODS.keys()),default='legacy_2021_2022')
     args=parser.parse_args(argv)
     if args.command=='admit':
         Path(args.output).parent.mkdir(parents=True,exist_ok=True)
-        admit(args.source_cache,args.output,station_limit=args.station_limit,minimum_coverage=args.minimum_coverage)
+        admit(args.source_cache,args.output,station_limit=args.station_limit,minimum_coverage=args.minimum_coverage,campaign=args.campaign)
     else:
         if not args.admission:parser.error('--admission required for preparation')
-        prepare(args.source_cache,args.admission,args.output)
+        prepare(args.source_cache,args.admission,args.output,campaign=args.campaign)
 
 
 if __name__=='__main__':
