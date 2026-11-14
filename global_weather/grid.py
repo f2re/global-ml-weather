@@ -275,5 +275,5 @@ def build_mesh8_grid():
     return grid
 
 
-def build_pyramid(level=1):
-    return [build_grid(i) for i in range(level, -1, -1)]
+def build_pyramid(level=1, *, max_cells=DEFAULT_MAX_CELLS):
+    return [build_grid(i, max_cells=max_cells) for i in range(level, -1, -1)]

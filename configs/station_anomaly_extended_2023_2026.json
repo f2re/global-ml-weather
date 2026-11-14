@@ -1,0 +1,18 @@
+{
+  "schema": "station-anomaly-training-config-1",
+  "experiment_id": "station-anomaly-extended-2023-2026",
+  "experiment_role": "surface_climatology_anomaly_research_trained",
+  "mesh_level": 4,
+  "hidden": 32,
+  "epochs": 100,
+  "patience": 15,
+  "threads": 8,
+  "seed": 44,
+  "learning_rate": 0.001,
+  "weight_decay": 0.01,
+  "gradient_clip": 1.0,
+  "max_train_samples": 2000,
+  "max_val_samples": 300,
+  "prediction_target": "dimensionless anomaly departure from climatology",
+  "scientific_acceptance": false
+}

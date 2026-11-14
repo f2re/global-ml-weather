@@ -7,7 +7,7 @@ trap '' HUP
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$DIR"
 
-mkdir -p outputs outputs/mesh8-extended-2023-2026/training
+mkdir -p outputs outputs/extended_2023_2026/training
 LOG="outputs/extended_training_2023_2026.log"
 PID_FILE="outputs/extended_training_2023_2026.pid"
 
@@ -41,5 +41,5 @@ fi
 echo "[$(date -u +'%Y-%m-%dT%H:%M:%SZ')] ЭТАП 2: Запуск обучения модели station_anomaly_training..."
 exec .venv/bin/python -u -m global_weather.station_anomaly_training \
     --dataset "${DATASET_DIR}" \
-    --output outputs/mesh8-extended-2023-2026/training \
-    --config configs/joint_observation_training_2023_2026.json
+    --output outputs/extended_2023_2026/training \
+    --config configs/station_anomaly_extended_2023_2026.json

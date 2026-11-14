@@ -20,7 +20,7 @@ import numpy as np
 os.environ.setdefault('CUBLAS_WORKSPACE_CONFIG', ':4096:8')
 import torch
 
-from .grid import build_pyramid
+from .grid import build_grid, build_mesh8_grid
 from .observation_data import ObservationDataset, START, campaign_bounds
 from .observations import utc
 from .observation_training import (
@@ -51,9 +51,10 @@ DEFAULT_CONFIG = {
 
 
 def create_model(dataset: ObservationDataset, climatology: StationClimatology, config: dict, device: torch.device):
-    grids = build_pyramid(config['mesh_level'])
+    mesh_level = config.get('mesh_level', 0)
+    grid = build_mesh8_grid() if mesh_level == 8 else build_grid(mesh_level)
     return StationAnomalyModel(
-        grids,
+        [grid],
         dataset.latlon,
         climatology.std,
         hidden=config['hidden'],
