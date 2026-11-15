@@ -83,6 +83,33 @@ class StationAnomalyModel(nn.Module):
             raise ValueError("Predicted anomalies and climatology normals must have identical shapes.")
         return climatology_normals + predicted_anomalies * self.scales
 
+    def analysis_state(self, history_anomalies: Tensor, history_mask: Tensor) -> tuple[Tensor, Tensor]:
+        """Ingest 12 hours of observed departures and return the analysis state and diagnostic profiles at t0."""
+        expected = (12, self.operator.cells.numel(), 6)
+        if history_anomalies.shape != expected or history_mask.shape != expected or history_mask.dtype != torch.bool:
+            raise ValueError("History departures and boolean mask must have shape [12, stations, 6].")
+        if not bool(torch.isfinite(history_anomalies[history_mask]).all()):
+            raise ValueError("An admitted anomaly measurement is nonfinite.")
+
+        n, d = self.xyz.shape[0], self.hidden
+        clean_anomalies = torch.where(history_mask, history_anomalies, torch.zeros_like(history_anomalies))
+        state = self.geometry(self.xyz)[:, None, :] + self.level_embedding[None, :, :]
+
+        for values, mask in zip(clean_anomalies, history_mask):
+            tokens = self.input_encoder(torch.cat([values, mask.to(values.dtype)], dim=-1))
+            valid = mask.any(-1)
+            pooled = values.new_zeros(n, d).index_add(0, self.operator.cells, tokens * valid[:, None])
+            counts = values.new_zeros(n).index_add(0, self.operator.cells, valid.to(values.dtype))
+            pooled = pooled / counts.clamp_min(1)[:, None]
+            updated = self.ingest(
+                pooled[:, None, :].expand(-1, 37, -1).reshape(-1, d),
+                state.reshape(-1, d),
+            ).reshape(n, 37, d)
+            state = torch.where((counts > 0)[:, None, None], updated, state)
+
+        profiles = self.profile_head(state)
+        return state, profiles
+
     def forward(self, history_anomalies: Tensor, history_mask: Tensor) -> AnomalyForecast:
         """Ingest 12 hours of observed departures, evolve the global state, and predict future anomalies."""
         expected = (12, self.operator.cells.numel(), 6)
