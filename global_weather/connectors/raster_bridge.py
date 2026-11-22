@@ -57,6 +57,7 @@ def import_raster(spec, out, *, available_at, availability_reference, geometry=N
                     raise ValueError('Raster/asset offset conflict.')
             if ds.tags().get('time') and utc(ds.tags()['time']) != observed: raise ValueError('Raster/manifest time conflict.')
             raster = ds.read(1, masked=True).astype('float32')
+            quality_support = 'dataset_mask' if any(flag.name in ('per_dataset', 'alpha') for flag in ds.mask_flag_enums[0]) else 'nodata_only'
             values = np.asarray(raster.data, dtype='float32')*spec['scale']+spec['offset']
             valid = ~np.ma.getmaskarray(raster) & np.isfinite(values)
             if spec.get('declared_nodata') is not None:
@@ -79,27 +80,33 @@ def import_raster(spec, out, *, available_at, availability_reference, geometry=N
                         raise ValueError('Quality raster is on another grid.')
                     flags = qc.read(1, masked=True)
                     valid &= ~np.ma.getmaskarray(flags) & (flags.data == 0)
+                    quality_support = 'paired_quality_raster'
     arrays = dict(values=np.where(valid,values,0).astype('float32'), valid=valid,
                   latitude=np.where(valid,lat,0), longitude=np.where(valid,lon,0))
     reasons = ['geometry_supplement_required']
     geo_ref = None
     if geometry is not None:
         geo = read_json(geometry)
-        if set(geo)-{'reference','view_zenith_deg','footprint_km'} or not isinstance(geo.get('reference'),str) or not geo['reference'].strip():
+        if set(geo)-{'reference','view_zenith_deg','footprint_km','solar_zenith_deg'} or not isinstance(geo.get('reference'),str) or not geo['reference'].strip():
             raise ValueError('Reviewed view geometry reference required.')
-        for key in ('view_zenith_deg','footprint_km'):
+        geometry_fields = ('view_zenith_deg', 'footprint_km')
+        if 'solar_zenith_deg' in geo:
+            geometry_fields += ('solar_zenith_deg',)
+        for key in geometry_fields:
             a = np.asarray(geo[key], dtype='float64')
             if a.shape not in ((), values.shape): raise ValueError('Geometry shape differs from raster.')
             a = np.broadcast_to(a, values.shape).copy()
             if not np.isfinite(a[valid]).all(): raise ValueError('Missing geometry at valid pixels.')
             if key == 'view_zenith_deg' and ((a[valid]<0)|(a[valid]>=90)).any(): raise ValueError('Invalid viewing angle.')
             if key == 'footprint_km' and (a[valid]<=0).any(): raise ValueError('Invalid native footprint.')
+            if key == 'solar_zenith_deg' and ((a[valid] < 0) | (a[valid] > 180)).any(): raise ValueError('Invalid solar angle.')
             arrays[key] = np.where(valid,a,0)
         geo_ref, reasons = geo['reference'], []
     if not valid.any(): raise ValueError('No physical pixels survive QC.')
     manifest = {k:v for k,v in spec.items() if k not in ('raster','quality','inputs')}
     manifest.update(schema='physical-raster-v1', available_at=iso(available_at), availability_reference=availability_reference,
                     time_support='native_scene_time_not_per_pixel_time', geometry_reference=geo_ref,
+                    quality_support=quality_support,
                     model_ready=False, observation_export_ready=not reasons,
                     pending=reasons+['model_registry_normalization_and_footprint_admission'],
                     crs=crs, transform=affine, shape=list(values.shape), valid_pixels=int(valid.sum()),
@@ -136,7 +143,7 @@ def read_capsule(directory, *, max_array_bytes=256*1024*1024):
             raise ValueError('Array archive exceeds memory budget.')
     with np.load(p,allow_pickle=False) as z: a = {k:z[k] for k in z.files}
     required = {'values','valid','latitude','longitude'}
-    if not required.issubset(a) or set(a)-required-{'view_zenith_deg','footprint_km'}: raise ValueError('Unexpected arrays.')
+    if not required.issubset(a) or set(a)-required-{'view_zenith_deg','footprint_km','solar_zenith_deg'}: raise ValueError('Unexpected arrays.')
     shape = tuple(m['shape'])
     if len(shape)!=2 or any(v.shape!=shape for v in a.values()) or a['valid'].dtype != bool:
         raise ValueError('Array dimensions/mask mismatch.')
@@ -149,6 +156,8 @@ def read_capsule(directory, *, max_array_bytes=256*1024*1024):
         raise ValueError('No valid positive Kelvin measurements.')
     if (np.abs(a['latitude'][valid]) > 90).any() or (np.abs(a['longitude'][valid]) > 180).any():
         raise ValueError('Coordinates outside geographical ranges.')
+    if 'solar_zenith_deg' in a and ((a['solar_zenith_deg'][valid] < 0) | (a['solar_zenith_deg'][valid] > 180)).any():
+        raise ValueError('Solar geometry outside physical range.')
     if utc(m['available_at']) < utc(m['observed_at']):
         raise ValueError('Capsule availability precedes its observation.')
     if m.get('valid_pixels') != int(valid.sum()):

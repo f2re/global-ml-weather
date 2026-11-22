@@ -198,6 +198,7 @@ def arktika_product(path):
     platform = meta.get('platform')
     if platform not in ('ARCM1', 'ARCM2'): raise ValueError('This audited worker produces ARCM1/ARCM2 only; use the asset adapter for Electro-L.')
     return dict(source='arktika_m', platform=platform, instrument='MSU-GS/A', channel_id=str(channel),
+                native_scene_id=meta['scene_id'],
                 observed_at=iso(meta['time']), quantity='brightness_temperature', units='K',
                 calibration_reference=cal[0]['reference'], calibration_status=cal[0]['status'],
                 scale=1., offset=0., values_already_physical=True,
@@ -254,6 +255,7 @@ def gptl_asset(path, raster_path, *, source, asset_key=None, channel=None):
     if uri.username or uri.password: raise ValueError('Credential-bearing URI is not admitted.')
     redacted_uri = urlunsplit((uri.scheme, uri.netloc, uri.path, '', ''))
     return dict(source=source, platform=platform, instrument='MSU-GS/A' if source=='arktika_m' else 'MSU-GS',
+                native_scene_id=a['item_id'],
                 channel_id=str(channel), observed_at=iso(a['time']), quantity='brightness_temperature', units='K',
                 calibration_reference='raster_bands:'+sha256(p), calibration_status='metadata',
                 scale=scale, offset=offset, declared_nodata=nodata, values_already_physical=False,

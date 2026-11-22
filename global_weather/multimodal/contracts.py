@@ -137,6 +137,7 @@ class Sequence:
     link_weight: Tensor | None = None
     link_grid_fingerprint: str | None = None
     link_reference: str | None = None
+    scan_start_unix: Tensor | None = None
 
     def validate(self, sensor: Sensor, *, n_cells=None, grid_fingerprint=None):
         if self.sensor_id != sensor.id or self.sensor_signature != sensor.measurement_signature:
@@ -159,6 +160,12 @@ class Sequence:
         if (not torch.isfinite(times).all() or not torch.isfinite(self.available_unix).all()
                 or (self.available_unix < times).any() or (torch.diff(times) <= 0).any()):
             raise ValueError("Неверные времена съёмки или готовности.")
+        if sensor.data_kind == 'real' and sensor.source in ('arktika_m', 'electro_l') and self.scan_start_unix is None:
+            raise ValueError("Для реального ИК-кадра нужны границы съёмки.")
+        if self.scan_start_unix is not None and (
+                self.scan_start_unix.shape != (t,) or not torch.isfinite(self.scan_start_unix).all()
+                or (self.scan_start_unix > times).any()):
+            raise ValueError("Неверное начало сканирования.")
         if len(self.frame_ids) != t or len(set(self.frame_ids)) != t:
             raise ValueError("Нужны уникальные идентификаторы версий кадров.")
         for ident in self.frame_ids: hash_value(ident)
@@ -214,12 +221,18 @@ class Sequence:
     def causal(self, issue_time, sensor: Sensor):
         self.validate(sensor)
         issue = utc(issue_time).timestamp()
-        use = ((self.observed_unix > issue-43200) & (self.observed_unix <= issue)
+        start = self.observed_unix if self.scan_start_unix is None else self.scan_start_unix
+        use = ((start > issue-43200) & (self.observed_unix <= issue)
                & (self.available_unix <= issue))
         if not use.any(): return None
+        return self.select_frames(use)
+
+    def select_frames(self, use):
         ids = tuple(x for x,keep in zip(self.frame_ids,use.tolist()) if keep)
         changes = {key:getattr(self,key)[use] for key in ("values","valid","observed_unix","available_unix",
                     "view_zenith_deg","solar_zenith_deg","footprint_km")}
+        if self.scan_start_unix is not None:
+            changes['scan_start_unix'] = self.scan_start_unix[use]
         return replace(self,**changes,frame_ids=ids)
 
     def to(self, device):

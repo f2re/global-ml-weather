@@ -92,7 +92,8 @@ def read_arrays(path):
 
 
 TENSORS=('values','valid','observed_unix','available_unix','latitude','longitude',
-         'view_zenith_deg','solar_zenith_deg','footprint_km','area_m2','link_pixel','link_cell','link_weight')
+         'view_zenith_deg','solar_zenith_deg','footprint_km','area_m2','link_pixel','link_cell','link_weight',
+         'scan_start_unix')
 
 
 def save_sequence(path,seq):
@@ -111,7 +112,7 @@ def load_sequence(path,sensor):
     for k in data:
         v=data[k]
         dtype=torch.bool if k=='valid' else torch.long if k in ('link_pixel','link_cell') else (
-              torch.float64 if k in ('observed_unix','available_unix') else torch.float32)
+              torch.float64 if k in ('observed_unix','available_unix','scan_start_unix') else torch.float32)
         if k=='valid' and v.dtype!=bool:raise ValueError('Маска должна быть Boolean.')
         if k in ('link_pixel','link_cell') and v.dtype.kind not in 'iu':raise ValueError('Индексы должны быть целыми.')
         meta[k]=torch.as_tensor(v,dtype=dtype)

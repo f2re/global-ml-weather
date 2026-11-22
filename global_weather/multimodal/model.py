@@ -1,6 +1,5 @@
 """Связь новых кодировщиков с существующим физически адаптивным ядром и выходами."""
 from __future__ import annotations
-from dataclasses import replace
 from datetime import timedelta
 import json
 import torch
@@ -44,10 +43,7 @@ class MultimodalWeatherModel(AdaptiveWeatherModel):
             keep=torch.tensor([frame_identity(seq.sensor_id,key) not in old for key in seq.frame_ids],
                               device=seq.values.device,dtype=torch.bool)
             if not keep.any():continue
-            changed={k:getattr(seq,k)[keep] for k in ('values','valid','observed_unix','available_unix',
-                        'view_zenith_deg','solar_zenith_deg','footprint_km')}
-            changed['frame_ids']=tuple(k for k,yes in zip(seq.frame_ids,keep.tolist()) if yes)
-            available.append(replace(seq,**changed))
+            available.append(seq.select_frames(keep))
         analysed=super().analysis_state(obs,elevation,land,background)
         fields,masks=self.satellite_bank(available,obs.issue_time,self.output_grid)
         state=self.source_fusion(analysed.latent,fields,masks)
