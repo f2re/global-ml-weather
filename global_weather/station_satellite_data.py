@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, replace
+from dataclasses import asdict, fields, replace
 from datetime import timedelta
 import json
 import math
@@ -11,13 +11,10 @@ from pathlib import Path
 
 import numpy as np
 
-from .multimodal.contracts import fingerprint, hash_value, utc
+from .multimodal.contracts import fingerprint, hash_value, is_station_ir, utc
 from .multimodal.io import load_sensors, load_sequence, read_json, reference, regular, resolve, sha256, write_json
-from .multimodal.prepare import _admitted_scan, from_capsules
+from .multimodal.prepare import _admitted_scan, from_capsules, sequence_from_capsules
 from .observation_data import campaign_bounds
-
-
-ARCTIC_IR_CHANNELS = frozenset(str(channel) for channel in range(4, 11))
 
 
 def _frame_index(sequence):
@@ -28,21 +25,9 @@ def _frame_index(sequence):
                                                sequence.observed_unix.tolist(), sequence.available_unix.tolist())]
 
 
-def _require_arctic(sensor):
-    if (sensor.data_kind != 'real' or sensor.source != 'arktika_m' or sensor.kind != 'imager'
-            or sensor.platform not in {'ARCM1', 'ARCM2'}
-            or any(ch.id not in ARCTIC_IR_CHANNELS or ch.quantity != 'brightness_temperature' or ch.units != 'K'
-                   for ch in sensor.channels)):
-        raise ValueError('Для станционного опыта допустимы только реальные ИК-каналы МСУ-ГС/А в K.')
-
-
 def _require_supported_sensor(sensor):
-    if sensor.source == 'goes_abi':
-        if (sensor.data_kind != 'real' or sensor.platform != 'GOES-18' or sensor.kind != 'imager'
-                or [(ch.id, ch.quantity, ch.units) for ch in sensor.channels] != [('13', 'brightness_temperature', 'K')]):
-            raise ValueError('Станционный пилот ABI принимает только реальный канал C13 GOES-18 в K.')
-    else:
-        _require_arctic(sensor)
+    if sensor.data_kind != 'real' or not is_station_ir(sensor):
+        raise ValueError('Станционный опыт принимает реальные ИК-каналы «Арктики-М» и «Электро-Л» в K.')
 
 
 def prepare_station_sequence(plan_path, output, report_path):
@@ -56,7 +41,7 @@ def prepare_station_sequence(plan_path, output, report_path):
     plan = read_json(plan_path)
     sensors = load_sensors(resolve(plan_path.parent, plan['sensor_registry']))
     sensor = next(s for s in sensors if s.id == plan['sensor'])
-    _require_arctic(sensor)
+    _require_supported_sensor(sensor)
     result = from_capsules(plan_path, output)
     sequence = load_sequence(output, sensor)
     if sequence.source_sha256 != result['sha256'] or sha256(plan_path) != plan_ref['sha256']:
@@ -93,7 +78,21 @@ def _station_schedule(root):
     return station_sha, schedule, manifest['samples']
 
 
-def _arctic_provenance(report_path, report, sensor, *, verify_raw):
+def _check_replayed_sequence(sequence, replayed):
+    for field in fields(sequence):
+        if field.name == 'source_sha256':
+            continue
+        actual, expected = getattr(sequence, field.name), getattr(replayed, field.name)
+        if hasattr(expected, 'numpy'):
+            same = (hasattr(actual, 'numpy') and actual.dtype == expected.dtype
+                    and np.array_equal(actual.numpy(), expected.numpy(), equal_nan=True))
+        else:
+            same = not hasattr(actual, 'numpy') and actual == expected
+        if not same:
+            raise ValueError(f'Поле спутниковой последовательности {field.name} не совпадает с исходными капсулами.')
+
+
+def _capsule_provenance(report_path, report, sensor, *, verify_raw, sequence=None):
     plan_path = resolve(report_path.parent, report['plan'])
     root = plan_path.parent
     plan = read_json(plan_path)
@@ -129,9 +128,8 @@ def _arctic_provenance(report_path, report, sensor, *, verify_raw):
                     or metadata.get('arrays_sha256') != entry['pixels']['sha256']
                     or not metadata.get('geometry_reference')):
                 raise ValueError('Повторная капсула или несовместимый физический канал.')
-            if verify_raw and resolve(root, entry['pixels']) != manifest_path.with_name('pixels.npz'):
-                raise ValueError('Неверный файл исходных пикселей капсулы.')
-            scans.append(_admitted_scan(manifest_path, digest, admission['capsules'].get(digest), metadata, root, evidence))
+            scans.append(_admitted_scan(manifest_path, digest, admission['capsules'].get(digest), metadata, root,
+                                        evidence))
             identities.add(metadata['native_scene_id'])
             evidence[manifest_path] = digest
             used.add(digest)
@@ -147,25 +145,23 @@ def _arctic_provenance(report_path, report, sensor, *, verify_raw):
         raise ValueError('Подтверждение происхождения изменилось.')
     if sha256(plan_path) != report['plan']['sha256'] or sha256(admission_path) != declarations['real_admission']['sha256']:
         raise ValueError('План подготовки изменился.')
+    if verify_raw:
+        replayed = sequence_from_capsules(plan_path)
+        if replayed.source_sha256 != report['plan']['sha256']:
+            raise ValueError('План подготовки изменился при повторной проверке.')
+        if sequence is not None:
+            _check_replayed_sequence(sequence, replayed)
 
 
-def _preparation(root, row, issue, sensor, *, verify_raw=False):
+def _preparation(root, row, issue, sensor, *, verify_raw=False, sequence=None):
     report_path = resolve(root, row['preparation'])
-    if sensor.source == 'goes_abi':
-        from .goes_abi import validate_station_passport
-
-        report = validate_station_passport(report_path, sensor, row['file']['sha256'], verify_raw=verify_raw)
-        schema = 'station-goes-abi-sequence-1'
-    else:
-        report = read_json(report_path)
-        schema = 'station-satellite-sequence-1'
-    if (report.get('schema') != schema or report.get('status') != 'sequence_prepared'
+    report = read_json(report_path)
+    if (report.get('schema') != 'station-satellite-sequence-1' or report.get('status') != 'sequence_prepared'
             or report.get('sensor') != sensor.id or report.get('data_kind') != 'real'
             or report.get('meteorologically_validated') is not False
             or report.get('sha256') != row['file']['sha256']):
         raise ValueError('Паспорт подготовки и спутниковый файл не совпадают.')
-    if sensor.source == 'arktika_m':
-        _arctic_provenance(report_path, report, sensor, verify_raw=verify_raw)
+    _capsule_provenance(report_path, report, sensor, verify_raw=verify_raw, sequence=sequence)
     index = report.get('frame_index')
     shape = report.get('shape')
     if (not isinstance(index, list) or not 1 <= len(index) <= 48 or report.get('frames') != len(index)
@@ -307,8 +303,8 @@ class StationSatelliteData:
         sequences = []
         for row, shape, frame_index in rows:
             sensor = self._sensors[row['sensor']]
-            _preparation(self.root, row, issue, sensor, verify_raw=True)
             sequence = load_sequence(resolve(self.root, row['file']), sensor)
+            _preparation(self.root, row, issue, sensor, verify_raw=True, sequence=sequence)
             if (tuple(sequence.values.shape) != shape or _frame_index(sequence) != frame_index
                     or sequence.source_sha256 != row['file']['sha256']):
                 raise ValueError('Спутниковые массивы не совпадают с паспортом подготовки.')

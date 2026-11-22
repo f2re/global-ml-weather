@@ -1,6 +1,6 @@
 {
   "schema": "station-anomaly-training-config-1",
-  "experiment_id": "station-satellite-2023-2026-pilot-1",
+  "experiment_id": "station-satellite-russian-ir-2023-2026-pilot-1",
   "experiment_role": "station_satellite_anomaly_research_trained",
   "mesh_level": 4,
   "hidden": 32,

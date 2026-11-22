@@ -59,6 +59,9 @@ def main(argv=None):
     for name in ('arktika','gptl'):
         a=s.choices[name];a.add_argument('--available-at',required=True);a.add_argument('--availability-reference',required=True)
         a.add_argument('--geometry',type=Path);a.add_argument('--output',type=Path,required=True)
+    a = s.add_parser('electro-native')
+    a.add_argument('input', type=Path)
+    a.add_argument('--output', type=Path, required=True)
     a=s.add_parser('export');a.add_argument('input',type=Path);a.add_argument('--output',type=Path,required=True);a.add_argument('--max-records',type=int,default=100_000)
     a=s.add_parser('checkout');a.add_argument('input',type=Path);a.add_argument('--upstream',choices=list(UPSTREAM),required=True)
     a=s.add_parser('release-gate');a.add_argument('input',type=Path)
@@ -69,6 +72,9 @@ def main(argv=None):
         spec=arktika_product(args.input) if args.command=='arktika' else gptl_asset(args.input,args.raster,source=args.source,asset_key=args.asset_key,channel=args.channel)
         result=import_raster(spec,args.output,available_at=args.available_at,
                              availability_reference=args.availability_reference,geometry=args.geometry)
+    elif args.command == 'electro-native':
+        from .multimodal.prepare import prepare_electro_capsule
+        result = prepare_electro_capsule(args.input, args.output)
     elif args.command=='export':
         from .connectors.raster_bridge import export_observations
         result=export_observations(args.input,args.output,max_records=args.max_records)

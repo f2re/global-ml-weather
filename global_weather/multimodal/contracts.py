@@ -13,7 +13,10 @@ import numpy as np
 import torch
 from torch import Tensor
 
-SOURCES = ("electro_l", "arktika_m", "meteor_msu_mr", "meteor_mtvza", "goes_abi")
+SOURCES = ("electro_l", "arktika_m", "meteor_msu_mr", "meteor_mtvza")
+STATION_IR_PLATFORMS = {"arktika_m": frozenset({"ARCM1", "ARCM2"}),
+                       "electro_l": frozenset({"EL2", "EL3", "EL4"})}
+STATION_IR_CHANNELS = frozenset(str(channel) for channel in range(4, 11))
 
 
 def utc(value):
@@ -74,9 +77,6 @@ class Sensor:
             raise ValueError("МТВЗА требует отдельного микроволнового адаптера.")
         if not 1 <= len(self.channels) <= 64 or len({x.id for x in self.channels}) != len(self.channels):
             raise ValueError("Нужны уникальные физические каналы.")
-        if self.source == "goes_abi" and (self.platform != "GOES-18" or self.kind != "imager"
-                or [(c.id, c.quantity, c.units) for c in self.channels] != [("13", "brightness_temperature", "K")]):
-            raise ValueError("В пилоте GOES ABI допускается только тепловой канал 13 GOES-18.")
         if self.data_kind not in ("real", "synthetic"):
             raise ValueError("Неизвестное происхождение норм.")
         unfit = [c.mean is None for c in self.channels]
@@ -107,6 +107,12 @@ class Sensor:
     @property
     def signature(self):
         return fingerprint(asdict(self))
+
+
+def is_station_ir(sensor: Sensor) -> bool:
+    return (sensor.kind == 'imager' and sensor.platform in STATION_IR_PLATFORMS.get(sensor.source, ())
+            and all(ch.id in STATION_IR_CHANNELS and ch.quantity == 'brightness_temperature' and ch.units == 'K'
+                    for ch in sensor.channels))
 
 
 @dataclass(frozen=True)
@@ -163,7 +169,7 @@ class Sequence:
         if (not torch.isfinite(times).all() or not torch.isfinite(self.available_unix).all()
                 or (self.available_unix < times).any() or (torch.diff(times) <= 0).any()):
             raise ValueError("Неверные времена съёмки или готовности.")
-        if sensor.data_kind == 'real' and sensor.source in ('arktika_m', 'electro_l', 'goes_abi') and self.scan_start_unix is None:
+        if sensor.data_kind == 'real' and sensor.source in STATION_IR_PLATFORMS and self.scan_start_unix is None:
             raise ValueError("Для реального ИК-кадра нужны границы съёмки.")
         if self.scan_start_unix is not None and (
                 self.scan_start_unix.shape != (t,) or not torch.isfinite(self.scan_start_unix).all()

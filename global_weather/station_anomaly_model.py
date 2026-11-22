@@ -16,7 +16,7 @@ from torch import Tensor, nn
 from torch.nn import functional as F
 
 from .model import GraphOps
-from .multimodal.contracts import Sensor, Sequence
+from .multimodal.contracts import Sensor, Sequence, is_station_ir
 from .multimodal.fusion import SatelliteBank, SourceFusion
 from .observation_model import LEAD_HOURS, NearestSphericalOperator
 from .vertical import PRESSURE_HPA
@@ -141,18 +141,6 @@ class StationAnomalyModel(nn.Module):
         )
 
 
-def _supported_station_sensor(sensor: Sensor) -> bool:
-    if sensor.kind != "imager":
-        return False
-    if sensor.source == "arktika_m":
-        return True
-    if sensor.source != "goes_abi" or sensor.platform != "GOES-18" or sensor.data_kind != "real":
-        return False
-    return tuple((channel.id, channel.quantity, channel.units) for channel in sensor.channels) == (
-        ("13", "brightness_temperature", "K"),
-    )
-
-
 class SatelliteStationAnomalyModel(StationAnomalyModel):
     """Add a masked infrared feature update at issue time before the station rollout."""
 
@@ -164,8 +152,8 @@ class SatelliteStationAnomalyModel(StationAnomalyModel):
     ):
         sensors = tuple(sensors)
         if (not sensors or len({sensor.id for sensor in sensors}) != len(sensors)
-                or not all(_supported_station_sensor(sensor) for sensor in sensors)):
-            raise ValueError("Station fusion requires unique Arctic imagers or the real GOES-18 ABI C13 channel.")
+                or not all(is_station_ir(sensor) for sensor in sensors)):
+            raise ValueError("Station fusion requires unique Arktika-M or Elektro-L thermal imager entries.")
         if hidden % 4:
             raise ValueError("Station satellite fusion requires hidden divisible by four.")
         for sensor in sensors:

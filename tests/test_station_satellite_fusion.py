@@ -110,21 +110,18 @@ def test_duplicate_causal_frames_and_changed_station_geometry_are_rejected(stati
         model.set_extra_state({**model.get_extra_state(), "sensor_contracts": []})
 
 
-def test_station_sensor_allowlist_includes_only_the_reviewed_goes_channel():
+def test_station_sensor_allowlist_requires_supported_platform_and_thermal_channel():
     grids = build_pyramid(0)
     coords = latlon(grids[0].xyz[:4])
     scales = np.ones(6, dtype=np.float32)
     sensor = Sensor(
-        "goes18_c13", "goes_abi", "GOES-18", "imager",
-        (Channel("13", "brightness_temperature", "K", 250.0, 5.0, "fixture-calibration"),),
+        "electro_l_ir", "electro_l", "EL3", "imager",
+        (Channel("10", "brightness_temperature", "K", 250.0, 5.0, "fixture-calibration"),),
         "1" * 64, "2023-12-31T00:00:00Z", "real",
     )
     model = SatelliteStationAnomalyModel(grids, coords, scales, sensors=(sensor,), hidden=8, base_channels=8)
     assert model.sensors == (sensor,)
-    with pytest.raises(ValueError, match="GOES-18"):
-        replace(sensor, platform="GOES-16")
-    with pytest.raises(ValueError, match="GOES-18"):
-        replace(sensor, channels=(replace(sensor.channels[0], id="14"),))
-    with pytest.raises(ValueError, match="real GOES-18 ABI C13"):
-        SatelliteStationAnomalyModel(grids, coords, scales, sensors=(replace(sensor, data_kind="synthetic"),),
-                                     hidden=8, base_channels=8)
+    for unsupported in (replace(sensor, platform="ARCM1"),
+                        replace(sensor, channels=(replace(sensor.channels[0], id="14"),))):
+        with pytest.raises(ValueError, match="Elektro-L thermal"):
+            SatelliteStationAnomalyModel(grids, coords, scales, sensors=(unsupported,), hidden=8, base_channels=8)

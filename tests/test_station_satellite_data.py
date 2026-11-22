@@ -1,8 +1,6 @@
 """Analytical fixtures for the Arctic input contract, never proof of live admission."""
 import hashlib
 import json
-import sys
-from types import ModuleType
 
 import pytest
 import torch
@@ -15,13 +13,13 @@ from global_weather import station_satellite_data as bridge
 ISSUES = ('2024-06-01T12:00:00Z', '2025-06-01T12:00:00Z', '2026-06-01T12:00:00Z')
 
 
-def _fixture(root, *, duplicate=False, future=False, empty=False, goes=False):
+def _fixture(root, *, duplicate=False, future=False, empty=False, electro=False):
     dataset = root / 'stations'
     write_json(dataset / 'dataset.json', {
         'schema': 'native-station-dataset-1', 'data_kind': 'real', 'campaign': 'extended_2023_2026',
         'samples': [dict(issue=issue, split=split) for issue, split in zip(ISSUES, ('train', 'validation', 'test'))],
     })
-    source, platform, channel = ('goes_abi', 'GOES-18', '13') if goes else ('arktika_m', 'ARCM1', '8')
+    source, platform, channel = ('electro_l', 'EL3', '10') if electro else ('arktika_m', 'ARCM1', '8')
     sensor = Sensor('fixture-ir', source, platform, 'imager',
                     (Channel(channel, 'brightness_temperature', 'K', None, None, 'fixture'),), None, None, 'real')
     registry = root / 'sensors.json'
@@ -52,7 +50,7 @@ def _fixture(root, *, duplicate=False, future=False, empty=False, goes=False):
         file = root / f'sequence-{index}.npz'
         save_sequence(file, sequence)
         report = root / f'preparation-{index}.json'
-        write_json(report, {'schema': 'station-goes-abi-sequence-1' if goes else 'station-satellite-sequence-1',
+        write_json(report, {'schema': 'station-satellite-sequence-1',
                             'status': 'sequence_prepared', 'data_kind': 'real',
                             'meteorologically_validated': False, 'sensor': sensor.id, 'frames': 1, 'shape': [1, 1, 8, 8],
                             'sha256': sha256(file), 'plan': reference(root, root / 'plan.json'),
@@ -68,7 +66,7 @@ def _fixture(root, *, duplicate=False, future=False, empty=False, goes=False):
 def station_case(tmp_path, monkeypatch):
     # The pixel/split tests exercise the station bridge independently of source
     # evidence. The native GeoTIFF test below runs the actual proof checker.
-    monkeypatch.setattr(bridge, '_arctic_provenance', lambda *args, **kwargs: None)
+    monkeypatch.setattr(bridge, '_capsule_provenance', lambda *args, **kwargs: None)
     return lambda **options: _fixture(tmp_path, **options)
 
 
@@ -149,20 +147,16 @@ def test_manifest_rejects_native_input_with_only_a_generic_report(tmp_path):
         bridge.fit_station_sensors(dataset, manifest, tmp_path / 'fixed.json')
 
 
-def test_goes_proof_checks_heldout_metadata_and_opens_train_raw_only(tmp_path, monkeypatch):
-    dataset, manifest = _fixture(tmp_path, goes=True)
+def test_electro_proof_checks_heldout_metadata_and_opens_train_raw_only(tmp_path, monkeypatch):
+    dataset, manifest = _fixture(tmp_path, electro=True)
     calls = []
 
-    def verify(path, sensor, expected_sha, *, verify_raw):
-        assert sensor.platform == 'GOES-18' and sensor.channels[0].id == '13'
-        report = read_json(path)
-        assert report['sha256'] == expected_sha
+    def verify(path, report, sensor, *, verify_raw, sequence):
+        assert sensor.platform == 'EL3' and sensor.channels[0].id == '10'
+        assert report['schema'] == 'station-satellite-sequence-1'
         calls.append((path.name, verify_raw))
-        return report
 
-    converter = ModuleType('global_weather.goes_abi')
-    converter.validate_station_passport = verify
-    monkeypatch.setitem(sys.modules, converter.__name__, converter)
+    monkeypatch.setattr(bridge, '_capsule_provenance', verify)
     bridge.fit_station_sensors(dataset, manifest, tmp_path / 'fixed.json')
     assert calls == [('preparation-0.json', False), ('preparation-1.json', False),
                      ('preparation-2.json', False), ('preparation-0.json', True)]
@@ -178,9 +172,14 @@ def test_prepare_wraps_native_capsule_contract(tmp_path):
     assert read_json(report) == passport and passport['sensor'] == sensor.id
     assert passport['sha256'] == sha256(output) and passport['meteorologically_validated'] is False
     assert utc('2026-11-01T10:00:00Z').timestamp() == passport['frame_index'][0]['scan_start']
-    bridge._arctic_provenance(report, passport, sensor, verify_raw=True)
+    bridge._capsule_provenance(report, passport, sensor, verify_raw=True)
+    sequence = bridge.load_sequence(output, sensor)
+    bridge._capsule_provenance(report, passport, sensor, verify_raw=True, sequence=sequence)
+    with pytest.raises(ValueError, match='values'):
+        bridge._capsule_provenance(report, passport, sensor, verify_raw=True,
+                                   sequence=bridge.replace(sequence, values=sequence.values + 1))
     passport['frame_index'][0]['scan_start'] += 1
     with pytest.raises(ValueError, match='нативной сцене'):
-        bridge._arctic_provenance(report, passport, sensor, verify_raw=False)
+        bridge._capsule_provenance(report, passport, sensor, verify_raw=False)
     with pytest.raises(ValueError, match='новый паспорт'):
         bridge.prepare_station_sequence(tmp_path / 'plan.json', output, report)

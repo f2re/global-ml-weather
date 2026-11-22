@@ -93,12 +93,25 @@ python -m global_weather.providers.satellite_cli \
 ## Подготовить проверенные ИК-кадры
 
 Для «Арктики-М» подготовьте численные капсулы `physical-raster-v1` через `global_weather.compatibility arktika`.
-«Электро-Л» остаётся в карантине. Ссылка калибровки GPTL меняется вместе с ресурсом и требует отдельного согласования с реестром прибора.
+Для «Электро-Л» используйте `global_weather.compatibility electro-native` с проверенным паспортом `electro-l-native-l2ir-1`.
 Проверьте закреплённую ревизию поставщика, идентификатор сцены, платформу и канал.
 Подтвердите калибровку яркостной температуры в K, геометрию визирования, размер пятна и нативную маску качества.
 Подтвердите начало и конец съёмки по сведениям поставщика.
 Подтвердите фактическое время готовности кадра. Время архивного скачивания не заменяет этот срок.
 Остановите подготовку при отсутствии любого подтверждения.
+
+В паспорте «Электро-Л» укажите в `files` ссылки на исходный STAC Item `producer_item`, метаданные актива из журнала `asset`, численный GeoTIFF `raster`, квитанцию `download`, отдельный GeoTIFF качества `quality` и геометрию `geometry`.
+В `calibration` укажите `revision`, `asset_key` и `reference`. В `quality` укажите `good_flag` со значением 0 и подтверждающую `reference`.
+Если STAC Item публикует активы с ролью `quality` или `quality-mask`, в `quality.asset_key` укажите соответствующий нативный актив качества.
+В `timing` укажите нативные `scan_start`, `scan_end`, `provider_ready_at` и `reference` для этих сроков.
+В этом маршруте срок допуска к прогнозу берётся из проверенной квитанции поступления. Он может быть позже срока готовности поставщика.
+Поздно полученная архивная копия сама по себе не доказывает, что кадр был доступен прошлому выпуску.
+Путь к паспорту передайте в команду. Предел капсулы составляет 262144 пикселя.
+Для большого кадра задайте `window` с полями `row_offset`, `column_offset`, `height`, `width` в исходной сетке данных и качества. Чтение окна сохраняет нативные пиксели и их координаты.
+
+```bash
+python -m global_weather.compatibility electro-native "$NATIVE_MANIFEST" --output "$CAPSULE"
+```
 
 Создайте план `multimodal-capsule-plan-1` по [руководству многомодальной модели](MULTIMODAL.md#подготовить-данные).
 Укажите `data_kind=real` в плане и в реестре прибора.
@@ -135,10 +148,12 @@ python -m global_weather.providers.satellite_cli \
 В `origin` укажите схему `multimodal-ir-origin-1`.
 Перенесите из капсулы `upstream`, `instrument`, `channel_id`, `calibration_reference` и `calibration_status`.
 Добавьте подтверждение происхождения и калибровки канала.
+Для «Электро-Л» добавьте в `origin.native_manifest` ссылку на паспорт `electro-l-native-l2ir-1`.
+Скопируйте `calibration_reference` капсулы в `calibration_id` канала реестра. Идентификатор версии калибровки и SHA256 конкретного кадра хранятся отдельно.
 В `geometry` укажите схему `multimodal-ir-geometry-1` и `geometry_reference` из капсулы.
 Добавьте подтверждение геометрии и пятна.
 В `quality` укажите схему `multimodal-ir-quality-1` и `quality_support` из капсулы.
-Для нативной капсулы «Арктики-М» требуется `quality_support=paired_quality_raster`.
+Для нативных капсул двух источников требуется `quality_support=paired_quality_raster`.
 Добавьте подтверждение маски качества.
 В `timing` сохраните паспорт времени `multimodal-ir-timing-1`.
 В паспорте `source`, `platform`, `native_scene_id` и `observed_at` должны совпадать с капсулой.

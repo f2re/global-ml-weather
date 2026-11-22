@@ -1,15 +1,52 @@
 """Сборка последовательностей из численных капсул без повторной шкалы."""
 from __future__ import annotations
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import numpy as np
 import torch
 from .contracts import Sequence, utc, fingerprint
 from .io import sha256, read_json, read_arrays, load_sensors, save_sequence, resolve
 
 
-def _admitted_scan(capsule, manifest_hash, proof, metadata, root, evidence):
+def prepare_electro_capsule(native_manifest, output):
+    """Import a reviewed native L2IR scene into the usual physical raster capsule."""
+    from ..connectors.ecosystem import electro_l_native
+    from ..connectors.raster_bridge import import_raster
+
+    spec, geometry, ready, reference = electro_l_native(native_manifest)
+    return import_raster(spec, output, available_at=ready, availability_reference=reference,
+                         geometry=geometry, max_pixels=262144)
+
+
+def _verify_electro_scan(capsule, report, metadata, root, evidence, verify_native):
+    from ..connectors.ecosystem import electro_l_native
+    from ..connectors.raster_bridge import read_capsule
+
+    native_ref = report.get('native_manifest')
+    native = resolve(root, native_ref)
+    evidence[native] = native_ref['sha256']
+    spec, geometry, ready, reference = electro_l_native(native, verify_raw=False)
+    expected = {key: value for key, value in spec.items() if key not in ('raster', 'quality', 'inputs')}
+    expected.update(available_at=ready, availability_reference=reference, geometry_reference=read_json(geometry)['reference'])
+    if (native_ref['sha256'] != spec['native_manifest_sha256']
+            or any(metadata.get(key) != value for key, value in expected.items())):
+        raise ValueError('Паспорт поставщика «Электро-Л» не соответствует капсуле.')
+    if verify_native:
+        with TemporaryDirectory(prefix='electro-native-') as cache:
+            rebuilt = Path(cache).resolve(strict=True) / 'replayed'
+            prepare_electro_capsule(native, rebuilt)
+            replay, arrays = read_capsule(rebuilt)
+            _, supplied = read_capsule(capsule.parent)
+            fields = set(replay) | set(metadata)
+            if (any(replay.get(key) != metadata.get(key) for key in fields - {'arrays_sha256'})
+                    or set(arrays) != set(supplied)
+                    or any(not np.array_equal(value, supplied[k]) for k, value in arrays.items())):
+                raise ValueError('Пиксели и маски капсулы «Электро-Л» не воспроизводятся из нативных файлов.')
+
+
+def _admitted_scan(capsule, manifest_hash, proof, metadata, root, evidence, *, verify_native=False):
     """Bind reviewed external evidence to a capsule without asserting its authenticity."""
-    from ..connectors.ecosystem import UPSTREAM
+    from ..connectors.ecosystem import ELECTRO_L_PLATFORMS, UPSTREAM
 
     if not isinstance(proof, dict) or set(proof) != {'scan_start', 'scan_end', 'available_at', 'evidence'}:
         raise ValueError('Для реальной капсулы требуется допуск с границами съёмки и временем готовности.')
@@ -25,14 +62,21 @@ def _admitted_scan(capsule, manifest_hash, proof, metadata, root, evidence):
             raise ValueError('Нужно отдельное непустое подтверждение реальной капсулы.')
     if len(set(paths.values())) != len(paths):
         raise ValueError('Нужны отдельные подтверждения происхождения, времени, геометрии и качества.')
-    if (metadata.get('upstream') != UPSTREAM['arktika-worker']
-            or metadata.get('instrument') != 'MSU-GS/A'
-            or metadata.get('platform') not in ('ARCM1', 'ARCM2')
+    electro = metadata.get('source') == 'electro_l'
+    if electro:
+        native = (metadata.get('instrument') == 'MSU-GS'
+                  and metadata.get('platform') in ELECTRO_L_PLATFORMS
+                  and metadata.get('values_already_physical') is False)
+    else:
+        native = (metadata.get('source') == 'arktika_m'
+                  and metadata.get('instrument') == 'MSU-GS/A'
+                  and metadata.get('platform') in ('ARCM1', 'ARCM2')
+                  and metadata.get('values_already_physical') is True
+                  and metadata.get('scale') == 1 and metadata.get('offset') == 0)
+    if (not native or metadata.get('upstream') != UPSTREAM['arktika-worker']
             or metadata.get('channel_id') not in ('4', '5', '6', '7', '8', '9', '10')
             or metadata.get('quantity') != 'brightness_temperature' or metadata.get('units') != 'K'
             or metadata.get('calibration_status') not in ('metadata', 'declared')
-            or metadata.get('values_already_physical') is not True
-            or metadata.get('scale') != 1 or metadata.get('offset') != 0
             or metadata.get('time_support') != 'native_scene_time_not_per_pixel_time'
             or metadata.get('quality_support') != 'paired_quality_raster'
             or metadata.get('observation_export_ready') is not True
@@ -50,11 +94,15 @@ def _admitted_scan(capsule, manifest_hash, proof, metadata, root, evidence):
         expected = identifiers | {field: metadata[field] for field in fields} | {'schema': f'multimodal-ir-{kind}-1'}
         if not isinstance(report, dict) or any(report.get(key) != value for key, value in expected.items()):
             raise ValueError(f'Паспорт {kind} не соответствует капсуле.')
+        if electro and kind == 'origin':
+            _verify_electro_scan(capsule, report, metadata, root, evidence, verify_native)
     start, end = utc(proof['scan_start']), utc(proof['scan_end'])
     nominal, available = utc(metadata['observed_at']), utc(metadata['available_at'])
     if (not start <= nominal <= end <= available or available != utc(proof['available_at'])
             or (available-start).total_seconds() >= 43200):
         raise ValueError('Границы съёмки противоречат времени сцены или готовности.')
+    if electro and (start != utc(metadata['scan_start']) or end != utc(metadata['scan_end'])):
+        raise ValueError('Границы съёмки противоречат паспорту поставщика «Электро-Л».')
     timing = read_json(paths['timing'])
     if (not isinstance(timing, dict) or timing.get('schema') != 'multimodal-ir-timing-1'
             or any(timing.get(key) != metadata[key] for key in ('source', 'platform', 'native_scene_id'))
@@ -78,7 +126,8 @@ def _geographic_grid(metadata):
     return latitude, longitude, area
 
 
-def from_capsules(plan_path,output):
+def sequence_from_capsules(plan_path, *, verify_native=True):
+    from ..connectors.ecosystem import ELECTRO_L_PLATFORMS
     from ..connectors.raster_bridge import read_capsule
     plan=read_json(plan_path);root=Path(plan_path).absolute().parent
     required={'schema','sensor','sensor_registry','frames','data_kind'}
@@ -95,9 +144,10 @@ def from_capsules(plan_path,output):
     sensor=sensors[plan['sensor']]
     if sensor.kind!='imager':raise ValueError('МТВЗА требует физического экспортёра с антенной поддержкой.')
     if sensor.data_kind!=plan['data_kind']:raise ValueError('Нельзя изменить происхождение данных.')
-    if sensor.data_kind == 'real' and sensor.source == 'electro_l':
+    if (sensor.data_kind == 'real' and sensor.source == 'electro_l'
+            and sensor.platform not in ELECTRO_L_PLATFORMS):
         raise ValueError('Реальные капсулы «Электро-Л» требуют отдельного согласования калибровки GPTL и реестра.')
-    real_ir = sensor.data_kind == 'real' and sensor.source == 'arktika_m'
+    real_ir = sensor.data_kind == 'real' and sensor.source in ('arktika_m', 'electro_l')
     admission = {}
     evidence = {}
     if real_ir:
@@ -110,7 +160,7 @@ def from_capsules(plan_path,output):
             raise ValueError('Неверный манифест допуска реальных ИК-капсул.')
         admission = admission['capsules']
     elif 'real_admission' in declarations:
-        raise ValueError('Допуск применим только к реальным ИК-капсулам Арктики.')
+        raise ValueError('Допуск применим только к реальным ИК-капсулам «Арктика-М» и «Электро-Л».')
     if not isinstance(plan['frames'],list) or not 1<=len(plan['frames'])<=48:raise ValueError('Неверное число кадров.')
     xs=[];ms=[];views=[];solars=[];footprints=[];observed=[];available=[];ids=[];geo=None;ident=None
     scan_starts=[];used_capsules=set()
@@ -169,7 +219,8 @@ def from_capsules(plan_path,output):
                 manifest_hash = ref['manifest']['sha256']
                 if manifest_hash in used_capsules:
                     raise ValueError('Повторное включение одной капсулы.')
-                scans.append(_admitted_scan(mp, manifest_hash, admission.get(manifest_hash), m, root, evidence))
+                scans.append(_admitted_scan(mp, manifest_hash, admission.get(manifest_hash), m, root, evidence,
+                                            verify_native=verify_native))
                 used_capsules.add(manifest_hash)
             fields.append(a);metadata.append((m,pp))
             if sha256(mp)!=ref['manifest']['sha256'] or sha256(pp)!=ref['pixels']['sha256']:raise ValueError('Капсула изменилась при чтении.')
@@ -213,6 +264,11 @@ def from_capsules(plan_path,output):
         if sha256(path)!=declarations[key]['sha256']:raise ValueError('Подтверждение изменилось.')
     if any(sha256(path) != digest for path,digest in evidence.items()):
         raise ValueError('Подтверждение допуска изменилось во время подготовки.')
+    return seq
+
+
+def from_capsules(plan_path, output):
+    seq = sequence_from_capsules(plan_path)
     save_sequence(output,seq)
-    return {'status':'sequence_prepared','frames':len(ids),'shape':list(seq.values.shape),'sha256':sha256(output),
+    return {'status':'sequence_prepared','frames':len(seq.frame_ids),'shape':list(seq.values.shape),'sha256':sha256(output),
             'data_kind':seq.data_kind,'meteorologically_validated':False}
