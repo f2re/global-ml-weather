@@ -72,3 +72,43 @@ journalctl --user -u global-weather-station-2023-2026.service
 
 Этот запуск охватывает станционную модель приземных аномалий.
 Реальная спутниковая ассимиляция заблокирована по результатам [рецензии S1–S3](reviews/satellite-real-readiness-2026-11-22.md).
+
+## Спутниковое обновление станционного прогноза
+
+Исследовательский режим описан в [решении 0028](decisions/0028-station-satellite-anomaly-pilot.md).
+Он добавляет спутниковые признаки к начальному состоянию станционного прогноза и обучает добавленные модули на измеренных аномалиях.
+Зафиксированное станционное ядро служит контрольным методом на общих сроках.
+
+Подготовьте отдельные последовательности с паспортами и назначьте их точным срокам станционного манифеста.
+Храните спутниковые файлы и их паспорта рядом с манифестом или в его подкаталогах.
+Для «Арктики-М» используйте `station_satellite_data prepare` после [проверки нативных капсул](SATELLITE_ACQUISITION.md#подготовить-проверенные-ик-кадры).
+Архивный GOES-18 ABI C13 подготавливает отдельный адаптер `global_weather.goes_abi`.
+Рассчитайте нормы по train. Сохраните хэш нового манифеста и независимый паспорт происхождения данных.
+
+```bash
+python -m global_weather.station_satellite_data fit \
+  --dataset "$STATION_DATASET" --manifest "$RAW_MANIFEST" --output "$FROZEN_MANIFEST"
+python -m global_weather.station_anomaly_training \
+  --dataset "$STATION_DATASET" --output "$NEW_TRAINING" \
+  --config configs/station_satellite_2023_2026_pilot.json \
+  --satellite-manifest "$FROZEN_MANIFEST" --base-training "$STATION_TRAINING" \
+  --expected-base-sha "$STATION_BEST_SHA" --expected-climatology-sha "$CLIMATOLOGY_SHA" \
+  --expected-dataset-sha "$STATION_DATASET_SHA"
+```
+
+Здесь пути и SHA обозначают значения из проверенных паспортов конкретного опыта.
+Запускайте вычисления в отдельной рабочей копии проверенного SHA под службой `systemd`.
+Служба выполняется от имени владельца данных. Для неё задайте время, память и GPU из паспорта запуска.
+Остановка или ошибка сохраняет каталог. Повтор используйте с новым каталогом после проверки причины.
+
+После окончания обучения зафиксируйте лучшую эпоху по validation и запустите отдельный тест.
+Передайте оценщику тот же спутниковый манифест и SHA лучшей новой контрольной точки.
+
+```bash
+python -m global_weather.station_anomaly_evaluation \
+  --dataset "$STATION_DATASET" --training "$NEW_TRAINING" --output "$TEST_REPORT" \
+  --satellite-manifest "$FROZEN_MANIFEST" --expected-checkpoint-sha "$NEW_BEST_SHA" \
+  --expected-climatology-sha "$CLIMATOLOGY_SHA" --device auto
+```
+
+Сохраняйте MAE, RMSE, смещение, покрытие общих целей и результат станционного контроля без спутниковых кадров.

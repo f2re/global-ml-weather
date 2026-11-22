@@ -1,0 +1,24 @@
+{
+  "schema": "multimodal-sensors-1",
+  "sensors": [
+    {
+      "id": "goes18_abi_c13",
+      "source": "goes_abi",
+      "platform": "GOES-18",
+      "kind": "imager",
+      "channels": [
+        {
+          "id": "13",
+          "quantity": "brightness_temperature",
+          "units": "K",
+          "mean": null,
+          "std": null,
+          "calibration_id": "noaa-goes18-abi-l1b-radc-c13-planck-1"
+        }
+      ],
+      "normalization_sha256": null,
+      "fit_end": null,
+      "data_kind": "real"
+    }
+  ]
+}

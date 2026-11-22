@@ -13,17 +13,19 @@ from .observation_model import LEAD_HOURS
 from .observation_training import checkpoint_path
 from .observations import utc
 from .pipeline.io import atomic_json, read_json, sha256
-from .station_anomaly_training import create_model
+from .station_anomaly_training import SATELLITE_STATUS, create_model
 from .station_climatology import StationClimatology
 
 
-def score(model, dataset, climatology, device):
-    baselines = ('model', 'climatology', 'persistence')
+def score(model, dataset, climatology, device, satellite_data=None):
+    methods = ('model', 'climatology', 'persistence')
+    if satellite_data is not None:
+        methods += ('station_only',)
     shape = (len(LEAD_HOURS), len(NATIVE_VARIABLES))
     count = np.zeros(shape, dtype=np.int64)
     target_count = np.zeros_like(count)
-    totals = np.zeros((len(baselines), 3, *shape), dtype=np.float64)
-    issues = dataset.subset('test')
+    totals = np.zeros((len(methods), 3, *shape), dtype=np.float64)
+    issues = dataset.subset('test') if satellite_data is None else satellite_data.indices('test')
     scored_issues = 0
     model.eval()
     with torch.inference_mode():
@@ -38,12 +40,24 @@ def score(model, dataset, climatology, device):
             history_climate = climatology.for_window([issue + timedelta(hours=h) for h in range(-11, 1)])
             target_climate = climatology.for_window([issue + timedelta(hours=h) for h in LEAD_HOURS])
             history = np.where(observed, (sample['input'] - history_climate) / climatology.std, 0)
-            forecast = model(torch.as_tensor(history, device=device), torch.as_tensor(observed, device=device))
-            prediction = model.reconstruct_physical(
-                forecast.predicted_anomalies, torch.as_tensor(target_climate, device=device)).cpu().numpy()
+            history_tensor = torch.as_tensor(history, device=device)
+            mask_tensor = torch.as_tensor(observed, device=device)
+            climate_tensor = torch.as_tensor(target_climate, device=device)
+            station_only = model(history_tensor, mask_tensor)
+            if satellite_data is None:
+                forecast = station_only
+            else:
+                forecast = model(history_tensor, mask_tensor, issue_time=issue,
+                                 satellite_sequences=satellite_data.sequences(index))
+                if forecast.satellite_support is None or not forecast.satellite_support.any():
+                    raise ValueError('Test issue has no effective satellite support on the model grid.')
+            prediction = model.reconstruct_physical(forecast.predicted_anomalies, climate_tensor).cpu().numpy()
             last_index = len(observed) - 1 - observed[::-1].argmax(axis=0)
             persistence = np.take_along_axis(sample['input'], last_index[None], axis=0)
-            for i, estimate in enumerate((prediction, target_climate, persistence)):
+            estimates = (prediction, target_climate, persistence)
+            if satellite_data is not None:
+                estimates += (model.reconstruct_physical(station_only.predicted_anomalies, climate_tensor).cpu().numpy(),)
+            for i, estimate in enumerate(estimates):
                 error = np.where(common, estimate - sample['target'], 0).astype(np.float64)
                 if not np.isfinite(error).all():
                     raise FloatingPointError('Nonfinite forecast error on the common test mask.')
@@ -64,7 +78,7 @@ def score(model, dataset, climatology, device):
             n = int(count[cell])
             row = {'lead_hours': lead, 'variable': variable, 'units': units,
                    'common_targets': n, 'observed_targets': int(target_count[cell])}
-            for i, name in enumerate(baselines):
+            for i, name in enumerate(methods):
                 absolute, squared, signed = totals[i, :, lead_index, variable_index]
                 row[name] = {'mae': float(absolute / n), 'rmse': float(np.sqrt(squared / n)),
                              'bias': float(signed / n)} if n else None
@@ -72,10 +86,11 @@ def score(model, dataset, climatology, device):
     return {'test_issues': len(issues), 'scored_issues': scored_issues, 'metrics': rows}
 
 
-def evaluate(dataset_path, training, checkpoint_sha, climatology_sha, device_name):
+def evaluate(dataset_path, training, checkpoint_sha, climatology_sha, device_name, satellite_manifest=None):
     best = read_json(training / 'best.json')
     completion = read_json(training / 'complete.json')
-    if (completion['status'] != 'surface_climatology_anomaly_research_trained'
+    expected_status = SATELLITE_STATUS if satellite_manifest else 'surface_climatology_anomaly_research_trained'
+    if (completion['status'] != expected_status
             or best['epoch'] != completion['best_epoch'] or best['sha256'] != checkpoint_sha):
         raise ValueError('Completion, validation selection and expected checkpoint disagree.')
     checkpoint = checkpoint_path(training, best)
@@ -92,16 +107,29 @@ def evaluate(dataset_path, training, checkpoint_sha, climatology_sha, device_nam
     state = torch.load(checkpoint, map_location='cpu', weights_only=True)
     if state['epoch'] != best['epoch'] or state['best_loss'] != completion['best_loss']:
         raise ValueError('Checkpoint does not match the completion record.')
-    model = create_model(dataset, climatology, state['config'], device)
+    satellite_data = None
+    if satellite_manifest is None:
+        model = create_model(dataset, climatology, state['config'], device)
+    else:
+        from .station_satellite_data import StationSatelliteData
+
+        satellite_data = StationSatelliteData(satellite_manifest, dataset)
+        identity = state['identity']
+        if (completion['identity'] != identity or identity['satellite_input_signature'] != satellite_data.signature
+                or identity['station_dataset_sha256'] != dataset_sha
+                or identity['station_climatology_sha256'] != climatology_sha
+                or identity['station_core_frozen'] is not True):
+            raise ValueError('Test dataset, satellite inputs or station climatology differ from training.')
+        model = create_model(dataset, climatology, state['config'], device, sensors=satellite_data.sensors)
     current = model.state_dict()
     for key in ('scales', 'xyz', 'pressure_hpa', 'operator.cells', 'operator.station_xyz'):
         if not torch.equal(current[key].cpu(), state['model'][key]):
             raise ValueError(f'Checkpoint and evaluation setup differ on {key}.')
     model.load_state_dict(state['model'], strict=True)
-    results = score(model, dataset, climatology, device)
+    results = score(model, dataset, climatology, device, satellite_data)
     if sha256(manifest_path) != dataset_sha or sha256(climate_path) != climatology_sha:
         raise ValueError('Evaluation input changed during scoring.')
-    return {
+    result = {
         'schema': 'station-anomaly-test-1', 'status': 'research_test_completed',
         'scientific_acceptance': False, 'checkpoint_epoch': best['epoch'],
         'checkpoint_sha256': checkpoint_sha, 'climatology_sha256': climatology_sha,
@@ -112,6 +140,11 @@ def evaluate(dataset_path, training, checkpoint_sha, climatology_sha, device_nam
         'persistence': 'most recent available measurement in the 12-hour history',
         **results,
     }
+    if satellite_data is not None:
+        result.update(satellite_input_signature=satellite_data.signature,
+                      base_checkpoint_sha256=state['identity']['base_checkpoint_sha256'],
+                      station_test_issues=len(dataset.subset('test')))
+    return result
 
 
 def main():
@@ -121,12 +154,13 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--expected-checkpoint-sha', required=True)
     parser.add_argument('--expected-climatology-sha', required=True)
+    parser.add_argument('--satellite-manifest', type=Path)
     parser.add_argument('--device', choices=('auto', 'cpu'), default='auto')
     args = parser.parse_args()
     if args.output.exists() or args.output.is_symlink():
         parser.error('Output already exists. Choose a new evidence file.')
     result = evaluate(args.dataset, args.training, args.expected_checkpoint_sha,
-                      args.expected_climatology_sha, args.device)
+                      args.expected_climatology_sha, args.device, args.satellite_manifest)
     atomic_json(args.output, result)
 
 
