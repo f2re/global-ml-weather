@@ -9,7 +9,8 @@ import hashlib
 import json
 import math
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+import re
+from urllib.parse import parse_qs, unquote, urlsplit, urlunsplit
 from .native_cbor import loads as cbor_loads
 
 UPSTREAM = {
@@ -198,6 +199,7 @@ def arktika_product(path):
     platform = meta.get('platform')
     if platform not in ('ARCM1', 'ARCM2'): raise ValueError('This audited worker produces ARCM1/ARCM2 only; use the asset adapter for Electro-L.')
     return dict(source='arktika_m', platform=platform, instrument='MSU-GS/A', channel_id=str(channel),
+                native_scene_id=meta['scene_id'],
                 observed_at=iso(meta['time']), quantity='brightness_temperature', units='K',
                 calibration_reference=cal[0]['reference'], calibration_status=cal[0]['status'],
                 scale=1., offset=0., values_already_physical=True,
@@ -211,6 +213,10 @@ def gptl_asset(path, raster_path, *, source, asset_key=None, channel=None):
     Acquisition remains with the user's existing GPTL client. Its .download.json
     provides checksum and download completion, NOT historical ready time.
     """
+    return _gptl_asset(path, raster_path, source=source, asset_key=asset_key, channel=channel)
+
+
+def _gptl_asset(path, raster_path, *, source, asset_key=None, channel=None, expected_raster_hash=None):
     p = regular(path, limit=MAX_METADATA); a = read_json(p); raster = regular(raster_path)
     if metadata_kind(a) == 'gptl_stac_item':
         if asset_key not in a['assets'] or type(channel) is not int:
@@ -248,14 +254,353 @@ def gptl_asset(path, raster_path, *, source, asset_key=None, channel=None):
     if nodata is not None and (isinstance(nodata,bool) or not isinstance(nodata,(int,float)) or not math.isfinite(nodata)):
         raise ValueError('Explicit nodata must be a finite number or null.')
     journal = regular(str(raster)+'.download.json', limit=MAX_METADATA); j = read_json(journal)
-    if j.get('asset_id') != a.get('id') or j.get('size') != raster.stat().st_size or j.get('sha256') != sha256(raster):
+    raster_hash = sha256(raster) if expected_raster_hash is None else expected_raster_hash
+    if j.get('asset_id') != a.get('id') or j.get('size') != raster.stat().st_size or j.get('sha256') != raster_hash:
         raise ValueError('Download journal does not match the physical source file.')
     uri = urlsplit(a.get('uri', ''))
     if uri.username or uri.password: raise ValueError('Credential-bearing URI is not admitted.')
     redacted_uri = urlunsplit((uri.scheme, uri.netloc, uri.path, '', ''))
     return dict(source=source, platform=platform, instrument='MSU-GS/A' if source=='arktika_m' else 'MSU-GS',
+                native_scene_id=a['item_id'],
                 channel_id=str(channel), observed_at=iso(a['time']), quantity='brightness_temperature', units='K',
                 calibration_reference='raster_bands:'+sha256(p), calibration_status='metadata',
                 scale=scale, offset=offset, declared_nodata=nodata, values_already_physical=False,
                 raster=raster, quality=None, inputs=[p,journal], earliest_available_at=iso(j['time']),
                 source_uri=redacted_uri, upstream=UPSTREAM['arktika-worker'])
+
+
+ARKTIKA_M_PLATFORMS = ('ARCM1', 'ARCM2')
+ELECTRO_L_PLATFORMS = ('EL2', 'EL3', 'EL4')
+NATIVE_IR_SOURCES = {
+    'arktika_m': ('arktika-m-native-l2ir-1', ARKTIKA_M_PLATFORMS, 'arktika-m'),
+    'electro_l': ('electro-l-native-l2ir-1', ELECTRO_L_PLATFORMS, 'electro-l'),
+}
+STAC_TIMESTAMPS = 'https://stac-extensions.github.io/timestamps/v1.1.0/schema.json'
+
+
+def native_window_parameters(window, max_pixels):
+    fields = ('row_offset', 'column_offset', 'height', 'width')
+    if (not isinstance(window, dict) or set(window) != set(fields)
+            or any(type(window[field]) is not int for field in fields)):
+        raise ValueError('Для нативного окна нужны целочисленные смещения и размеры.')
+    row, col, height, width = (window[field] for field in fields)
+    if row < 0 or col < 0 or height < 1 or width < 1 or height * width > max_pixels:
+        raise ValueError('Размер или смещение нативного окна выходит за пределы.')
+    return row, col, height, width
+
+
+def _native_kelvin_band(bands):
+    if (not isinstance(bands, list) or len(bands) != 1 or not isinstance(bands[0], dict)
+            or bands[0].get('unit') != 'K'
+            or any(type(bands[0].get(key)) not in (int, float) for key in ('scale', 'offset'))):
+        raise ValueError('Нужны явные числовые коэффициенты единственного нативного канала в K.')
+
+
+def _native_channel(asset, key):
+    explicit = asset.get('channel')
+    if explicit is not None and type(explicit) is not int and not (
+        isinstance(explicit, str) and re.fullmatch(r'\d{1,2}', explicit)
+    ):
+        raise ValueError('В STAC указан некорректный номер физического канала.')
+    values = [] if explicit is None else [int(explicit)]
+    asset_path = unquote(urlsplit(asset['href']).path)
+    for match in (re.search(r'(?:^ch|\.ir\.\d+\.)(\d{1,2})$', key, re.IGNORECASE),
+                  re.search(r'_ch(\d{1,2})\.tiff?$', asset_path, re.IGNORECASE)):
+        if match:
+            values.append(int(match.group(1)))
+    if len(set(values)) > 1:
+        raise ValueError('Номера физического канала в исходном STAC расходятся.')
+    return values[0] if values else None
+
+
+def _check_native_qc(qc_asset):
+    classes = qc_asset.get('classification:classes')
+    bands = qc_asset.get('raster:bands')
+    if qc_asset.get('classification:bitfields') is not None:
+        raise ValueError('Ожидается легенда целочисленных значений нативного QC.')
+    if bands is not None:
+        if (not isinstance(bands, list) or len(bands) != 1 or not isinstance(bands[0], dict)
+                or bands[0].get('classification:bitfields') is not None):
+            raise ValueError('Ожидается один канал QC с целочисленной классификацией.')
+        band_classes = bands[0].get('classification:classes')
+        if band_classes is not None:
+            if classes is not None and classes != band_classes:
+                raise ValueError('Легенды нативной маски QC расходятся.')
+            classes = band_classes
+    if (not isinstance(classes, list) or any(
+        not isinstance(row, dict) or type(row.get('value')) is not int or not isinstance(row.get('name'), str)
+        for row in classes
+    ) or len({row['value'] for row in classes}) != len(classes)):
+        raise ValueError('Нужна однозначная классификация нативных флагов QC.')
+    good = [row['value'] for row in classes if row['name'].casefold() in ('valid', 'good', 'valid_data', 'good_data')]
+    if good != [0]:
+        raise ValueError('Легенда QC не подтверждает флаг 0 для годного ИК-пикселя.')
+
+
+def _check_stac_file(asset, ref, path):
+    size = asset.get('file:size')
+    if size is not None and (type(size) is not int or size != path.stat().st_size):
+        raise ValueError('Размер файла отличается от исходных метаданных поставщика.')
+    checksum = asset.get('file:checksum')
+    if checksum is not None and checksum not in (ref['sha256'], '1220' + ref['sha256'], 'sha256:' + ref['sha256']):
+        raise ValueError('Контрольная сумма файла не подтверждена исходными метаданными поставщика.')
+
+
+def _archive_asset_publication(asset, scan_end, downloaded):
+    if not asset.get('file:checksum') or not isinstance(asset.get('published'), str):
+        raise ValueError('Для архива нужны первичная публикация и SHA256 каждой версии растра и QC.')
+    raw_uri = asset.get('href')
+    uri = urlsplit(raw_uri) if isinstance(raw_uri, str) else urlsplit('')
+    versions = parse_qs(uri.query, keep_blank_values=True).get('versionId', [])
+    if (uri.scheme != 'https' or uri.netloc != 's3.gptl.ru' or not uri.path or uri.fragment
+            or len(versions) != 1 or versions[0].strip().lower() in ('', 'null')):
+        raise ValueError('Ссылка GPTL не фиксирует неизменяемую версию растра или QC.')
+    published = utc(asset['published'])
+    if (not scan_end <= published <= downloaded
+            or (asset.get('ready_at') is not None and not scan_end <= utc(asset['ready_at']) <= published)
+            or (asset.get('created') is not None and utc(asset['created']) > published)
+            or (asset.get('updated') is not None and utc(asset['updated']) > published)
+            or any(asset.get(field) is not None for field in ('expires', 'unpublished'))):
+        raise ValueError('Историческая доступность этой версии растра или QC не подтверждена.')
+    return published, (unquote(uri.path), versions[0])
+
+
+def _native_receipt(path, payload_path, producer_id, producer_asset, digest):
+    if path != Path(str(payload_path) + '.download.json'):
+        raise ValueError('Квитанция не относится к нативному файлу.')
+    href = producer_asset.get('href')
+    uri = urlsplit(href) if isinstance(href, str) else urlsplit('')
+    if uri.scheme != 'https' or uri.netloc not in ('s3.gptl.ru', 's3ext.gptl.ru') or uri.fragment:
+        raise ValueError('Требуется исходный URL HTTPS объекта GPTL без учётных данных.')
+    canonical = urlunsplit((uri.scheme, uri.netloc, uri.path, '', ''))
+    asset_id = hashlib.sha256((producer_id + '\n' + canonical).encode()).hexdigest()[:32]
+    params = parse_qs(uri.query, keep_blank_values=True)
+    version = params.get('versionId', [])
+    if set(params) - {'versionId'} or len(version) > 1 or (version and version[0].strip().lower() in ('', 'null')):
+        raise ValueError('Несогласованная версия нативного файла.')
+    checksum = digest if producer_asset.get('file:checksum') is not None else None
+    receipt = read_json(path)
+    if (receipt.get('asset_id') != asset_id or receipt.get('size') != payload_path.stat().st_size
+            or receipt.get('sha256') != digest or (receipt.get('object_version') or None) != (version[0] if version else None)
+            or (receipt.get('provider_sha256') or None) != checksum):
+        raise ValueError('Квитанция не соответствует нативной версии растра или маски QC.')
+    return utc(receipt.get('time')), asset_id
+
+
+def _russian_ir_native(path, source, *, verify_raw):
+    """Read reviewed per-scene evidence with separately bound native data and QC."""
+    schema, platforms, calibration_prefix = NATIVE_IR_SOURCES[source]
+    manifest = regular(path, limit=MAX_METADATA)
+    digest = sha256(manifest)
+    review = read_json(manifest)
+    required = {'schema', 'files', 'calibration', 'quality', 'timing'}
+    if (set(review) - {'window'} != required
+            or review['schema'] != schema):
+        raise ValueError(f'Нужен паспорт нативного L2IR {schema}.')
+    raster_limit = 32 * 1024**2
+    if 'window' in review:
+        native_window_parameters(review['window'], 262144)
+        raster_limit = 512 * 1024**2
+    refs = review['files']
+    roles = {'producer_item', 'asset', 'raster', 'download', 'quality', 'geometry'}
+    paired_receipt = isinstance(refs, dict) and 'quality_download' in refs
+    if source == 'arktika_m' or paired_receipt:
+        roles.add('quality_download')
+    if not isinstance(refs, dict) or set(refs) != set(roles):
+        raise ValueError('Нужны метаданные поставщика и загрузчика, растр, квитанция, маска качества и геометрия.')
+    files = {}
+    for role in refs:
+        ref = refs[role]
+        if not isinstance(ref, dict) or set(ref) != {'path', 'sha256'}:
+            raise ValueError('Нужны путь и SHA256 нативного файла.')
+        expected = ref['sha256']
+        if not isinstance(expected, str) or len(expected) != 64 or set(expected)-set('0123456789abcdef'):
+            raise ValueError('Неверный SHA256 нативного файла.')
+        file = child(manifest.parent, ref['path'])
+        limit = raster_limit if role in ('raster', 'quality') else MAX_METADATA
+        if not 0 < file.stat().st_size <= limit:
+            raise ValueError('Нативный файл пуст или превышает предел размера.')
+        if (verify_raw or role not in ('raster', 'quality')) and sha256(file) != expected:
+            raise ValueError('SHA256 нативного файла не совпадает с паспортом.')
+        files[role] = file
+    if len(set(files.values())) != len(roles) or manifest in files.values():
+        raise ValueError('Паспорт должен связывать отдельные нативные файлы.')
+    if files['download'] != Path(str(files['raster']) + '.download.json'):
+        raise ValueError('Квитанция не относится к нативному растру.')
+    asset = read_json(files['asset'])
+    if (metadata_kind(asset) != 'arktika_worker_asset'
+            or asset.get('platform') not in platforms
+            or not all(isinstance(asset.get(key), str) and asset[key].strip() for key in ('id', 'item_id', 'uri'))):
+        raise ValueError('Требуется явно идентифицированный нативный актив arktika-worker.')
+    uri = urlsplit(asset['uri'])
+    if uri.scheme not in ('https', 's3') or not uri.hostname:
+        raise ValueError('Требуется абсолютный URI исходного актива поставщика.')
+    _native_kelvin_band(asset['raster_bands'])
+    spec = _gptl_asset(files['asset'], files['raster'], source=source,
+                       expected_raster_hash=refs['raster']['sha256'])
+    calibration = review['calibration']
+    quality = review['quality']
+    timing = review['timing']
+    quality_fields = {'good_flag', 'reference'}
+    if paired_receipt:
+        quality_fields.update(('asset_key', 'asset_id'))
+    elif isinstance(quality, dict) and 'asset_key' in quality:
+        quality_fields.add('asset_key')
+    timing_fields = {'scan_start', 'scan_end', 'provider_ready_at', 'reference'}
+    if isinstance(timing, dict) and 'availability_basis' in timing:
+        if timing['availability_basis'] != 'provider_asset_publication':
+            raise ValueError('Неизвестное основание доступности архивного кадра.')
+        timing_fields.add('availability_basis')
+    archive = 'availability_basis' in timing_fields
+    for section, fields in (
+        (calibration, {'revision', 'reference', 'asset_key'}),
+        (quality, quality_fields),
+        (timing, timing_fields),
+    ):
+        if (not isinstance(section, dict) or set(section) != fields
+                or not isinstance(section['reference'], str) or not section['reference'].strip()):
+            raise ValueError('Нужна отдельная проверенная ссылка на калибровку, качество и время.')
+    if any(not isinstance(calibration[key], str) or not calibration[key].strip()
+           for key in ('revision', 'asset_key')):
+        raise ValueError('Нужны стабильная версия калибровки и ключ нативного актива.')
+    producer_item = read_json(files['producer_item'])
+    key = calibration['asset_key']
+    if (metadata_kind(producer_item) != 'gptl_stac_item'
+            or not isinstance(producer_item.get('id'), str) or not producer_item['id']
+            or not isinstance(producer_item.get('properties'), dict)
+            or not isinstance(producer_item['assets'].get(key), dict)
+            or not isinstance(producer_item['assets'][key].get('href'), str)):
+        raise ValueError('Нужен исходный STAC Item со снимком.')
+    producer_asset = producer_item['assets'][key]
+    _native_kelvin_band(producer_asset.get('raster:bands'))
+    producer_spec = _gptl_asset(files['producer_item'], files['raster'], source=source,
+                                asset_key=key, channel=asset['channel'], expected_raster_hash=refs['raster']['sha256'])
+    fields = ('native_scene_id', 'platform', 'source_uri', 'observed_at', 'scale', 'offset', 'declared_nodata')
+    if any(producer_spec[field] != spec[field] for field in fields):
+        raise ValueError('Исходный STAC Item и метаданные загрузчика не совпадают.')
+    named_channel = re.search(r'(?:^ch(\d+)$|\.ir\.\d+\.(\d+)$)', key, re.IGNORECASE)
+    if not paired_receipt and (
+        (named_channel and int(named_channel.group(1) or named_channel.group(2)) != asset['channel'])
+        or ('channel' in producer_asset and str(producer_asset['channel']) != spec['channel_id'])
+    ):
+        raise ValueError('Канал не соответствует нативному активу поставщика.')
+    _check_stac_file(producer_asset, refs['raster'], files['raster'])
+    if type(quality['good_flag']) is not int or quality['good_flag'] != 0:
+        raise ValueError('Поддерживается только нативная маска с подтверждённым значением 0 для годных пикселей.')
+    quality_key = quality.get('asset_key')
+    declared_quality = {
+        name for name, candidate in producer_item['assets'].items()
+        if isinstance(candidate, dict) and isinstance(candidate.get('roles'), list)
+        and any(role in candidate['roles'] for role in ('quality', 'quality-mask'))
+    }
+    if 'asset_key' in quality or declared_quality:
+        if (not isinstance(quality_key, str) or quality_key == key or not quality_key
+                or (declared_quality and quality_key not in declared_quality)
+                or (paired_receipt and quality_key not in declared_quality)
+                or not isinstance(producer_item['assets'].get(quality_key), dict)):
+            raise ValueError('Паспорт маски не связан с активом качества поставщика.')
+        _check_stac_file(producer_item['assets'][quality_key], refs['quality'], files['quality'])
+    start, nominal, end, provider_ready, raster_downloaded = map(utc, (
+        timing['scan_start'], spec['observed_at'], timing['scan_end'],
+        timing['provider_ready_at'], spec['earliest_available_at'],
+    ))
+    properties = producer_item['properties']
+    qc_asset = producer_item['assets'].get(quality_key)
+    qc_downloaded = raster_downloaded
+    if paired_receipt:
+        if any(not isinstance(properties.get(field), str) for field in ('start_datetime', 'end_datetime', 'ready_at')):
+            raise ValueError('В исходном STAC Item отсутствуют границы съёмки или готовность поставщика.')
+        if any(properties.get(field) not in (None, spec['platform']) for field in ('platform', 'platform_identifier')):
+            raise ValueError('Поля аппарата в исходном STAC расходятся.')
+        if any(container.get(field) not in (None, 'L2IR')
+               for container in (properties, producer_asset)
+               for field in ('processing:level', 'processing_level_code', 'level')):
+            raise ValueError('Уровни обработки в исходном STAC расходятся.')
+        if producer_asset.get('calibration:version') != calibration['revision']:
+            raise ValueError('Исходный STAC Item не подтверждает версию калибровки.')
+        _check_native_qc(qc_asset)
+        checked_raster_time, _ = _native_receipt(files['download'], files['raster'], producer_item['id'],
+                                                 producer_asset, refs['raster']['sha256'])
+        producer_version = parse_qs(urlsplit(producer_asset['href']).query, keep_blank_values=True)
+        if parse_qs(uri.query, keep_blank_values=True) != producer_version:
+            raise ValueError('Версия растра в метаданных загрузчика расходится с исходным STAC.')
+        qc_downloaded, qc_id = _native_receipt(files['quality_download'], files['quality'],
+                                              producer_item['id'], qc_asset, refs['quality']['sha256'])
+        if (checked_raster_time != raster_downloaded or quality['asset_id'] != qc_id
+                or qc_id == asset['id'] or refs['raster']['sha256'] == refs['quality']['sha256']):
+            raise ValueError('Идентификатор маски QC не соответствует её квитанции.')
+        if _native_channel(producer_asset, key) != asset['channel']:
+            raise ValueError('Исходный STAC Item не подтверждает номер физического канала.')
+        qc_channel = _native_channel(qc_asset, quality_key)
+        if qc_channel is not None and qc_channel != asset['channel']:
+            raise ValueError('Нативная маска QC относится к другому физическому каналу.')
+        if qc_channel is None and any(
+            candidate_key not in (key, quality_key) and isinstance(candidate, dict)
+            and isinstance(candidate.get('raster:bands'), list)
+            and any(isinstance(band, dict) and band.get('unit') == 'K' for band in candidate['raster:bands'])
+            for candidate_key, candidate in producer_item['assets'].items()
+        ):
+            raise ValueError('Для нескольких численных каналов требуется явная связь QC с ИК-каналом.')
+    downloaded = max(raster_downloaded, qc_downloaded)
+    if (not start < end or not start <= nominal <= end <= provider_ready <= downloaded
+            or end > min(raster_downloaded, qc_downloaded)):
+        raise ValueError('Время съёмки, готовности поставщика и загрузки противоречит порядку событий.')
+    for product_metadata in (properties, producer_asset, qc_asset or {}):
+        for field, expected in (('start_datetime', start), ('end_datetime', end)):
+            if product_metadata.get(field) is not None and utc(product_metadata[field]) != expected:
+                raise ValueError('Границы съёмки или готовность противоречат исходному STAC Item.')
+    if properties.get('ready_at') is not None and utc(properties['ready_at']) != provider_ready:
+        raise ValueError('Готовность противоречит исходному STAC Item.')
+    if not archive:
+        for native_asset, receipt_time in ((producer_asset, raster_downloaded), (qc_asset, qc_downloaded)):
+            asset_times = [utc(native_asset[field]) for field in ('ready_at', 'published')
+                           if native_asset and native_asset.get(field) is not None]
+            if any(not end <= stamp <= receipt_time for stamp in asset_times) or asset_times != sorted(asset_times):
+                raise ValueError('Срок актива противоречит времени съёмки или загрузки.')
+    if paired_receipt:
+        spec.update(earliest_available_at=iso(downloaded.isoformat()),
+                    raster_downloaded_at=iso(raster_downloaded.isoformat()),
+                    quality_downloaded_at=iso(qc_downloaded.isoformat()))
+    if archive:
+        extensions = producer_item.get('stac_extensions')
+        if (not isinstance(extensions, list) or STAC_TIMESTAMPS not in extensions
+                or quality_key not in declared_quality
+                or any(not isinstance(properties.get(field), str) for field in ('start_datetime', 'end_datetime'))):
+            raise ValueError('Для архива нужны STAC Timestamps, нативные границы съёмки и отдельный актив QC.')
+        raster_published, raster_version = _archive_asset_publication(producer_asset, end, raster_downloaded)
+        qc_published, qc_version = _archive_asset_publication(qc_asset, end, qc_downloaded)
+        if raster_version == qc_version or refs['raster']['sha256'] == refs['quality']['sha256']:
+            raise ValueError('Растр и QC должны ссылаться на разные версии нативных объектов.')
+        available = max(provider_ready, raster_published, qc_published)
+        spec.update(availability_basis='provider_asset_publication', earliest_available_at=iso(available.isoformat()),
+                    local_downloaded_at=spec['earliest_available_at'], raster_published_at=iso(producer_asset['published']),
+                    quality_published_at=iso(qc_asset['published']),
+                    archive_raster_sha256=refs['raster']['sha256'],
+                    archive_quality_sha256=refs['quality']['sha256'])
+    definition = {key: spec[key] for key in ('platform', 'instrument', 'channel_id', 'units', 'scale', 'offset')}
+    definition['revision'] = calibration['revision'].strip()
+    calibration_id = hashlib.sha256(json.dumps(definition, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    spec.update(calibration_reference=f'{calibration_prefix}-gptl-l2ir:{calibration_id}',
+                native_manifest_sha256=digest, native_asset_sha256=refs['producer_item']['sha256'],
+                worker_asset_sha256=refs['asset']['sha256'],
+                calibration_evidence=calibration['reference'], quality_evidence=quality['reference'],
+                quality=files['quality'], scan_start=iso(timing['scan_start']), scan_end=iso(timing['scan_end']),
+                provider_ready_at=iso(timing['provider_ready_at']), data_kind='real',
+                inputs=[files['producer_item'], files['asset'], files['download'], manifest])
+    if paired_receipt:
+        spec['inputs'].append(files['quality_download'])
+        spec['expected_native_files'] = {path: refs[kind]['sha256'] for kind, path in files.items()}
+        spec['expected_native_files'][manifest] = digest
+    if 'window' in review:
+        spec['native_window'] = review['window']
+    return spec, files['geometry'], spec['earliest_available_at'], timing['reference']
+
+
+def electro_l_native(path, *, verify_raw=True):
+    """Read reviewed evidence for a native Elektro-L L2IR raster."""
+    return _russian_ir_native(path, 'electro_l', verify_raw=verify_raw)
+
+
+def arktika_m_native(path, *, verify_raw=True):
+    """Read reviewed evidence for a native Arktika-M L2IR raster."""
+    return _russian_ir_native(path, 'arktika_m', verify_raw=verify_raw)

@@ -14,6 +14,9 @@ import torch
 from torch import Tensor
 
 SOURCES = ("electro_l", "arktika_m", "meteor_msu_mr", "meteor_mtvza")
+STATION_IR_PLATFORMS = {"arktika_m": frozenset({"ARCM1", "ARCM2"}),
+                       "electro_l": frozenset({"EL2", "EL3", "EL4"})}
+STATION_IR_CHANNELS = frozenset(str(channel) for channel in range(4, 11))
 
 
 def utc(value):
@@ -106,6 +109,12 @@ class Sensor:
         return fingerprint(asdict(self))
 
 
+def is_station_ir(sensor: Sensor) -> bool:
+    return (sensor.kind == 'imager' and sensor.platform in STATION_IR_PLATFORMS.get(sensor.source, ())
+            and all(ch.id in STATION_IR_CHANNELS and ch.quantity == 'brightness_temperature' and ch.units == 'K'
+                    for ch in sensor.channels))
+
+
 @dataclass(frozen=True)
 class Sequence:
     """Размеры values/valid: T,C,H,W; остальные пиксельные поля: T,H,W.
@@ -137,6 +146,7 @@ class Sequence:
     link_weight: Tensor | None = None
     link_grid_fingerprint: str | None = None
     link_reference: str | None = None
+    scan_start_unix: Tensor | None = None
 
     def validate(self, sensor: Sensor, *, n_cells=None, grid_fingerprint=None):
         if self.sensor_id != sensor.id or self.sensor_signature != sensor.measurement_signature:
@@ -159,6 +169,12 @@ class Sequence:
         if (not torch.isfinite(times).all() or not torch.isfinite(self.available_unix).all()
                 or (self.available_unix < times).any() or (torch.diff(times) <= 0).any()):
             raise ValueError("Неверные времена съёмки или готовности.")
+        if sensor.data_kind == 'real' and sensor.source in STATION_IR_PLATFORMS and self.scan_start_unix is None:
+            raise ValueError("Для реального ИК-кадра нужны границы съёмки.")
+        if self.scan_start_unix is not None and (
+                self.scan_start_unix.shape != (t,) or not torch.isfinite(self.scan_start_unix).all()
+                or (self.scan_start_unix > times).any()):
+            raise ValueError("Неверное начало сканирования.")
         if len(self.frame_ids) != t or len(set(self.frame_ids)) != t:
             raise ValueError("Нужны уникальные идентификаторы версий кадров.")
         for ident in self.frame_ids: hash_value(ident)
@@ -214,12 +230,18 @@ class Sequence:
     def causal(self, issue_time, sensor: Sensor):
         self.validate(sensor)
         issue = utc(issue_time).timestamp()
-        use = ((self.observed_unix > issue-43200) & (self.observed_unix <= issue)
+        start = self.observed_unix if self.scan_start_unix is None else self.scan_start_unix
+        use = ((start > issue-43200) & (self.observed_unix <= issue)
                & (self.available_unix <= issue))
         if not use.any(): return None
+        return self.select_frames(use)
+
+    def select_frames(self, use):
         ids = tuple(x for x,keep in zip(self.frame_ids,use.tolist()) if keep)
         changes = {key:getattr(self,key)[use] for key in ("values","valid","observed_unix","available_unix",
                     "view_zenith_deg","solar_zenith_deg","footprint_km")}
+        if self.scan_start_unix is not None:
+            changes['scan_start_unix'] = self.scan_start_unix[use]
         return replace(self,**changes,frame_ids=ids)
 
     def to(self, device):

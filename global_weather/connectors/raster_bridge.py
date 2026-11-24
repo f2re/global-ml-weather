@@ -11,7 +11,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import numpy as np
-from .ecosystem import regular, child, read_json, sha256, utc, iso
+from .ecosystem import regular, child, read_json, sha256, utc, iso, native_window_parameters
 
 
 def _dump(path, obj):
@@ -30,23 +30,42 @@ def import_raster(spec, out, *, available_at, availability_reference, geometry=N
     try:
         import rasterio
         from rasterio.warp import transform
+        from rasterio.windows import Window
     except ImportError as exc:
         raise RuntimeError('Install the optional ecosystem dependencies for physical raster import.') from exc
     ready, observed = utc(available_at), utc(spec['observed_at'])
     if not isinstance(availability_reference, str) or not availability_reference.strip():
         raise ValueError('Availability evidence reference is required; file mtime is not evidence.')
     if ready < observed or (spec.get('earliest_available_at') and ready < utc(spec['earliest_available_at'])):
-        raise ValueError('Ready time precedes measurement or upstream download completion.')
+        raise ValueError('Ready time precedes measurement or the verified source availability bound.')
     if type(max_pixels) is not int or not 1 <= max_pixels <= 8_000_000: raise ValueError('Invalid pixel limit.')
+    window = None
+    if 'native_window' in spec:
+        row, col, height, width = native_window_parameters(spec['native_window'], max_pixels)
+        window = Window(col, row, width, height)
     out = _new_directory(out)
     files = [regular(spec['raster']), *[regular(p) for p in spec['inputs']]]
     if spec.get('quality'): files.append(regular(spec['quality']))
     if geometry is not None: files.append(regular(geometry))
     checksums = {str(p): sha256(p) for p in files}
+    if any(checksums.get(str(path)) != digest for path, digest in spec.get('expected_native_files', {}).items()):
+        raise ValueError('Native bundle files differ from the verified worker receipts.')
+    if spec.get('availability_basis') == 'provider_asset_publication' and (
+        checksums[str(files[0])] != spec['archive_raster_sha256']
+        or checksums[str(spec['quality'])] != spec['archive_quality_sha256']
+    ):
+        raise ValueError('Native raster or QC differs from the published archive version.')
     with rasterio.Env(GDAL_DISABLE_READDIR_ON_OPEN='EMPTY_DIR', GDAL_PAM_ENABLED='NO'):
         with rasterio.open(files[0]) as ds:
-            if ds.driver != 'GTiff' or not ds.crs or ds.count != 1 or ds.width*ds.height > max_pixels:
+            if ds.driver != 'GTiff' or not ds.crs or ds.count != 1:
                 raise ValueError('Expected bounded, georeferenced single-band GeoTIFF.')
+            if window is None:
+                if ds.width * ds.height > max_pixels:
+                    raise ValueError('Expected bounded, georeferenced single-band GeoTIFF.')
+            else:
+                block_rows, block_cols = ds.block_shapes[0]
+                if row + height > ds.height or col + width > ds.width or block_rows * block_cols > 8_000_000:
+                    raise ValueError('Native window or TIFF block exceeds the verified dimensions.')
             if ds.units[0] not in (None, spec['units']): raise ValueError('Raster/manifest units conflict.')
             if spec['values_already_physical'] and (ds.scales != (1.,) or ds.offsets != (0.,)):
                 raise ValueError('Processed values.tif must not be scaled twice.')
@@ -56,7 +75,8 @@ def import_raster(spec, out, *, available_at, availability_reference, geometry=N
                 if ds.offsets != (0.,) and not np.isclose(ds.offsets[0], spec['offset']):
                     raise ValueError('Raster/asset offset conflict.')
             if ds.tags().get('time') and utc(ds.tags()['time']) != observed: raise ValueError('Raster/manifest time conflict.')
-            raster = ds.read(1, masked=True).astype('float32')
+            raster = ds.read(1, window=window, masked=True).astype('float32')
+            quality_support = 'dataset_mask' if any(flag.name in ('per_dataset', 'alpha') for flag in ds.mask_flag_enums[0]) else 'nodata_only'
             values = np.asarray(raster.data, dtype='float32')*spec['scale']+spec['offset']
             valid = ~np.ma.getmaskarray(raster) & np.isfinite(values)
             if spec.get('declared_nodata') is not None:
@@ -67,39 +87,54 @@ def import_raster(spec, out, *, available_at, availability_reference, geometry=N
             # A negative Kelvin value is physically invalid. Do not clip extremes to training percentiles.
             valid &= values > 0
             yy, xx = np.indices(values.shape, dtype='float64')
-            xx, yy = ds.transform*(xx+.5, yy+.5)
+            raster_transform = ds.transform if window is None else ds.window_transform(window)
+            xx, yy = raster_transform*(xx+.5, yy+.5)
             lon, lat = transform(ds.crs, 'EPSG:4326', xx.ravel().tolist(), yy.ravel().tolist())
             lon, lat = np.asarray(lon).reshape(values.shape), np.asarray(lat).reshape(values.shape)
             valid &= np.isfinite(lat) & np.isfinite(lon) & (np.abs(lat) <= 90)
             lon = (lon+180)%360-180
-            crs, affine = ds.crs.to_string(), list(ds.transform)[:6]
+            crs, affine = ds.crs.to_string(), list(raster_transform)[:6]
             if spec.get('quality'):
                 with rasterio.open(spec['quality']) as qc:
-                    if qc.count != 1 or (qc.height,qc.width) != values.shape or qc.crs != ds.crs or qc.transform != ds.transform:
+                    if (qc.count != 1 or (qc.height,qc.width) != (ds.height,ds.width)
+                            or qc.crs != ds.crs or qc.transform != ds.transform):
                         raise ValueError('Quality raster is on another grid.')
-                    flags = qc.read(1, masked=True)
+                    if spec['source'] == 'electro_l' or 'expected_native_files' in spec:
+                        block_rows, block_cols = qc.block_shapes[0]
+                        if (qc.driver != 'GTiff' or np.dtype(qc.dtypes[0]).kind not in 'iu'
+                                or qc.scales != (1.,) or qc.offsets != (0.,)
+                                or block_rows * block_cols > 8_000_000
+                                or ('expected_native_files' in spec and qc.nodata == 0)):
+                            raise ValueError('Expected native unscaled integer quality flags in a bounded GeoTIFF.')
+                    flags = qc.read(1, window=window, masked=True)
                     valid &= ~np.ma.getmaskarray(flags) & (flags.data == 0)
+                    quality_support = 'paired_quality_raster'
     arrays = dict(values=np.where(valid,values,0).astype('float32'), valid=valid,
                   latitude=np.where(valid,lat,0), longitude=np.where(valid,lon,0))
     reasons = ['geometry_supplement_required']
     geo_ref = None
     if geometry is not None:
         geo = read_json(geometry)
-        if set(geo)-{'reference','view_zenith_deg','footprint_km'} or not isinstance(geo.get('reference'),str) or not geo['reference'].strip():
+        if set(geo)-{'reference','view_zenith_deg','footprint_km','solar_zenith_deg'} or not isinstance(geo.get('reference'),str) or not geo['reference'].strip():
             raise ValueError('Reviewed view geometry reference required.')
-        for key in ('view_zenith_deg','footprint_km'):
+        geometry_fields = ('view_zenith_deg', 'footprint_km')
+        if 'solar_zenith_deg' in geo:
+            geometry_fields += ('solar_zenith_deg',)
+        for key in geometry_fields:
             a = np.asarray(geo[key], dtype='float64')
             if a.shape not in ((), values.shape): raise ValueError('Geometry shape differs from raster.')
             a = np.broadcast_to(a, values.shape).copy()
             if not np.isfinite(a[valid]).all(): raise ValueError('Missing geometry at valid pixels.')
             if key == 'view_zenith_deg' and ((a[valid]<0)|(a[valid]>=90)).any(): raise ValueError('Invalid viewing angle.')
             if key == 'footprint_km' and (a[valid]<=0).any(): raise ValueError('Invalid native footprint.')
+            if key == 'solar_zenith_deg' and ((a[valid] < 0) | (a[valid] > 180)).any(): raise ValueError('Invalid solar angle.')
             arrays[key] = np.where(valid,a,0)
         geo_ref, reasons = geo['reference'], []
     if not valid.any(): raise ValueError('No physical pixels survive QC.')
-    manifest = {k:v for k,v in spec.items() if k not in ('raster','quality','inputs')}
+    manifest = {k:v for k,v in spec.items() if k not in ('raster','quality','inputs','expected_native_files')}
     manifest.update(schema='physical-raster-v1', available_at=iso(available_at), availability_reference=availability_reference,
                     time_support='native_scene_time_not_per_pixel_time', geometry_reference=geo_ref,
+                    quality_support=quality_support,
                     model_ready=False, observation_export_ready=not reasons,
                     pending=reasons+['model_registry_normalization_and_footprint_admission'],
                     crs=crs, transform=affine, shape=list(values.shape), valid_pixels=int(valid.sum()),
@@ -136,7 +171,7 @@ def read_capsule(directory, *, max_array_bytes=256*1024*1024):
             raise ValueError('Array archive exceeds memory budget.')
     with np.load(p,allow_pickle=False) as z: a = {k:z[k] for k in z.files}
     required = {'values','valid','latitude','longitude'}
-    if not required.issubset(a) or set(a)-required-{'view_zenith_deg','footprint_km'}: raise ValueError('Unexpected arrays.')
+    if not required.issubset(a) or set(a)-required-{'view_zenith_deg','footprint_km','solar_zenith_deg'}: raise ValueError('Unexpected arrays.')
     shape = tuple(m['shape'])
     if len(shape)!=2 or any(v.shape!=shape for v in a.values()) or a['valid'].dtype != bool:
         raise ValueError('Array dimensions/mask mismatch.')
@@ -149,6 +184,8 @@ def read_capsule(directory, *, max_array_bytes=256*1024*1024):
         raise ValueError('No valid positive Kelvin measurements.')
     if (np.abs(a['latitude'][valid]) > 90).any() or (np.abs(a['longitude'][valid]) > 180).any():
         raise ValueError('Coordinates outside geographical ranges.')
+    if 'solar_zenith_deg' in a and ((a['solar_zenith_deg'][valid] < 0) | (a['solar_zenith_deg'][valid] > 180)).any():
+        raise ValueError('Solar geometry outside physical range.')
     if utc(m['available_at']) < utc(m['observed_at']):
         raise ValueError('Capsule availability precedes its observation.')
     if m.get('valid_pixels') != int(valid.sum()):
