@@ -92,20 +92,23 @@ python -m global_weather.providers.satellite_cli \
 
 ## Подготовить проверенные ИК-кадры
 
-Для «Арктики-М» подготовьте численные капсулы `physical-raster-v1` через `global_weather.compatibility arktika`.
-Для «Электро-Л» используйте `global_weather.compatibility electro-native` с проверенным паспортом `electro-l-native-l2ir-1`.
+Для нативного L2IR «Арктики-М» используйте `global_weather.compatibility arktika-native` с проверенным паспортом `arktika-m-native-l2ir-1`.
+Для нативного L2IR «Электро-Л» используйте `global_weather.compatibility electro-native` с проверенным паспортом `electro-l-native-l2ir-1`.
+Для ранее обработанных продуктов «Арктики-М» сохранён импорт через `global_weather.compatibility arktika`. Диагностическую маску приложения храните отдельно от нативного QC GPTL.
 Проверьте закреплённую ревизию поставщика, идентификатор сцены, платформу и канал.
 Подтвердите калибровку яркостной температуры в K, геометрию визирования, размер пятна и нативную маску качества.
 Подтвердите начало и конец съёмки по сведениям поставщика.
 Подтвердите фактическое время готовности кадра. Время архивного скачивания не заменяет этот срок.
 Остановите подготовку при отсутствии любого подтверждения.
 
-В паспорте «Электро-Л» укажите в `files` ссылки на исходный STAC Item `producer_item`, метаданные актива из журнала `asset`, численный GeoTIFF `raster`, квитанцию `download`, отдельный GeoTIFF качества `quality` и геометрию `geometry`.
+В нативном паспорте укажите в `files` ссылки на исходный STAC Item `producer_item`, метаданные актива `asset`, численный GeoTIFF `raster` и квитанцию `download`.
+Туда же добавьте ссылки на отдельный GeoTIFF качества `quality`, его квитанцию `quality_download` и проверенную геометрию `geometry`.
+Квитанции должны лежать рядом со своими GeoTIFF и иметь суффикс `.download.json`. Ранее подготовленные паспорта «Электро-Л» поддерживаются без отдельной квитанции QC.
 В `calibration` укажите `revision`, `asset_key` и `reference`. В `quality` укажите `good_flag` со значением 0 и подтверждающую `reference`.
-Если STAC Item публикует активы с ролью `quality` или `quality-mask`, в `quality.asset_key` укажите соответствующий нативный актив качества.
+В `quality.asset_key` и `quality.asset_id` укажите ключ нативного актива качества с ролью `quality` или `quality-mask` и идентификатор из его квитанции.
 В `timing` укажите нативные `scan_start`, `scan_end`, `provider_ready_at` и `reference` для этих сроков.
-По умолчанию срок допуска к прогнозу берётся из проверенной квитанции поступления. Он может быть позже срока готовности поставщика.
-Для ретроспективы «Электро-Л» задайте `timing.availability_basis=provider_asset_publication` только после независимой проверки исходного паспорта.
+По умолчанию срок допуска к прогнозу равен более позднему сроку поступления растра и QC. Он может быть позже срока готовности поставщика.
+Для ретроспективы задайте `timing.availability_basis=provider_asset_publication` только после независимой проверки исходного паспорта.
 В исходном STAC Item должны быть объявлены [STAC Timestamps 1.1.0](https://github.com/stac-extensions/timestamps#fields), нативные `start_datetime` и `end_datetime`.
 Укажите `quality.asset_key` для отдельного актива QC. Каждый актив должен содержать `file:checksum`, собственный `published` и ссылку HTTPS на объект `s3.gptl.ru` с явным `versionId`.
 Конвейер берёт самый поздний из сроков готовности поставщика и первой публикации двух закреплённых версий. Фактическую дату загрузки хранит отдельно.
@@ -114,6 +117,7 @@ python -m global_weather.providers.satellite_cli \
 Для большого кадра задайте `window` с полями `row_offset`, `column_offset`, `height`, `width` в исходной сетке данных и качества. Чтение окна сохраняет нативные пиксели и их координаты.
 
 ```bash
+python -m global_weather.compatibility arktika-native "$NATIVE_ARKTIKA_MANIFEST" --output "$ARKTIKA_CAPSULE"
 python -m global_weather.compatibility electro-native "$NATIVE_MANIFEST" --output "$CAPSULE"
 ```
 
@@ -152,7 +156,7 @@ python -m global_weather.compatibility electro-native "$NATIVE_MANIFEST" --outpu
 В `origin` укажите схему `multimodal-ir-origin-1`.
 Перенесите из капсулы `upstream`, `instrument`, `channel_id`, `calibration_reference` и `calibration_status`.
 Добавьте подтверждение происхождения и калибровки канала.
-Для «Электро-Л» добавьте в `origin.native_manifest` ссылку на паспорт `electro-l-native-l2ir-1`.
+Для каждого нативного L2IR добавьте в `origin.native_manifest` ссылку на соответствующий паспорт.
 Скопируйте `calibration_reference` капсулы в `calibration_id` канала реестра. Идентификатор версии калибровки и SHA256 конкретного кадра хранятся отдельно.
 В `geometry` укажите схему `multimodal-ir-geometry-1` и `geometry_reference` из капсулы.
 Добавьте подтверждение геометрии и пятна.

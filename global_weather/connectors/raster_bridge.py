@@ -48,6 +48,8 @@ def import_raster(spec, out, *, available_at, availability_reference, geometry=N
     if spec.get('quality'): files.append(regular(spec['quality']))
     if geometry is not None: files.append(regular(geometry))
     checksums = {str(p): sha256(p) for p in files}
+    if any(checksums.get(str(path)) != digest for path, digest in spec.get('expected_native_files', {}).items()):
+        raise ValueError('Native bundle files differ from the verified worker receipts.')
     if spec.get('availability_basis') == 'provider_asset_publication' and (
         checksums[str(files[0])] != spec['archive_raster_sha256']
         or checksums[str(spec['quality'])] != spec['archive_quality_sha256']
@@ -97,11 +99,12 @@ def import_raster(spec, out, *, available_at, availability_reference, geometry=N
                     if (qc.count != 1 or (qc.height,qc.width) != (ds.height,ds.width)
                             or qc.crs != ds.crs or qc.transform != ds.transform):
                         raise ValueError('Quality raster is on another grid.')
-                    if spec['source'] == 'electro_l':
+                    if spec['source'] == 'electro_l' or 'expected_native_files' in spec:
                         block_rows, block_cols = qc.block_shapes[0]
                         if (qc.driver != 'GTiff' or np.dtype(qc.dtypes[0]).kind not in 'iu'
                                 or qc.scales != (1.,) or qc.offsets != (0.,)
-                                or block_rows * block_cols > 8_000_000):
+                                or block_rows * block_cols > 8_000_000
+                                or ('expected_native_files' in spec and qc.nodata == 0)):
                             raise ValueError('Expected native unscaled integer quality flags in a bounded GeoTIFF.')
                     flags = qc.read(1, window=window, masked=True)
                     valid &= ~np.ma.getmaskarray(flags) & (flags.data == 0)
@@ -128,7 +131,7 @@ def import_raster(spec, out, *, available_at, availability_reference, geometry=N
             arrays[key] = np.where(valid,a,0)
         geo_ref, reasons = geo['reference'], []
     if not valid.any(): raise ValueError('No physical pixels survive QC.')
-    manifest = {k:v for k,v in spec.items() if k not in ('raster','quality','inputs')}
+    manifest = {k:v for k,v in spec.items() if k not in ('raster','quality','inputs','expected_native_files')}
     manifest.update(schema='physical-raster-v1', available_at=iso(available_at), availability_reference=availability_reference,
                     time_support='native_scene_time_not_per_pixel_time', geometry_reference=geo_ref,
                     quality_support=quality_support,

@@ -1,4 +1,4 @@
-"""Synthetic contract fixtures for Elektro-L. No provider scene is represented."""
+"""Synthetic contract fixtures for Elektro-L and Arktika-M."""
 import json
 import hashlib
 
@@ -9,10 +9,14 @@ from global_weather.connectors.ecosystem import STAC_TIMESTAMPS, electro_l_nativ
 from global_weather.connectors.raster_bridge import read_capsule
 from global_weather.multimodal.contracts import Channel, Sensor
 from global_weather.multimodal.io import reference, save_sensors, write_json
-from global_weather.multimodal.prepare import prepare_electro_capsule, sequence_from_capsules
+from global_weather.multimodal.prepare import (
+    prepare_arktika_capsule,
+    prepare_electro_capsule,
+    sequence_from_capsules,
+)
 
 
-def _native_fixture(root, minute, fault=None, window=None, *, archive=False):
+def _native_fixture(root, minute, fault=None, window=None, *, archive=False, platform='EL3', paired_receipt=False):
     rasterio = pytest.importorskip('rasterio')
     root.mkdir()
     time = f'2026-11-01T10:{minute}:00Z'
@@ -34,15 +38,17 @@ def _native_fixture(root, minute, fault=None, window=None, *, archive=False):
         del band['scale']
     asset = root / 'asset.json'
     scene_id = 'fictional-scene-' + minute
-    uri = ('https://s3.gptl.ru/fixture/channel.tif' if archive else 'https://example.invalid/channel.tif')
+    uri = ('https://s3.gptl.ru/fixture/channel.tif' if archive or paired_receipt
+           else 'https://example.invalid/channel.tif')
     asset_id = hashlib.sha256(f'{scene_id}\n{uri}'.encode()).hexdigest()[:32]
+    worker_uri = uri + '?versionId=raster-version' if archive and paired_receipt else uri
     write_json(asset, dict(id=asset_id, item_id=scene_id,
-               filename=raster.name, platform='EL3', time=time, time_assumed=fault == 'assumed_time',
-               uri=uri, level='L2IR', category='channel',
+               filename=raster.name, platform=platform, time=time, time_assumed=fault == 'assumed_time',
+               uri=worker_uri, level='L2IR', category='channel',
                channel=9, raster_bands=[band]))
     producer = root / 'producer.json'
     producer_band = band | {'scale': .2} if fault == 'producer_scale' else band
-    producer_properties = {'platform': 'EL3', 'datetime': time, 'processing:level': 'L2IR'}
+    producer_properties = {'platform': platform, 'datetime': time, 'processing:level': 'L2IR'}
     if fault == 'producer_timing':
         producer_properties['end_datetime'] = '2026-11-01T10:19:00Z'
     producer_assets = {'ch9': {'href': uri, 'raster:bands': [producer_band]}}
@@ -79,19 +85,56 @@ def _native_fixture(root, minute, fault=None, window=None, *, archive=False):
             del producer_assets['ch9']['published']
         if fault == 'same_version':
             producer_assets['qa']['href'] = producer_assets['ch9']['href']
+    qc_receipt = None
+    if paired_receipt:
+        qc_uri = 'https://s3.gptl.ru/fixture/quality.tif'
+        qc_id = hashlib.sha256(f'{scene_id}\n{qc_uri}'.encode()).hexdigest()[:32]
+        qc_receipt = root / 'quality.tif.download.json'
+        producer_properties.update(start_datetime='2026-11-01T10:05:00Z',
+                                   end_datetime='2026-11-01T10:20:00Z', ready_at='2026-11-01T10:21:00Z')
+        qc_sha = reference(root, quality)['sha256']
+        if not archive:
+            producer_assets['qa'] = {'roles': ['quality'], 'file:checksum': qc_sha, 'href': qc_uri}
+        producer_assets['ch9']['calibration:version'] = 'fixture-revision'
+        producer_assets['qa']['classification:classes'] = [{'value': 0, 'name': 'good'},
+                                                          {'value': 2, 'name': 'invalid'}]
+        if fault == 'unproven_revision':
+            del producer_assets['ch9']['calibration:version']
+        if fault == 'unproven_good_flag':
+            del producer_assets['qa']['classification:classes']
+        if fault == 'ambiguous_quality_channel':
+            producer_assets['ch8'] = {'href': 'https://s3.gptl.ru/fixture/ch08.tif', 'raster:bands': [band]}
+        if fault == 'bad_raster_publication':
+            producer_assets['ch9']['published'] = '2026-11-03T10:32:00Z'
+        quality_evidence.update(asset_key='qa', asset_id=qc_id)
+        qc_journal = dict(asset_id=qc_id, size=quality.stat().st_size, sha256=qc_sha,
+                          time='2026-11-03T10:35:00Z' if archive else '2026-11-01T10:35:00Z',
+                          provider_sha256=qc_sha)
+        if archive:
+            qc_journal['object_version'] = 'qc-version'
+        if fault == 'bad_qc_version':
+            qc_journal['object_version'] = 'different-version'
+        if fault == 'bad_qc_claim':
+            qc_journal['provider_sha256'] = '0' * 64
+        write_json(qc_receipt, qc_journal)
     write_json(producer, item)
     download = root / 'channel.tif.download.json'
-    write_json(download, dict(asset_id=asset_id, size=raster.stat().st_size,
-               sha256=reference(root, raster)['sha256'],
-               time='2026-11-03T10:30:00Z' if archive else '2026-11-01T10:30:00Z'))
+    raster_journal = dict(asset_id=asset_id, size=raster.stat().st_size, sha256=reference(root, raster)['sha256'],
+                          time='2026-11-03T10:30:00Z' if archive else '2026-11-01T10:30:00Z')
+    if archive and paired_receipt:
+        raster_journal.update(provider_sha256=raster_journal['sha256'], object_version='raster-version')
+    write_json(download, raster_journal)
     geometry = root / 'geometry.json'
     write_json(geometry, dict(reference='synthetic geometry fixture', view_zenith_deg=20, footprint_km=4))
     files = {role: reference(root, path) for role, path in dict(
         producer_item=producer, asset=asset, raster=raster, download=download, quality=quality, geometry=geometry).items()}
     if fault == 'missing_quality':
         del files['quality']
+    if qc_receipt is not None and fault != 'missing_qc_receipt':
+        files['quality_download'] = reference(root, qc_receipt)
     manifest = root / 'native.json'
-    review = dict(schema='electro-l-native-l2ir-1', files=files,
+    schema = 'arktika-m-native-l2ir-1' if platform.startswith('ARCM') else 'electro-l-native-l2ir-1'
+    review = dict(schema=schema, files=files,
         calibration={'revision': 'fixture-revision', 'reference': 'synthetic calibration fixture', 'asset_key': 'ch9'},
         quality=quality_evidence,
         timing={'scan_start': '2026-11-01T10:05:00Z', 'scan_end': '2026-11-01T10:20:00Z',
@@ -107,7 +150,7 @@ def _native_fixture(root, minute, fault=None, window=None, *, archive=False):
 
 def _sequence_plan(root, capsule, metadata, native):
     manifest = reference(root, capsule / 'manifest.json')
-    sensor = Sensor('electro-fixture', 'electro_l', 'EL3', 'imager', (
+    sensor = Sensor('native-fixture', metadata['source'], metadata['platform'], 'imager', (
         Channel('9', 'brightness_temperature', 'K', None, None, metadata['calibration_reference']),
     ), None, None, 'real')
     registry = root / 'registry.json'
@@ -168,6 +211,58 @@ def test_electro_archive_uses_the_last_exact_asset_publication(tmp_path):
     seq = sequence_from_capsules(plan)
     assert seq.causal('2026-11-01T10:26:59Z', sensor) is None
     assert seq.causal('2026-11-01T10:27:00Z', sensor) is not None
+
+
+@pytest.mark.parametrize(('platform', 'prepare'), [
+    ('ARCM2', prepare_arktika_capsule),
+    ('EL3', prepare_electro_capsule),
+])
+def test_paired_worker_receipts_wait_for_later_qc_download(tmp_path, platform, prepare):
+    native = _native_fixture(tmp_path / 'prospective', '12', platform=platform, paired_receipt=True)
+    out = tmp_path / 'capsule'
+    metadata = prepare(native, out)
+    assert metadata['raster_downloaded_at'] == '2026-11-01T10:30:00Z'
+    assert metadata['available_at'] == metadata['quality_downloaded_at'] == '2026-11-01T10:35:00Z'
+    plan, sensor = _sequence_plan(tmp_path, out, metadata, native)
+    seq = sequence_from_capsules(plan)
+    assert seq.values[0, 0, 0, 0] == 260.
+    assert not seq.valid[0, 0, 0, 1]
+    assert seq.causal('2026-11-01T10:34:59Z', sensor) is None
+    assert seq.causal('2026-11-01T10:35:00Z', sensor) is not None
+
+
+def test_arktika_archive_replays_paired_native_versions(tmp_path):
+    native = _native_fixture(tmp_path / 'archive', '12', archive=True, platform='ARCM1', paired_receipt=True)
+    out = tmp_path / 'capsule'
+    metadata = prepare_arktika_capsule(native, out)
+    assert metadata['local_downloaded_at'] == '2026-11-03T10:35:00Z'
+    assert metadata['available_at'] == '2026-11-01T10:27:00Z'
+    plan, sensor = _sequence_plan(tmp_path, out, metadata, native)
+    assert sequence_from_capsules(plan).causal('2026-11-01T10:27:00Z', sensor) is not None
+
+
+@pytest.mark.parametrize('fault', ['bad_qc_version', 'bad_qc_claim', 'missing_qc_receipt'])
+def test_arktika_rejects_unbound_native_qc_receipt(tmp_path, fault):
+    native = _native_fixture(tmp_path / 'archive', '12', fault, archive=True,
+                             platform='ARCM1', paired_receipt=True)
+    out = tmp_path / 'capsule'
+    with pytest.raises(ValueError, match='Квитанция|Нужны метаданные'):
+        prepare_arktika_capsule(native, out)
+    assert not out.exists()
+
+
+@pytest.mark.parametrize('fault', ['unproven_revision', 'unproven_good_flag', 'ambiguous_quality_channel'])
+def test_arktika_requires_native_calibration_version_and_unambiguous_qc(tmp_path, fault):
+    native = _native_fixture(tmp_path / 'case', '12', fault, platform='ARCM1', paired_receipt=True)
+    with pytest.raises(ValueError, match='версию калибровки|флагов QC|связь QC'):
+        prepare_arktika_capsule(native, tmp_path / 'capsule')
+
+
+def test_arktika_archive_checks_publication_against_its_own_receipt(tmp_path):
+    native = _native_fixture(tmp_path / 'case', '12', 'bad_raster_publication', archive=True,
+                             platform='ARCM1', paired_receipt=True)
+    with pytest.raises(ValueError, match='Историческая доступность'):
+        prepare_arktika_capsule(native, tmp_path / 'capsule')
 
 
 @pytest.mark.parametrize('fault', [
