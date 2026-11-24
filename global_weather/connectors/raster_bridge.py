@@ -37,7 +37,7 @@ def import_raster(spec, out, *, available_at, availability_reference, geometry=N
     if not isinstance(availability_reference, str) or not availability_reference.strip():
         raise ValueError('Availability evidence reference is required; file mtime is not evidence.')
     if ready < observed or (spec.get('earliest_available_at') and ready < utc(spec['earliest_available_at'])):
-        raise ValueError('Ready time precedes measurement or upstream download completion.')
+        raise ValueError('Ready time precedes measurement or the verified source availability bound.')
     if type(max_pixels) is not int or not 1 <= max_pixels <= 8_000_000: raise ValueError('Invalid pixel limit.')
     window = None
     if 'native_window' in spec:
@@ -48,6 +48,11 @@ def import_raster(spec, out, *, available_at, availability_reference, geometry=N
     if spec.get('quality'): files.append(regular(spec['quality']))
     if geometry is not None: files.append(regular(geometry))
     checksums = {str(p): sha256(p) for p in files}
+    if spec.get('availability_basis') == 'provider_asset_publication' and (
+        checksums[str(files[0])] != spec['archive_raster_sha256']
+        or checksums[str(spec['quality'])] != spec['archive_quality_sha256']
+    ):
+        raise ValueError('Native raster or QC differs from the published archive version.')
     with rasterio.Env(GDAL_DISABLE_READDIR_ON_OPEN='EMPTY_DIR', GDAL_PAM_ENABLED='NO'):
         with rasterio.open(files[0]) as ds:
             if ds.driver != 'GTiff' or not ds.crs or ds.count != 1:

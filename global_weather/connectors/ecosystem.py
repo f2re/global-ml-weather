@@ -10,7 +10,7 @@ import json
 import math
 from pathlib import Path
 import re
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qs, unquote, urlsplit, urlunsplit
 from .native_cbor import loads as cbor_loads
 
 UPSTREAM = {
@@ -270,6 +270,7 @@ def _gptl_asset(path, raster_path, *, source, asset_key=None, channel=None, expe
 
 
 ELECTRO_L_PLATFORMS = ('EL2', 'EL3', 'EL4')
+STAC_TIMESTAMPS = 'https://stac-extensions.github.io/timestamps/v1.1.0/schema.json'
 
 
 def native_window_parameters(window, max_pixels):
@@ -297,6 +298,25 @@ def _check_stac_file(asset, ref, path):
     checksum = asset.get('file:checksum')
     if checksum is not None and checksum not in (ref['sha256'], '1220' + ref['sha256'], 'sha256:' + ref['sha256']):
         raise ValueError('Контрольная сумма файла не подтверждена исходными метаданными поставщика.')
+
+
+def _archive_asset_publication(asset, scan_end, downloaded):
+    if not asset.get('file:checksum') or not isinstance(asset.get('published'), str):
+        raise ValueError('Для архива нужны первичная публикация и SHA256 каждой версии растра и QC.')
+    raw_uri = asset.get('href')
+    uri = urlsplit(raw_uri) if isinstance(raw_uri, str) else urlsplit('')
+    versions = parse_qs(uri.query, keep_blank_values=True).get('versionId', [])
+    if (uri.scheme != 'https' or uri.netloc != 's3.gptl.ru' or not uri.path or uri.fragment
+            or len(versions) != 1 or versions[0].strip().lower() in ('', 'null')):
+        raise ValueError('Ссылка GPTL не фиксирует неизменяемую версию растра или QC.')
+    published = utc(asset['published'])
+    if (not scan_end <= published <= downloaded
+            or (asset.get('ready_at') is not None and not scan_end <= utc(asset['ready_at']) <= published)
+            or (asset.get('created') is not None and utc(asset['created']) > published)
+            or (asset.get('updated') is not None and utc(asset['updated']) > published)
+            or any(asset.get(field) is not None for field in ('expires', 'unpublished'))):
+        raise ValueError('Историческая доступность этой версии растра или QC не подтверждена.')
+    return published, (unquote(uri.path), versions[0])
 
 
 def electro_l_native(path, *, verify_raw=True):
@@ -349,10 +369,16 @@ def electro_l_native(path, *, verify_raw=True):
     calibration = review['calibration']
     quality = review['quality']
     timing = review['timing']
+    timing_fields = {'scan_start', 'scan_end', 'provider_ready_at', 'reference'}
+    if isinstance(timing, dict) and 'availability_basis' in timing:
+        if timing['availability_basis'] != 'provider_asset_publication':
+            raise ValueError('Неизвестное основание доступности архивного кадра.')
+        timing_fields.add('availability_basis')
+    archive = 'availability_basis' in timing_fields
     for section, fields in (
         (calibration, {'revision', 'reference', 'asset_key'}),
         (quality, {'good_flag', 'reference'} | ({'asset_key'} if isinstance(quality, dict) and 'asset_key' in quality else set())),
-        (timing, {'scan_start', 'scan_end', 'provider_ready_at', 'reference'}),
+        (timing, timing_fields),
     ):
         if (not isinstance(section, dict) or set(section) != fields
                 or not isinstance(section['reference'], str) or not section['reference'].strip()):
@@ -399,11 +425,33 @@ def electro_l_native(path, *, verify_raw=True):
     ))
     if not start < end or not start <= nominal <= end <= provider_ready <= downloaded:
         raise ValueError('Время съёмки, готовности поставщика и загрузки противоречит порядку событий.')
-    for product_metadata in (producer_item['properties'], producer_asset):
-        for field, expected in (('start_datetime', start), ('end_datetime', end),
-                                ('published', provider_ready), ('ready_at', provider_ready)):
+    properties = producer_item['properties']
+    for product_metadata in (properties, producer_asset):
+        for field, expected in (('start_datetime', start), ('end_datetime', end)):
             if product_metadata.get(field) is not None and utc(product_metadata[field]) != expected:
                 raise ValueError('Границы съёмки или готовность противоречат исходному STAC Item.')
+    if properties.get('ready_at') is not None and utc(properties['ready_at']) != provider_ready:
+        raise ValueError('Готовность противоречит исходному STAC Item.')
+    if not archive and any(producer_asset.get(field) is not None
+                           and not end <= utc(producer_asset[field]) <= downloaded
+                           for field in ('published', 'ready_at')):
+        raise ValueError('Срок актива противоречит времени съёмки или загрузки.')
+    if archive:
+        extensions = producer_item.get('stac_extensions')
+        if (not isinstance(extensions, list) or STAC_TIMESTAMPS not in extensions
+                or quality_key not in declared_quality
+                or any(not isinstance(properties.get(field), str) for field in ('start_datetime', 'end_datetime'))):
+            raise ValueError('Для архива нужны STAC Timestamps, нативные границы съёмки и отдельный актив QC.')
+        raster_published, raster_version = _archive_asset_publication(producer_asset, end, downloaded)
+        qc_published, qc_version = _archive_asset_publication(producer_item['assets'][quality_key], end, downloaded)
+        if raster_version == qc_version or refs['raster']['sha256'] == refs['quality']['sha256']:
+            raise ValueError('Растр и QC должны ссылаться на разные версии нативных объектов.')
+        available = max(provider_ready, raster_published, qc_published)
+        spec.update(availability_basis='provider_asset_publication', earliest_available_at=iso(available.isoformat()),
+                    local_downloaded_at=spec['earliest_available_at'], raster_published_at=iso(producer_asset['published']),
+                    quality_published_at=iso(producer_item['assets'][quality_key]['published']),
+                    archive_raster_sha256=refs['raster']['sha256'],
+                    archive_quality_sha256=refs['quality']['sha256'])
     definition = {key: spec[key] for key in ('platform', 'instrument', 'channel_id', 'units', 'scale', 'offset')}
     definition['revision'] = calibration['revision'].strip()
     calibration_id = hashlib.sha256(json.dumps(definition, sort_keys=True, separators=(',', ':')).encode()).hexdigest()

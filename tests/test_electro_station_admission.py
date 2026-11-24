@@ -5,14 +5,14 @@ import hashlib
 import numpy as np
 import pytest
 
-from global_weather.connectors.ecosystem import electro_l_native
+from global_weather.connectors.ecosystem import STAC_TIMESTAMPS, electro_l_native
 from global_weather.connectors.raster_bridge import read_capsule
 from global_weather.multimodal.contracts import Channel, Sensor
 from global_weather.multimodal.io import reference, save_sensors, write_json
 from global_weather.multimodal.prepare import prepare_electro_capsule, sequence_from_capsules
 
 
-def _native_fixture(root, minute, fault=None, window=None):
+def _native_fixture(root, minute, fault=None, window=None, *, archive=False):
     rasterio = pytest.importorskip('rasterio')
     root.mkdir()
     time = f'2026-11-01T10:{minute}:00Z'
@@ -34,7 +34,7 @@ def _native_fixture(root, minute, fault=None, window=None):
         del band['scale']
     asset = root / 'asset.json'
     scene_id = 'fictional-scene-' + minute
-    uri = 'https://example.invalid/channel.tif'
+    uri = ('https://s3.gptl.ru/fixture/channel.tif' if archive else 'https://example.invalid/channel.tif')
     asset_id = hashlib.sha256(f'{scene_id}\n{uri}'.encode()).hexdigest()[:32]
     write_json(asset, dict(id=asset_id, item_id=scene_id,
                filename=raster.name, platform='EL3', time=time, time_assumed=fault == 'assumed_time',
@@ -52,11 +52,38 @@ def _native_fixture(root, minute, fault=None, window=None):
     if fault == 'producer_quality':
         quality_evidence['asset_key'] = 'qa'
         producer_assets['qa'] = {'roles': ['quality'], 'file:checksum': '0' * 64}
-    write_json(producer, {'type': 'Feature', 'id': scene_id,
-        'properties': producer_properties, 'assets': producer_assets})
+    item = {'type': 'Feature', 'id': scene_id, 'properties': producer_properties, 'assets': producer_assets}
+    if archive:
+        item['stac_extensions'] = [STAC_TIMESTAMPS]
+        producer_properties.update(start_datetime='2026-11-01T10:05:00Z', end_datetime='2026-11-01T10:20:00Z',
+                                   published='2026-11-02T00:01:00Z')
+        producer_assets['ch9'].update(href=uri + '?versionId=raster-version',
+                                      published='2026-11-01T10:22:00Z',
+                                      **{'file:checksum': reference(root, raster)['sha256']})
+        quality_evidence['asset_key'] = 'qa'
+        quality_sha = reference(root, quality)['sha256']
+        producer_assets['qa'] = {'roles': ['quality'], 'file:checksum': quality_sha,
+                                'href': 'https://s3.gptl.ru/fixture/quality.tif?versionId=qc-version',
+                                'published': '2026-11-01T10:27:00Z'}
+        if fault == 'rolling_address':
+            producer_assets['ch9']['href'] = uri
+        if fault == 'missing_archive_checksum':
+            del producer_assets['qa']['file:checksum']
+        if fault == 'late_asset_ready':
+            producer_assets['qa']['ready_at'] = '2026-11-01T10:29:00Z'
+        if fault == 'changed_archive_asset':
+            producer_assets['ch9']['updated'] = '2026-11-01T10:23:00Z'
+        if fault == 'unpublished_archive_asset':
+            producer_assets['qa']['unpublished'] = '2026-11-01T10:28:00Z'
+        if fault == 'only_metadata_published':
+            del producer_assets['ch9']['published']
+        if fault == 'same_version':
+            producer_assets['qa']['href'] = producer_assets['ch9']['href']
+    write_json(producer, item)
     download = root / 'channel.tif.download.json'
     write_json(download, dict(asset_id=asset_id, size=raster.stat().st_size,
-               sha256=reference(root, raster)['sha256'], time='2026-11-01T10:30:00Z'))
+               sha256=reference(root, raster)['sha256'],
+               time='2026-11-03T10:30:00Z' if archive else '2026-11-01T10:30:00Z'))
     geometry = root / 'geometry.json'
     write_json(geometry, dict(reference='synthetic geometry fixture', view_zenith_deg=20, footprint_km=4))
     files = {role: reference(root, path) for role, path in dict(
@@ -70,6 +97,8 @@ def _native_fixture(root, minute, fault=None, window=None):
         timing={'scan_start': '2026-11-01T10:05:00Z', 'scan_end': '2026-11-01T10:20:00Z',
                 'provider_ready_at': '2026-11-01T10:10:00Z' if fault == 'early_provider' else '2026-11-01T10:21:00Z',
                 'reference': 'synthetic timing fixture'})
+    if archive:
+        review['timing']['availability_basis'] = 'provider_asset_publication'
     if window is not None:
         review['window'] = window
     write_json(manifest, review)
@@ -126,6 +155,47 @@ def test_electro_kelvin_qc_stable_calibration_and_conservative_ready_time(tmp_pa
     assert seq.valid[0, 0, :2, :2].tolist() == [[True, False], [True, True]]
     assert seq.causal('2026-11-01T10:29:59Z', sensor) is None
     assert seq.causal('2026-11-01T10:30:00Z', sensor) is not None
+
+
+def test_electro_archive_uses_the_last_exact_asset_publication(tmp_path):
+    native = _native_fixture(tmp_path / 'historical', '12', archive=True)
+    out = tmp_path / 'capsule'
+    metadata = prepare_electro_capsule(native, out)
+    assert metadata['local_downloaded_at'] == '2026-11-03T10:30:00Z'
+    assert metadata['raster_published_at'] == '2026-11-01T10:22:00Z'
+    assert metadata['available_at'] == metadata['quality_published_at'] == '2026-11-01T10:27:00Z'
+    plan, sensor = _sequence_plan(tmp_path, out, metadata, native)
+    seq = sequence_from_capsules(plan)
+    assert seq.causal('2026-11-01T10:26:59Z', sensor) is None
+    assert seq.causal('2026-11-01T10:27:00Z', sensor) is not None
+
+
+@pytest.mark.parametrize('fault', [
+    'rolling_address', 'missing_archive_checksum', 'late_asset_ready', 'changed_archive_asset',
+    'unpublished_archive_asset', 'only_metadata_published', 'same_version',
+])
+def test_electro_archive_rejects_ambiguous_version_or_availability(tmp_path, fault):
+    native = _native_fixture(tmp_path / 'archive', '12', fault, archive=True)
+    with pytest.raises(ValueError):
+        prepare_electro_capsule(native, tmp_path / 'capsule')
+
+
+def test_electro_archive_binds_pixels_before_import(tmp_path, monkeypatch):
+    from global_weather.connectors import raster_bridge
+
+    native = _native_fixture(tmp_path / 'archive', '12', archive=True)
+    import_raster = raster_bridge.import_raster
+
+    def replace_quality_then_import(spec, out, **kwargs):
+        with spec['quality'].open('ab') as changed:
+            changed.write(b'x')
+        return import_raster(spec, out, **kwargs)
+
+    monkeypatch.setattr(raster_bridge, 'import_raster', replace_quality_then_import)
+    out = tmp_path / 'capsule'
+    with pytest.raises(ValueError, match='published archive version'):
+        prepare_electro_capsule(native, out)
+    assert not out.exists()
 
 
 @pytest.mark.parametrize('fault', [
